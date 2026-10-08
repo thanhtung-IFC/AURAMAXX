@@ -1,0 +1,3 @@
+# Các thư viện phục vụ VisionFace AI Cloud Server (server.py & face_aesthetic_analyzer.py)
+pillow>=10.0.0
+numpy>=1.24.0
