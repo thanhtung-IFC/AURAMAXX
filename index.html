@@ -136,7 +136,7 @@
       <!-- Khung Viewport Video & Canvas Overlay -->
       <div class="relative w-full aspect-[4/3] bg-black rounded-2xl overflow-hidden border border-surface-700 hud-glow group">
         <!-- Luồng Video ngầm -->
-        <video id="webcamVideo" playsinline muted class="hidden"></video>
+        <video id="webcamVideo" playsinline muted autoplay class="hidden"></video>
 
         <!-- Canvas hiển thị chính (Được flip lật gương bằng class CSS nếu bật) -->
         <canvas id="outputCanvas" class="w-full h-full object-cover transition-transform duration-200"></canvas>
@@ -380,12 +380,21 @@
         <div class="space-y-3 text-xs">
           <!-- Chọn thiết bị Camera -->
           <div>
-            <label for="cameraSelect" class="block font-medium text-slate-300 mb-1">
-              Thiết bị Camera khả dụng:
-            </label>
+            <div class="flex items-center justify-between mb-1">
+              <label for="cameraSelect" class="block font-medium text-slate-300">
+                Thiết bị Camera khả dụng:
+              </label>
+              <button id="btnToggleCamQuick" type="button" class="text-[11px] text-cyan-400 hover:text-cyan-300 font-semibold flex items-center gap-1 transition" title="Chuyển đổi nhanh giữa Camera laptop và Camera USB">
+                <i class="fa-solid fa-repeat text-[10px]"></i> Đổi nhanh
+              </button>
+            </div>
             <select id="cameraSelect" class="w-full bg-surface-900 border border-surface-700 rounded-lg px-2.5 py-2 text-slate-200 focus:outline-none focus:border-cyan-500 font-mono text-[11px]">
               <option value="">Đang dò tìm camera...</option>
             </select>
+            <div class="flex items-center justify-between mt-1 px-1 text-[10px] text-slate-400 font-mono">
+              <span id="lblCamHardwareType">💻 Đang dùng Cam Laptop</span>
+              <span id="lblCamHotplugHint" class="text-slate-500">Hỗ trợ cắm nóng USB</span>
+            </div>
           </div>
 
           <!-- Chọn độ phân giải tối ưu -->
@@ -1034,6 +1043,8 @@
     const chkMirror = document.getElementById('chkMirror');
     const lblMirrorMode = document.getElementById('lblMirrorMode');
     const btnRefreshDevices = document.getElementById('btnRefreshDevices');
+    const btnToggleCamQuick = document.getElementById('btnToggleCamQuick');
+    const lblCamHardwareType = document.getElementById('lblCamHardwareType');
     
     // Trạng thái AI & Overlay
     const aiStatusBadge = document.getElementById('aiStatusBadge');
@@ -1223,14 +1234,16 @@
     let profileCaptureData = null; // { image: b64, landmarks: [...] }
     let isAnalyzingSnapshot = false;
 
-    // Quản lý đồng bộ phần cứng Camera (Đảm bảo 2 lần chụp dùng chung 1 camera)
+    // Quản lý đồng bộ phần cứng Camera (Laptop & USB rời)
     let activeCameraDeviceId = null;
     let activeCameraLabel = '';
     const CAMERA_STORAGE_KEY = 'visionface_preferred_cam_v1';
+    let knownCameraDeviceIds = new Set();
+    let isProcessingFrame = false;
+    let frameCallbackId = null;
 
     // Biến trạng thái toàn cục
     let isCameraActive = false;
-    let cameraInstance = null;
     let faceMesh = null;
     let currentStream = null;
     let latestLandmarks = null;
@@ -1291,17 +1304,45 @@
         return;
       }
       let cleanName = activeCameraLabel || (cameraSelect.options[cameraSelect.selectedIndex]?.text || 'Webcam');
-      cleanName = cleanName.replace(/📷\s*\[USB Cam Ngoài\]\s*|💻\s*\[Cam Tích Hợp\]\s*/g, '').trim();
+      cleanName = cleanName.replace(/📷\s*\[USB Cam Rời\]\s*|💻\s*\[Cam Laptop\]\s*|📷\s*\[USB Cam Ngoài\]\s*|💻\s*\[Cam Tích Hợp\]\s*/g, '').trim();
       if (cleanName.length > 22) cleanName = cleanName.substring(0, 19) + '...';
       lblActiveCamSync.innerText = `Đồng bộ 1 Cam: ${cleanName}`;
     }
 
-    async function enumerateVideoDevices() {
+    function updateCameraHardwareLabel() {
+      if (!lblCamHardwareType) return;
+      const curOpt = cameraSelect.options[cameraSelect.selectedIndex];
+      if (!curOpt || !curOpt.value) {
+        lblCamHardwareType.innerText = '💻 Chưa có camera';
+        return;
+      }
+      const isUsb = /usb|cam rời|cam ngoài|webcam/i.test(curOpt.text);
+      lblCamHardwareType.innerHTML = isUsb 
+        ? '<i class="fa-solid fa-usb text-emerald-400"></i> Đang chọn: USB Cam Rời' 
+        : '<i class="fa-solid fa-laptop text-cyan-400"></i> Đang chọn: Cam Laptop';
+    }
+
+    async function enumerateVideoDevices(isTriggeredByHotplug = false) {
       try {
         const devices = await navigator.mediaDevices.enumerateDevices();
         const videoDevices = devices.filter(d => d.kind === 'videoinput');
         const savedCamId = localStorage.getItem(CAMERA_STORAGE_KEY);
         const prevSelected = cameraSelect.value || savedCamId;
+
+        // Phát hiện thiết bị cắm nóng (Hot-plugging)
+        if (isTriggeredByHotplug) {
+          const newDevices = videoDevices.filter(d => !knownCameraDeviceIds.has(d.deviceId));
+          newDevices.forEach(nd => {
+            const label = nd.label || 'Webcam USB';
+            const isUsb = /usb|external|uvc|webcam/i.test(label);
+            showToast(`🎉 Phát hiện thiết bị mới: ${isUsb ? '[USB Cam Rời]' : '[Camera]'} ${label}!`, "success");
+            // Nếu camera đang tắt, ưu tiên chọn ngay camera mới vừa cắm
+            if (!isCameraActive) {
+              cameraSelect.value = nd.deviceId;
+            }
+          });
+        }
+        knownCameraDeviceIds = new Set(videoDevices.map(d => d.deviceId));
 
         cameraSelect.innerHTML = '';
 
@@ -1310,6 +1351,7 @@
           opt.value = '';
           opt.text = 'Không tìm thấy camera nào';
           cameraSelect.appendChild(opt);
+          updateCameraHardwareLabel();
           updateCameraSyncUI();
           return;
         }
@@ -1321,10 +1363,10 @@
           const opt = document.createElement('option');
           opt.value = device.deviceId;
           const devLabel = (device.label || '').toLowerCase();
-          // Nhận diện chuẩn xác camera USB/ngoài vs camera tích hợp
+          // Nhận diện chuẩn xác camera USB/ngoài vs camera laptop tích hợp
           const isUsbExternal = /usb|external|uvc|webcam|c920|c922|c930|brio|droidcam|iriun|obs|cam|video/i.test(devLabel);
           const cleanLabel = device.label || `Thiết bị Camera ${idx + 1}`;
-          opt.text = isUsbExternal ? `📷 [USB Cam Ngoài] ${cleanLabel}` : `💻 [Cam Tích Hợp] ${cleanLabel}`;
+          opt.text = isUsbExternal ? `📷 [USB Cam Rời] ${cleanLabel}` : `💻 [Cam Laptop] ${cleanLabel}`;
 
           if (isUsbExternal && !firstUsbId) {
             firstUsbId = device.deviceId;
@@ -1337,11 +1379,12 @@
           cameraSelect.appendChild(opt);
         });
 
-        // Nếu người dùng chưa chọn thiết bị và phát hiện camera rời USB, ưu tiên chọn camera rời USB
+        // Nếu người dùng chưa chọn và phát hiện camera rời USB, ưu tiên camera rời USB
         if (!matchedSaved && firstUsbId) {
           cameraSelect.value = firstUsbId;
         }
 
+        updateCameraHardwareLabel();
         updateCameraSyncUI();
 
       } catch (err) {
@@ -1354,9 +1397,8 @@
     navigator.mediaDevices.addEventListener('devicechange', () => {
       clearTimeout(deviceChangeDebounceTimer);
       deviceChangeDebounceTimer = setTimeout(async () => {
-        showToast("Phát hiện thay đổi thiết bị Camera (Cắm/Rút USB)!", "info");
-        await enumerateVideoDevices();
-      }, 350);
+        await enumerateVideoDevices(true);
+      }, 450);
     });
 
     function getResolutionPreset(type) {
@@ -1368,16 +1410,67 @@
       }
     }
 
-    async function startCameraStream() {
+    // Vòng lặp xử lý video frame chuẩn xác và tiết kiệm phần cứng (không gọi getUserMedia lần 2)
+    function startFrameProcessingLoop() {
+      cancelVideoFrameLoop();
+
+      async function onCameraFrame() {
+        if (!isCameraActive) return;
+
+        if (videoElement.readyState >= 2 && !videoElement.paused && !videoElement.ended) {
+          if (!isProcessingFrame && faceMesh) {
+            isProcessingFrame = true;
+            const startStamp = performance.now();
+            try {
+              await faceMesh.send({ image: videoElement });
+            } catch (err) {
+              console.warn("FaceMesh send frame error:", err);
+            } finally {
+              isProcessingFrame = false;
+            }
+            const latency = Math.round(performance.now() - startStamp);
+            lblLatency.innerText = `${latency}ms`;
+          }
+        }
+
+        if (isCameraActive) {
+          if ('requestVideoFrameCallback' in videoElement) {
+            frameCallbackId = videoElement.requestVideoFrameCallback(onCameraFrame);
+          } else {
+            frameCallbackId = requestAnimationFrame(onCameraFrame);
+          }
+        }
+      }
+
+      if ('requestVideoFrameCallback' in videoElement) {
+        frameCallbackId = videoElement.requestVideoFrameCallback(onCameraFrame);
+      } else {
+        frameCallbackId = requestAnimationFrame(onCameraFrame);
+      }
+    }
+
+    function cancelVideoFrameLoop() {
+      if (frameCallbackId !== null) {
+        if ('cancelVideoFrameCallback' in videoElement) {
+          try { videoElement.cancelVideoFrameCallback(frameCallbackId); } catch(e) {}
+        } else {
+          try { cancelAnimationFrame(frameCallbackId); } catch(e) {}
+        }
+        frameCallbackId = null;
+      }
+      isProcessingFrame = false;
+    }
+
+    async function startCameraStream(targetDeviceId = null) {
       if (isCameraActive) return;
 
-      const deviceId = cameraSelect.value || undefined;
+      const deviceId = targetDeviceId || cameraSelect.value || undefined;
       const resConfig = getResolutionPreset(resolutionSelect.value);
 
       standbyTitle.innerText = "Đang kết nối camera...";
-      standbyDesc.innerText = "Vui lòng cho phép quyền truy cập webcam trên trình duyệt.";
+      standbyDesc.innerText = "Đang khởi động phần cứng camera (Laptop / USB)...";
 
-      // Cơ chế 4 cấp độ Fallback chống OverconstrainedError và xung đột phần cứng DirectShow/UVC
+      // Cơ chế 5 cấp độ Fallback chống OverconstrainedError và xung đột phần cứng DirectShow/UVC
       let stream = null;
       let lastErr = null;
 
@@ -1388,7 +1481,7 @@
             deviceId: deviceId ? { exact: deviceId } : undefined,
             width: resConfig.width,
             height: resConfig.height,
-            frameRate: { ideal: 30, max: 30 }
+            frameRate: { ideal: 30 }
           },
           audio: false
         });
@@ -1410,7 +1503,7 @@
           lastErr = err2;
           console.warn("Fallback Cấp 2 không thành công, thử Cấp 3:", err2.name, err2.message);
 
-          // Cấp 3: Device ID chỉ định với độ phân giải mặc định của phần cứng camera
+          // Cấp 3: Device ID với độ phân giải mặc định của phần cứng camera
           try {
             stream = await navigator.mediaDevices.getUserMedia({
               video: deviceId ? { deviceId: { exact: deviceId } } : true,
@@ -1418,16 +1511,27 @@
             });
           } catch (err3) {
             lastErr = err3;
-            console.warn("Fallback Cấp 3 không thành công, thử Cấp 4:", err3.name, err3.message);
+            console.warn("Fallback Cấp 3 không thành công, thử Cấp 4 (Cam Laptop mặc định):", err3.name, err3.message);
 
-            // Cấp 4: Chấp nhận bất kỳ luồng video khả dụng nào
+            // Cấp 4: Fallback về camera trước mặc định của máy tính (facingMode: user)
             try {
               stream = await navigator.mediaDevices.getUserMedia({
-                video: true,
+                video: { facingMode: 'user' },
                 audio: false
               });
             } catch (err4) {
               lastErr = err4;
+              console.warn("Fallback Cấp 4 không thành công, thử Cấp 5:", err4.name, err4.message);
+
+              // Cấp 5: Chấp nhận bất kỳ luồng video khả dụng nào
+              try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                  video: true,
+                  audio: false
+                });
+              } catch (err5) {
+                lastErr = err5;
+              }
             }
           }
         }
@@ -1465,7 +1569,7 @@
           }
           const devLabel = videoTrack.label || 'Webcam';
           const isUsb = /usb|external|uvc|webcam|c920|c922|brio/i.test(devLabel);
-          const prefix = isUsb ? '[USB Cam Ngoài]' : '[Cam Tích Hợp]';
+          const prefix = isUsb ? '[USB Cam Rời]' : '[Cam Laptop]';
           const actualFps = settings.frameRate ? `${Math.round(settings.frameRate)}fps` : '30fps';
           lblActualRes.innerText = `${actualW}x${actualH} (${actualFps})`;
           lblActualRes.title = `${prefix} ${devLabel}`;
@@ -1474,33 +1578,34 @@
           activeCameraDeviceId = settings.deviceId || deviceId || cameraSelect.value || 'default';
           activeCameraLabel = `${prefix} ${devLabel}`;
           try { localStorage.setItem(CAMERA_STORAGE_KEY, activeCameraDeviceId); } catch(e) {}
+
+          // Lắng nghe sự kiện rút USB khi camera đang hoạt động (Hot-unplug) -> Tự động chuyển về camera laptop
+          videoTrack.onended = async () => {
+            console.warn("Camera video track ended (có thể do rút cáp USB)");
+            showToast("⚠️ Mất kết nối camera! Đang tự động chuyển về Camera laptop...", "warning");
+            stopCameraStream();
+            await enumerateVideoDevices();
+            await new Promise(r => setTimeout(r, 350));
+            if (cameraSelect.options.length > 0 && cameraSelect.options[0].value) {
+              cameraSelect.selectedIndex = 0;
+              await startCameraStream();
+            }
+          };
         }
 
-        // Khởi chạy camera pipeline MediaPipe
-        cameraInstance = new Camera(videoElement, {
-          onFrame: async () => {
-            if (isCameraActive && faceMesh) {
-              const startStamp = performance.now();
-              await faceMesh.send({ image: videoElement });
-              const latency = Math.round(performance.now() - startStamp);
-              lblLatency.innerText = `${latency}ms`;
-            }
-          },
-          width: actualW,
-          height: actualH
-        });
-
-        await cameraInstance.start();
-
+        // Bắt đầu vòng lặp xử lý frame trực tiếp (Không dùng Camera wrapper để tránh gọi getUserMedia lần 2)
         isCameraActive = true;
+        updateCameraHardwareLabel();
         updateCameraSyncUI();
+        startFrameProcessingLoop();
+
         overlayStandby.classList.add('hidden');
         btnCamIcon.className = "fa-solid fa-stop";
         btnCamText.innerText = "Dừng Camera";
         btnToggleCamera.classList.replace('bg-cyan-500', 'bg-rose-500');
         btnToggleCamera.classList.replace('hover:bg-cyan-400', 'hover:bg-rose-400');
 
-        showToast("Đã kết nối camera phần cứng thành công!", "success");
+        showToast(`Đã kết nối thành công: ${activeCameraLabel}`, "success");
       } catch (runErr) {
         console.error("Lỗi chạy luồng camera:", runErr);
         stopCameraStream();
@@ -1511,24 +1616,28 @@
     function stopCameraStream() {
       if (!isCameraActive && !currentStream) return;
 
-      if (cameraInstance) {
-        try { cameraInstance.stop(); } catch (e) {}
-        cameraInstance = null;
-      }
+      cancelVideoFrameLoop();
 
       if (currentStream) {
         currentStream.getTracks().forEach(track => {
-          try { track.stop(); } catch (e) {}
+          try {
+            track.onended = null;
+            track.stop();
+          } catch (e) {}
         });
         currentStream = null;
       }
-      videoElement.srcObject = null;
+
+      try {
+        videoElement.pause();
+        videoElement.srcObject = null;
+      } catch (e) {}
 
       isCameraActive = false;
       updateCameraSyncUI();
       overlayStandby.classList.remove('hidden');
       standbyTitle.innerText = "Camera Đang Tắt";
-      standbyDesc.innerText = "Chọn nguồn camera và bấm Khởi Động để tiếp tục.";
+      standbyDesc.innerText = "Chọn nguồn camera (Laptop hoặc USB ngoài) và bấm Khởi Động để tiếp tục.";
       standbyIcon.className = "fa-solid fa-video-slash";
 
       btnCamIcon.className = "fa-solid fa-play";
@@ -2251,9 +2360,39 @@
       else startCameraStream();
     });
 
-    btnQuickStart.addEventListener('click', startCameraStream);
+    btnQuickStart.addEventListener('click', () => startCameraStream());
+
+    // Nút đổi camera nhanh giữa laptop và USB
+    if (btnToggleCamQuick) {
+      btnToggleCamQuick.addEventListener('click', () => {
+        if (cameraSelect.options.length <= 1) {
+          showToast("Chỉ có 1 camera khả dụng. Hãy cắm thêm webcam USB để đổi qua lại!", "info");
+          return;
+        }
+        let nextIndex = (cameraSelect.selectedIndex + 1) % cameraSelect.options.length;
+        cameraSelect.selectedIndex = nextIndex;
+        cameraSelect.dispatchEvent(new Event('change'));
+      });
+    }
 
     cameraSelect.addEventListener('change', async () => {
+      const selectedDevId = cameraSelect.value;
+      if (selectedDevId) {
+        try { localStorage.setItem(CAMERA_STORAGE_KEY, selectedDevId); } catch(e) {}
+      }
+
+      updateCameraHardwareLabel();
+
+      // Nhận diện loại camera để tối ưu chế độ lật gương
+      const curOpt = cameraSelect.options[cameraSelect.selectedIndex];
+      if (curOpt) {
+        const isUsb = /usb|cam rời/i.test(curOpt.text);
+        if (!isUsb && !chkMirror.checked) {
+          chkMirror.checked = true;
+          applyMirrorSetting();
+        }
+      }
+
       // Bảo vệ tính đồng bộ: Nếu đã chụp ảnh Bước 1 mà đổi camera, phải chụp lại từ đầu bằng camera mới
       if (frontalCaptureData) {
         const confirmChange = confirm(
@@ -2264,6 +2403,7 @@
         );
         if (!confirmChange) {
           if (activeCameraDeviceId) cameraSelect.value = activeCameraDeviceId;
+          updateCameraHardwareLabel();
           return;
         }
         resetTwoShotCapture();
@@ -2273,7 +2413,7 @@
       if (isCameraActive) {
         stopCameraStream();
         // Độ trễ giải phóng tài nguyên phần cứng cho USB DirectShow / UVC
-        await new Promise(resolve => setTimeout(resolve, 250));
+        await new Promise(resolve => setTimeout(resolve, 300));
         await startCameraStream();
       }
     });
@@ -2281,7 +2421,7 @@
     resolutionSelect.addEventListener('change', async () => {
       if (isCameraActive) {
         stopCameraStream();
-        await new Promise(resolve => setTimeout(resolve, 250));
+        await new Promise(resolve => setTimeout(resolve, 300));
         await startCameraStream();
       }
     });
@@ -3491,4 +3631,3 @@
   </script>
 </body>
 </html>
-```
