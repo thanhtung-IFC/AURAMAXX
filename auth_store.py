@@ -57,7 +57,7 @@ class AuthStore:
         return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
     def write_lock(self, connection):
-        if self.faces.backend == "sqlserver":
+        if self.faces.backend != "sqlite":
             self.faces._write_lock(connection)
         else:
             connection.execute("BEGIN IMMEDIATE")
@@ -69,13 +69,20 @@ class AuthStore:
             if version and version[0] not in ("1", AUTH_SCHEMA_VERSION):
                 raise StorageError("Unsupported authentication schema version")
             filename = "auth_schema.sql" if self.faces.backend == "sqlserver" else "auth_schema_sqlite.sql"
+            if self.faces.backend == "postgres":
+                filename = "auth_schema_postgres.sql"
             text = (Path(__file__).with_name("sql") / filename).read_text(encoding="utf-8")
             # SQLite executescript commits implicitly; execute statements inside our transaction instead.
             # SQL Server's IF/BEGIN blocks are separated explicitly below.
             statements = text.split(";\n") if self.faces.backend == "sqlite" else re.split(r"\n(?=IF OBJECT_ID)", text)
+            if self.faces.backend == "postgres":
+                statements = [text]
             for statement in statements:
                 if statement.strip():
                     connection.execute(statement)
+            if self.faces.backend == "postgres":
+                for table in ("accounts", "account_people", "auth_sessions", "audit_logs"):
+                    connection.execute(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY")
             if not version:
                 connection.execute("INSERT INTO metadata ([key], [value]) VALUES ('auth_schema_version', ?)", (AUTH_SCHEMA_VERSION,))
             elif version[0] != AUTH_SCHEMA_VERSION:
@@ -316,7 +323,7 @@ class AuthStore:
 
     def logs(self):
         limit = "TOP (100) " if self.faces.backend == "sqlserver" else ""
-        tail = " LIMIT 100" if self.faces.backend == "sqlite" else ""
+        tail = " LIMIT 100" if self.faces.backend != "sqlserver" else ""
         with self.faces._connect() as connection:
             return self.rows(connection.execute(f"""SELECT {limit}l.id, a.username AS actor,
                 l.action, l.target_id, l.created_at FROM audit_logs l LEFT JOIN accounts a ON a.id = l.actor_id

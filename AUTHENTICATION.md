@@ -93,7 +93,15 @@ Mật khẩu được băm bằng Argon2id. Cookie phiên có `HttpOnly`, `SameS
 
 Với triển khai HTTPS, đặt `FACE_COOKIE_SECURE=true` trước khi chạy máy chủ. Với HTTP localhost, giữ mặc định. Cần phục vụ giao diện và API cùng origin. Bản có tài khoản cần backend Python; mở HTML trực tiếp hoặc chỉ dùng GitHub Pages không cung cấp đăng nhập hay quản lý database.
 
+Trên domain `*.github.io`, giao diện chuyển về trang đăng nhập trong đúng thư mục repository và thông báo cần backend; đây không phải triển khai hệ thống tài khoản. Push lên GitHub chỉ cập nhật mã nguồn. Để sử dụng đầy đủ, triển khai `server.py` cùng giao diện trên một máy chủ có HTTPS và kết nối database. `localhost\SQLEXPRESS` chỉ đến SQL Server trên máy chạy Python; chuyển Python sang máy chủ khác cần cấu hình kết nối tới database tương ứng, không tự kết nối SQL Server trên máy cá nhân.
+
 ## Kiểm tra
+
+Với Supabase PostgreSQL, xem [SUPABASE_RENDER.md](SUPABASE_RENDER.md).
+`migrate_to_postgres.py` chuyển cả tài khoản, mật khẩu đã băm, quyền sở hữu
+hồ sơ và nhật ký; không chuyển phiên đăng nhập. Dùng lại tài khoản/mật khẩu
+cũ sau khi chuyển thành công. Không dùng Supabase Authentication thay thế
+`AuthStore` trong cấu hình này.
 
 ```powershell
 $env:VISIONFACE_TEST_SQLSERVER='localhost\SQLEXPRESS'

@@ -2,7 +2,20 @@
 (() => {
   const nativeFetch = window.fetch.bind(window);
   const state = { account: null, csrf: null };
-  const ready = nativeFetch('/api/auth/me', { credentials: 'same-origin', cache: 'no-store' })
+  const staticPages = window.location.hostname.endsWith('.github.io');
+  const hostingMessage = 'GitHub Pages chỉ chạy giao diện tĩnh. Đăng nhập cần máy chủ Python và database. Hãy mở địa chỉ của máy chủ web; trên máy đang chạy dự án là http://localhost:8000.';
+  if (staticPages) {
+    const projectRoot = new URL('../', document.currentScript.src);
+    document.querySelectorAll('a[href^="/"]').forEach(link => {
+      link.href = new URL(link.getAttribute('href').slice(1), projectRoot).href;
+    });
+    if (!['login.html', 'admin-login.html'].includes(window.location.pathname.split('/').pop())) {
+      window.location.replace(new URL('login.html', projectRoot).href);
+    }
+    const message = document.getElementById('loginMessage');
+    if (message) message.textContent = hostingMessage;
+  }
+  const ready = staticPages ? Promise.resolve(state) : nativeFetch('/api/auth/me', { credentials: 'same-origin', cache: 'no-store' })
     .then(response => response.ok ? response.json() : Promise.reject(new Error('Không thể kiểm tra phiên đăng nhập.')))
     .then(data => {
       state.account = data.account;
@@ -17,6 +30,7 @@
   async function authenticatedFetch(input, options = {}) {
     const url = new URL(typeof input === 'string' ? input : input.url, window.location.href);
     if (url.origin !== window.location.origin || !url.pathname.startsWith('/api/')) return nativeFetch(input, options);
+    if (staticPages) throw new Error(hostingMessage);
     await ready;
     const headers = new Headers(options.headers || {});
     const method = (options.method || 'GET').toUpperCase();

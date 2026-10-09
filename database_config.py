@@ -43,5 +43,10 @@ def create_store(base_dir):
             settings.get("database", "VisionFaceDB"),
             settings.get("driver", "ODBC Driver 18 for SQL Server"),
             settings.get("trust_certificate", False),
+            username=os.environ.get("SQLSERVER_USERNAME"),
+            password=os.environ.get("SQLSERVER_PASSWORD"),
         ))
-    raise ValueError("FACE_DB_BACKEND must be sqlite or sqlserver")
+    if backend == "postgres":
+        from postgres_store import PostgresFaceStore
+        return PostgresFaceStore(os.environ.get("DATABASE_URL"))
+    raise ValueError("FACE_DB_BACKEND must be sqlite, sqlserver or postgres")

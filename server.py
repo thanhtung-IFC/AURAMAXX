@@ -284,7 +284,7 @@ class VisionFaceRequestHandler(SimpleHTTPRequestHandler):
             elif path == "/api/admin/audit":
                 self._send_json({"events": self.auth.logs(), "storage": {
                     "backend": face_database.backend,
-                    "table": "dbo.audit_logs" if face_database.backend == "sqlserver" else "audit_logs"
+                    "table": {"sqlserver": "dbo.audit_logs", "postgres": "visionface.audit_logs"}.get(face_database.backend, "audit_logs")
                 }})
             elif path.startswith("/api/admin/people/"):
                 self._send_json(self.auth.person_detail(unquote(path.removeprefix("/api/admin/people/"))))

@@ -3,8 +3,8 @@
 Hệ thống nhận diện khuôn mặt thời gian thực, kiểm tra thực thể sống (**Liveness Verification Anti-Spoofing**), và chẩn đoán định lượng thẩm mỹ nhân trắc học (**Anthropometric Aesthetic Engine**) đạt chuẩn khoa học khách quan (không nịnh nọt).
 
 Hệ thống hoạt động theo kiến trúc **Hybrid**:
-- **Chạy trực tiếp 100% trên Trình duyệt Web (Client-Side)** thông qua MediaPipe Face Mesh + Client Aesthetic Engine (Hoạt động 24/7 trên **GitHub Pages** không cần bật máy tính cá nhân).
-- **Python Backend Engine (REST API)**: Phục vụ phân tích nhân trắc học nâng cao, xử lý ma trận điểm mốc và phân tích ROI cấu trúc da, có thể triển khai lên Cloud (Render, Railway, Hugging Face Spaces) hoàn toàn miễn phí.
+- **Trình duyệt** chạy MediaPipe Face Mesh, lấy điểm mốc từ camera và hiển thị kết quả.
+- **Python Backend (REST API)** phục vụ đăng nhập, phân quyền, nhận diện, phân tích nâng cao và kết nối database. Bản online cần backend; xem hướng dẫn Render + Supabase bên dưới về cấu hình và giới hạn gói Free.
 
 ---
 
@@ -40,18 +40,15 @@ Bản có đăng nhập và phân quyền cần máy chủ Python phục vụ c�
 
 ---
 
-### Cách 2: Triển Khai Python Backend Lên Cloud 24/7 (Render / Railway / Hugging Face)
+### Triển khai trên máy chủ riêng có HTTPS
 
-Nếu bạn muốn có thêm máy chủ Python chạy liên tục trên mạng để lưu trữ cơ sở dữ liệu khuôn mặt và xử lý Numpy trên đám mây:
+Giao diện, backend Python và SQL Server chạy trên máy chủ riêng; GitHub dùng để lưu và cập nhật mã nguồn. Caddy nhận HTTPS và chuyển yêu cầu đến Python ở `127.0.0.1:8000`.
 
-#### Triển khai lên Render.com (Miễn phí):
-1. Đăng ký tài khoản tại [Render.com](https://render.com).
-2. Chọn **New** -> **Web Service** -> Kết nối với GitHub Repository của bạn.
-3. Render sẽ tự động nhận diện tệp `render.yaml` và `requirements.txt`:
-   - **Build Command**: `pip install -r requirements.txt`
-   - **Start Command**: `python server.py`
-4. Bấm **Deploy**. Bạn sẽ nhận được đường dẫn API HTTPS (ví dụ: `https://visionface-ai.onrender.com`).
-5. Mở địa chỉ HTTPS của chính máy chủ để dùng giao diện và API cùng origin. Cấu hình database có lưu trữ bền vững, tạo admin bằng `manage_accounts.py`, và đặt `FACE_COOKIE_SECURE=true` khi phục vụ qua HTTPS.
+Xem [DEPLOYMENT.md](DEPLOYMENT.md) để triển khai trên máy chủ riêng. File `deploy/Caddyfile.example` là mẫu cấu hình HTTPS.
+
+### Chạy thử với Render + Supabase PostgreSQL
+
+Xem [SUPABASE_RENDER.md](SUPABASE_RENDER.md) để tạo Supabase, chuyển cả tài khoản/hồ sơ/nhật ký từ SQL Server, triển khai Render và sao lưu trước khi đóng web cuối tháng 10/2026. Render phục vụ cả giao diện và Python API trên cùng URL HTTPS; Supabase lưu dữ liệu. Cấu hình sẵn trong `render.yaml`, driver trong `requirements-postgres.txt`.
 
 ---
 

@@ -1,0 +1,6 @@
+# Set VISIONFACE_DOMAIN to the real DNS hostname before starting Caddy.
+# This example is for Caddy and Python running directly on the same server.
+{$VISIONFACE_DOMAIN} {
+    encode gzip
+    reverse_proxy 127.0.0.1:8000
+}

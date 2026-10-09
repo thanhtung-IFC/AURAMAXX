@@ -32,6 +32,16 @@ class DatabaseConfigTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 create_store(self.root)
 
+    def test_postgres_requires_explicit_secret_and_overrides_local_sqlserver(self):
+        (self.root / CONFIG_NAME).write_text(json.dumps({"backend": "sqlserver"}))
+        with patch.dict(os.environ, {"FACE_DB_BACKEND": "postgres"}):
+            with self.assertRaisesRegex(ValueError, "DATABASE_URL"):
+                create_store(self.root)
+            with patch("postgres_store.PostgresFaceStore") as constructor:
+                with patch.dict(os.environ, {"DATABASE_URL": "secret-value"}):
+                    create_store(self.root)
+                constructor.assert_called_once_with("secret-value")
+
     def test_certificate_trust_is_explicit_and_typed(self):
         (self.root / CONFIG_NAME).write_text(json.dumps({"backend": "sqlserver"}))
         self.assertIn("TrustServerCertificate=no", create_store(self.root).connection_string)
@@ -45,6 +55,22 @@ class DatabaseConfigTests(unittest.TestCase):
         value = connection_string("local;UID=other", "data}base")
         self.assertIn("SERVER={local;UID=other}", value)
         self.assertIn("DATABASE={data}}base}", value)
+
+    def test_cloud_sql_authentication_uses_environment_secrets(self):
+        with patch.dict(os.environ, {"FACE_DB_BACKEND": "sqlserver", "SQLSERVER_SERVER": "tcp:example.database.windows.net,1433",
+                                    "SQLSERVER_DATABASE": "VisionFaceCloudTest", "SQLSERVER_USERNAME": "cloudadmin",
+                                    "SQLSERVER_PASSWORD": "secret};Encrypt=no;"}):
+            store = create_store(self.root)
+        value = store.connection_string
+        self.assertIn("UID={cloudadmin};PWD={secret}};Encrypt=no;};Encrypt=yes;", value)
+        self.assertNotIn("Trusted_Connection", value)
+        self.assertIn("TrustServerCertificate=no", value)
+
+    def test_incomplete_credentials_fail_instead_of_using_windows_auth(self):
+        for options in ({"username": "user"}, {"password": "secret"}, {"username": "", "password": "secret"},
+                        {"username": "user", "password": ""}):
+            with self.assertRaises(ValueError):
+                connection_string("server", "database", **options)
 
 
 if __name__ == "__main__":

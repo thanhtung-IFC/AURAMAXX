@@ -16,10 +16,18 @@ def odbc_value(value):
     return "{" + str(value).replace("}", "}}") + "}"
 
 
-def connection_string(server, database, driver="ODBC Driver 18 for SQL Server", trust_certificate=False):
+def connection_string(server, database, driver="ODBC Driver 18 for SQL Server", trust_certificate=False,
+                      *, username=None, password=None):
+    if (username is None) != (password is None):
+        raise ValueError("SQLSERVER_USERNAME and SQLSERVER_PASSWORD must be set together")
+    if username is not None and (not isinstance(username, str) or not username.strip()
+                                 or not isinstance(password, str) or not password):
+        raise ValueError("SQL Server credentials must not be empty")
+    authentication = (f"UID={odbc_value(username)};PWD={odbc_value(password)};"
+                      if username is not None else "Trusted_Connection=yes;")
     return (
         f"DRIVER={odbc_value(driver)};SERVER={odbc_value(server)};"
-        f"DATABASE={odbc_value(database)};Trusted_Connection=yes;Encrypt=yes;"
+        f"DATABASE={odbc_value(database)};{authentication}Encrypt=yes;"
         f"TrustServerCertificate={'yes' if trust_certificate else 'no'};"
     )
 
@@ -46,7 +54,7 @@ class SqlServerFaceStore:
             raise StorageError("Install requirements-sqlserver.txt to use SQL Server") from error
         connection = None
         try:
-            connection = pyodbc.connect(self.connection_string, timeout=5)
+            connection = pyodbc.connect(self.connection_string, timeout=60)
             connection.timeout = 15
             connection.execute("SET XACT_ABORT ON")
             yield connection

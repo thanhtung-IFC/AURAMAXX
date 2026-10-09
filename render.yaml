@@ -1,11 +1,17 @@
 services:
   - type: web
-    name: visionface-pro-backend
-    env: python
+    name: visionface
+    runtime: python
     plan: free
-    buildCommand: pip install -r requirements.txt
-    startCommand: python server.py
+    buildCommand: pip install -r requirements-postgres.txt
+    startCommand: python -u render_start.py
+    healthCheckPath: /api/status
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.0
-
+      - key: FACE_DB_BACKEND
+        value: postgres
+      - key: DATABASE_URL
+        sync: false
+      - key: FACE_COOKIE_SECURE
+        value: "true"
+      - key: HOST
+        value: 0.0.0.0

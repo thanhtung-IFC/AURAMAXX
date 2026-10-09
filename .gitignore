@@ -17,5 +17,6 @@ Thumbs.db
 database.local.json
 database.local.tmp
 backups/
+.tools/
 *.bak
 

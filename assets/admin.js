@@ -219,7 +219,8 @@
     try { data = await request('/api/admin/audit'); }
     catch (error) { byId('auditSource').textContent = 'Không tải được nhật ký. Bấm Làm mới để thử lại.'; throw error; }
     const body = byId('auditRows'); body.replaceChildren();
-    byId('auditSource').textContent = `Nguồn dữ liệu: ${data.storage.backend === 'sqlserver' ? 'SQL Server' : 'SQLite'} · ${data.storage.table}`;
+    const databaseLabel = {sqlserver: 'SQL Server', postgres: 'Supabase PostgreSQL', sqlite: 'SQLite'}[data.storage.backend] || data.storage.backend;
+    byId('auditSource').textContent = `Nguồn dữ liệu: ${databaseLabel} · ${data.storage.table}`;
     const labels = { 'account.created': 'Tạo tài khoản', 'account.updated': 'Sửa thông tin tài khoản', 'account.password_reset': 'Admin đặt lại mật khẩu', 'account.sessions_revoked': 'Thu hồi phiên đăng nhập', 'account.login': 'Đăng nhập', 'account.password_changed': 'Đổi mật khẩu', 'account.enabled': 'Mở khóa tài khoản', 'account.disabled': 'Khóa tài khoản', 'person.updated': 'Sửa / gán hồ sơ', 'person.sample_saved': 'Lưu mẫu khuôn mặt', 'person.deleted': 'Xóa hồ sơ', 'people.cleared': 'Xóa toàn bộ hồ sơ' };
     for (const item of data.events) { const row = document.createElement('tr'); row.append(text('td', date(item.created_at)), text('td', item.actor || 'Hệ thống'), text('td', labels[item.action] || item.action), text('td', item.target_id || '—', 'mono')); body.append(row); }
     if (!data.events.length) { const row = document.createElement('tr'); const cell = text('td', 'Chưa có nhật ký thao tác.', 'empty'); cell.colSpan = 4; row.append(cell); body.append(row); }
