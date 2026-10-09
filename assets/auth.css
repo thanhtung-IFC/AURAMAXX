@@ -1,0 +1,51 @@
+:root { color-scheme: dark; font-family: Inter, system-ui, sans-serif; background: #080d18; color: #e5edf7; }
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; background: radial-gradient(ellipse at 10% 0%, #123344 0, transparent 50%), #080d18; }
+a { color: #67e8f9; text-decoration: none; }
+a:hover { text-decoration: underline; }
+button, input, select { font: inherit; }
+button, .button { cursor: pointer; border: 1px solid #334155; border-radius: 10px; padding: 10px 16px; background: #182438; color: #e5edf7; }
+button:hover, .button:hover { background: #23354c; text-decoration: none; }
+button:disabled { opacity: .5; cursor: wait; }
+button.primary { background: #22d3ee; color: #06202c; border-color: #22d3ee; font-weight: 700; }
+button.danger { color: #fda4af; }
+input, select { width: 100%; min-width: 0; border: 1px solid #334155; border-radius: 10px; padding: 11px 12px; background: #0b1423; color: #f1f5f9; }
+input:focus, select:focus { outline: 2px solid #22d3ee; outline-offset: 2px; }
+label { display: block; margin: 18px 0; font-size: 14px; color: #cbd5e1; }
+label input, label select { margin-top: 8px; }
+h1, h2, h3, p { margin-top: 0; }
+h1 { font-size: clamp(24px, 4vw, 36px); line-height: 1.2; }
+h2 { font-size: 20px; }
+p { line-height: 1.65; }
+.muted { color: #94a3b8; }
+.eyebrow { color: #67e8f9; letter-spacing: .12em; font-size: 12px; text-transform: uppercase; margin-bottom: 16px; }
+.topbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; padding: 20px max(24px, calc((100vw - 1280px) / 2)); border-bottom: 1px solid #263448; background: #0a1220dd; }
+.brand { font-weight: 800; color: white; font-size: 20px; }
+.links, .actions, .tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.login-layout { max-width: 1050px; margin: 7vh auto; padding: 24px; display: grid; grid-template-columns: 1fr 1fr; gap: 64px; align-items: center; }
+.card { border: 1px solid #28384e; border-radius: 20px; padding: 28px; background: #101b2ceb; box-shadow: 0 16px 60px #0002; }
+.card form > button.primary { width: 100%; margin-top: 10px; }
+.message { min-height: 24px; line-height: 1.5; color: #fda4af; font-size: 14px; white-space: pre-wrap; }
+.message.success { color: #6ee7b7; }
+.role-links { display: flex; gap: 10px; margin: 24px 0; }
+.role-links a, .tabs button { padding: 10px 14px; border-radius: 10px; border: 1px solid #334155; }
+.role-links a[aria-current], .tabs button[aria-selected="true"] { background: #16404c; border-color: #22d3ee; color: #a5f3fc; }
+.container { max-width: 1280px; margin: 0 auto; padding: 32px 24px; }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 24px 0; }
+.stat { padding: 20px; border-radius: 14px; background: #101b2c; border: 1px solid #263448; }
+.stat strong { display: block; font-size: 28px; margin-top: 8px; }
+.workspace { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(300px, 1fr); gap: 24px; align-items: start; margin-top: 20px; }
+.table-wrap { overflow-x: auto; margin-top: 16px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; text-align: left; }
+th { color: #94a3b8; font-size: 12px; font-weight: 600; }
+td, th { padding: 13px 10px; border-bottom: 1px solid #263448; vertical-align: top; }
+td button { padding: 7px 10px; white-space: nowrap; }
+.mono { font-family: Consolas, monospace; overflow-wrap: anywhere; font-size: 12px; }
+dl { display: grid; grid-template-columns: 110px 1fr; gap: 12px; font-size: 14px; }
+dt { color: #94a3b8; } dd { margin: 0; overflow-wrap: anywhere; }
+.empty { color: #94a3b8; padding: 30px 0; }
+[hidden] { display: none !important; }
+.account-form { max-width: 650px; }
+.credential-panel { margin-top: 20px; padding: 20px; border: 1px solid #22d3ee; border-radius: 12px; }
+summary { cursor: pointer; color: #67e8f9; padding: 10px 0; }
+@media (max-width: 800px) { .login-layout, .workspace { grid-template-columns: 1fr; gap: 24px; } .login-layout { margin-top: 20px; } .stats { gap: 8px; } .stat { padding: 14px; } .card { padding: 20px; } }

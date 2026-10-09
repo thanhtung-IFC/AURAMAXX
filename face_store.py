@@ -138,7 +138,8 @@ class FaceStore:
             self._bump_revision(connection)
             return imported
 
-    def register(self, name, vector, person_id=None, landmark_count=None, feature_version=FEATURE_VERSION):
+    def register(self, name, vector, person_id=None, landmark_count=None, feature_version=FEATURE_VERSION,
+                 owner_account_id=None, actor_id=None, access_account_id=None):
         name, vector_json = self._name(name), self._vector(vector)
         if not isinstance(feature_version, str) or not 1 <= len(feature_version) <= 64:
             raise ValueError("Invalid feature version")
@@ -153,7 +154,11 @@ class FaceStore:
                 person_id = "usr_" + uuid.uuid4().hex
                 connection.execute("INSERT INTO people VALUES (?, ?, ?, ?)",
                                    (person_id, name, created_at, display_date))
+                if owner_account_id:
+                    connection.execute("INSERT INTO account_people (person_id, account_id) VALUES (?, ?)",
+                                       (person_id, owner_account_id))
             else:
+                self._check_owner(connection, person_id, access_account_id)
                 person = connection.execute("SELECT name FROM people WHERE id = ?", (person_id,)).fetchone()
                 if person is None:
                     raise KeyError(person_id)
@@ -165,7 +170,21 @@ class FaceStore:
             """, ("smp_" + uuid.uuid4().hex, person_id, vector_json, feature_version,
                   VECTOR_DIMENSION, landmark_count, created_at))
             self._bump_revision(connection)
+            self._audit_action(connection, actor_id, "person.sample_saved", person_id)
             return self._person_summary(connection, person_id)
+
+    @staticmethod
+    def _check_owner(connection, person_id, account_id):
+        if account_id and not connection.execute(
+                "SELECT person_id FROM account_people WHERE person_id = ? AND account_id = ?",
+                (person_id, account_id)).fetchone():
+            raise PermissionError("Bạn không có quyền truy cập hồ sơ này.")
+
+    @staticmethod
+    def _audit_action(connection, actor, action, target=None):
+        if actor:
+            connection.execute("INSERT INTO audit_logs (id, actor_id, action, target_id, created_at) VALUES (?, ?, ?, ?, ?)",
+                               ("evt_" + uuid.uuid4().hex, actor, action, target, FaceStore._timestamps()[0]))
 
     @staticmethod
     def _person_summary(connection, person_id):
@@ -212,16 +231,20 @@ class FaceStore:
                 ]
             return self._cache[feature_version]
 
-    def delete_person(self, person_id):
+    def delete_person(self, person_id, actor_id=None, access_account_id=None):
         if not isinstance(person_id, str) or not person_id.strip():
             raise ValueError("Invalid person ID")
         with self._lock, self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            self._check_owner(connection, person_id, access_account_id)
             deleted = connection.execute("DELETE FROM people WHERE id = ?", (person_id,)).rowcount
             if deleted:
                 self._bump_revision(connection)
+                self._audit_action(connection, actor_id, "person.deleted", person_id)
             return bool(deleted)
 
-    def clear(self):
+    def clear(self, actor_id=None):
         with self._lock, self._connect() as connection:
             connection.execute("DELETE FROM people")
             self._bump_revision(connection)
+            self._audit_action(connection, actor_id, "people.cleared")

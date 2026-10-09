@@ -1,6 +1,6 @@
 # SQL Server cho VisionFace
 
-Backend hỗ trợ SQLite và SQL Server, dùng cùng các API hiện tại. Tài khoản đăng nhập web và phân quyền admin chưa được triển khai.
+Backend hỗ trợ SQLite và SQL Server. Web đã có tài khoản người dùng và admin; xem [AUTHENTICATION.md](AUTHENTICATION.md) để tạo admin, đăng nhập và gán hồ sơ khuôn mặt cho tài khoản.
 
 ## Cấu hình trên máy hiện tại
 

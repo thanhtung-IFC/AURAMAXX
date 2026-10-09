@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html lang="vi"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Đăng nhập người dùng · VisionFace</title><link rel="stylesheet" href="assets/auth.css"></head>
+<body data-login-role="user">
+<header class="topbar"><a class="brand" href="/login.html">VisionFace Pro</a><a href="/admin-login.html">Khu vực admin →</a></header>
+<main class="login-layout">
+  <section><div class="eyebrow">Không gian cá nhân</div><h1>Khuôn mặt của bạn.<br>Hồ sơ của bạn.</h1><p class="muted">Đăng nhập để đăng ký khuôn mặt, bổ sung mẫu và sử dụng công cụ phân tích. Mỗi tài khoản có danh sách hồ sơ riêng.</p><div class="role-links"><a href="/login.html" aria-current="page">Người dùng</a><a href="/admin-login.html">Admin</a></div></section>
+  <section class="card"><div class="tabs"><button id="tabLogin" type="button" aria-selected="true">Đăng nhập</button><button id="tabRegister" type="button" aria-selected="false">Tạo tài khoản</button></div>
+    <h2 id="formTitle" style="margin-top:24px">Chào mừng bạn trở lại</h2>
+    <form id="loginForm"><label id="displayNameLabel" hidden>Họ tên<input id="displayName" maxlength="120" autocomplete="name"></label><label>Tên đăng nhập<input id="username" required minlength="3" maxlength="64" pattern="[A-Za-z0-9_.\-]+" autocomplete="username" spellcheck="false"></label><label>Mật khẩu<input id="password" type="password" required maxlength="128" autocomplete="current-password"></label><p id="passwordHint" class="muted" hidden>Mật khẩu từ 12 đến 128 ký tự.</p><button id="submitLogin" class="primary" type="submit">Đăng nhập</button></form><p id="loginMessage" class="message" role="status" aria-live="polite"></p>
+  </section>
+</main><script src="assets/session.js"></script><script src="assets/login.js"></script></body></html>

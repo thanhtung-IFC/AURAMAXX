@@ -14,9 +14,11 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from face_store import FaceStore, StorageError
+from auth_store import AuthStore
 from sql_server_store import SqlServerFaceStore, connection_string
 import server
 import test_database_api as api_tests
+import test_authentication as auth_tests
 
 
 class TemporarySqlDatabase:
@@ -47,6 +49,11 @@ class SqlServerStoreTests(TemporarySqlDatabase, unittest.TestCase):
     def setUp(self):
         self.store = SqlServerFaceStore(self.store_string)
         self.store.clear()
+        self.auth = AuthStore(self.store)
+        self.auth.initialize()
+        with self.store._connect() as connection:
+            connection.execute("DELETE FROM accounts")
+        self.admin = self.auth.create_account("admin", "Admin", "Test admin password 123", role="admin")
         with self.store._connect() as connection:
             connection.execute("DELETE FROM dbo.metadata WHERE [key] = N'sqlite_imported'")
         self.temp = tempfile.TemporaryDirectory()
@@ -144,15 +151,24 @@ class SqlServerStoreTests(TemporarySqlDatabase, unittest.TestCase):
 
 
 @unittest.skipUnless(os.environ.get("VISIONFACE_TEST_SQLSERVER"), "SQL Server integration tests are opt-in")
-class SqlServerAPITests(TemporarySqlDatabase, api_tests.DatabaseAPITests):
+class SqlAuthSetup:
     def setUp(self):
         super().setUp()
         self.store = SqlServerFaceStore(self.store_string)
         self.store.clear()
+        self.auth = AuthStore(self.store)
+        self.auth.initialize()
+        with self.store._connect() as connection:
+            connection.execute("DELETE FROM accounts")
+        self.admin = self.auth.create_account("admin", "Admin", "Test admin password 123", role="admin")
         patcher = patch.object(server, "face_database", self.store)
         patcher.start()
         self.addCleanup(patcher.stop)
+        self.login_as("admin", role="admin", password="Test admin password 123")
 
+
+@unittest.skipUnless(os.environ.get("VISIONFACE_TEST_SQLSERVER"), "SQL Server integration tests are opt-in")
+class SqlServerAPITests(SqlAuthSetup, TemporarySqlDatabase, api_tests.DatabaseAPITests):
     def test_failed_storage_write_returns_500_and_rolls_back(self):
         with self.store._connect() as connection:
             connection.execute("""CREATE TRIGGER dbo.reject_sample ON dbo.face_samples AFTER INSERT AS
@@ -166,6 +182,27 @@ class SqlServerAPITests(TemporarySqlDatabase, api_tests.DatabaseAPITests):
         finally:
             with self.store._connect() as connection:
                 connection.execute("DROP TRIGGER dbo.reject_sample")
+
+
+@unittest.skipUnless(os.environ.get("VISIONFACE_TEST_SQLSERVER"), "SQL Server integration tests are opt-in")
+class SqlServerAuthenticationTests(SqlAuthSetup, TemporarySqlDatabase, auth_tests.AuthenticationTests):
+    test_failed_storage_write_returns_500_and_rolls_back = SqlServerAPITests.test_failed_storage_write_returns_500_and_rolls_back
+
+    def test_upgrade_repairs_legacy_audit_collations_and_preserves_events(self):
+        with self.store._connect() as connection:
+            before = [tuple(row) for row in connection.execute("SELECT * FROM dbo.audit_logs ORDER BY id").fetchall()]
+            connection.execute("ALTER TABLE dbo.audit_logs ALTER COLUMN actor_id NVARCHAR(128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL")
+            connection.execute("ALTER TABLE dbo.audit_logs ALTER COLUMN target_id NVARCHAR(128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL")
+            connection.execute("UPDATE dbo.metadata SET [value]='1' WHERE [key]='auth_schema_version'")
+        with self.assertRaises(StorageError):
+            self.auth.logs()
+        self.auth.initialize()
+        self.auth.initialize()
+        with self.store._connect() as connection:
+            after = [tuple(row) for row in connection.execute("SELECT * FROM dbo.audit_logs ORDER BY id").fetchall()]
+            self.assertEqual(connection.execute("SELECT [value] FROM dbo.metadata WHERE [key]='auth_schema_version'").fetchone()[0], "2")
+        self.assertEqual(after, before)
+        self.assertEqual(self.request("GET", "/api/admin/audit")[0], 200)
 
 
 if __name__ == "__main__":

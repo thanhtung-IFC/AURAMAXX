@@ -13,6 +13,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import server
 from face_store import FaceStore
+from auth_store import AuthStore, LoginLimiter
 
 
 class QuietHandler(server.VisionFaceRequestHandler):
@@ -27,6 +28,11 @@ class DatabaseAPITests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.store = FaceStore(self.root / "faces.sqlite3")
         self.store.initialize()
+        self.auth = AuthStore(self.store)
+        self.auth.initialize()
+        self.admin = self.auth.create_account("admin", "Admin", "Test admin password 123", role="admin")
+        self.cookie = ""
+        self.csrf = ""
         self.legacy = self.root / "face_database.json"
         self.legacy.write_text("[]", encoding="utf-8")
         self.store.migrate_json(self.legacy)
@@ -35,23 +41,40 @@ class DatabaseAPITests(unittest.TestCase):
             patcher = patch.object(server, target, value)
             patcher.start()
             self.addCleanup(patcher.stop)
+        limiter = patch.object(server, "login_limiter", LoginLimiter())
+        limiter.start()
+        self.addCleanup(limiter.stop)
         self.httpd = server.VisionFaceHTTPServer(("127.0.0.1", 0), partial(QuietHandler, directory=str(self.root)))
         self.thread = threading.Thread(target=self.httpd.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
         self.thread.start()
         self.addCleanup(self.stop_server)
         self.points = [{"x": i / 500, "y": 0.4, "z": 0.0} for i in range(478)]
+        self.login_as("admin", role="admin", password="Test admin password 123")
+
+    def login_as(self, username, role="user", password="Test user password 123"):
+        self.cookie, self.csrf = "", ""
+        status, data = self.request("POST", f"/api/auth/{role}/login", {"username": username, "password": password})
+        self.assertEqual(status, 200, data)
+        self.csrf = data["csrf_token"]
+        return data
 
     def stop_server(self):
         self.httpd.shutdown()
         self.httpd.server_close()
         self.thread.join(timeout=5)
 
-    def request(self, method, path, payload=None):
+    def request(self, method, path, payload=None, headers=None, authenticated=True):
         connection = http.client.HTTPConnection("127.0.0.1", self.httpd.server_port, timeout=5)
         try:
             body = json.dumps(payload) if payload is not None else None
-            connection.request(method, path, body=body, headers={"Content-Type": "application/json"})
+            request_headers = {"Content-Type": "application/json"}
+            if authenticated:
+                request_headers.update({"Cookie": self.cookie, "X-CSRF-Token": self.csrf})
+            request_headers.update(headers or {})
+            connection.request(method, path, body=body, headers=request_headers)
             response = connection.getresponse()
+            if response.getheader("Set-Cookie"):
+                self.cookie = response.getheader("Set-Cookie").split(";")[0]
             data = response.read()
             if response.getheader("Content-Type", "").startswith("application/json"):
                 data = json.loads(data)
@@ -149,7 +172,7 @@ class DatabaseAPITests(unittest.TestCase):
     def test_pages_and_shared_assets_are_served(self):
         project = Path(server.__file__).resolve().parent
         for filename in ("index.html", "real_time_face_landmark_liveness_tracker.html",
-                         "assets/app.js", "assets/app.css"):
+                         "assets/app.js", "assets/app.css", "assets/session.js"):
             with self.subTest(filename=filename):
                 source = project / filename
                 target = self.root / filename

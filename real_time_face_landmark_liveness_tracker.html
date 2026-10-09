@@ -84,6 +84,12 @@
         </button>
       </div>
     </div>
+    <nav class="max-w-7xl mx-auto flex flex-wrap justify-end items-center gap-4 mt-3 text-xs text-slate-300" aria-label="Tài khoản">
+      <span data-session-name></span>
+      <a href="/admin.html" data-admin-only hidden class="text-cyan-300 hover:underline">Quản trị người dùng</a>
+      <a href="/account.html" class="hover:underline">Tài khoản / Đổi mật khẩu</a>
+      <button data-logout class="text-rose-300 hover:underline">Đăng xuất</button>
+    </nav>
   </header>
 
   <main class="flex-1 max-w-7xl w-full mx-auto p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -446,7 +452,7 @@
         <div>
           <div class="text-[11px] font-medium text-slate-400 mb-1.5 flex justify-between items-center">
             <span>Dữ liệu khuôn mặt đã lưu (LocalStorage):</span>
-            <button id="btnClearAllFaces" class="text-[10px] text-rose-400 hover:underline">Xóa tất cả</button>
+            <button id="btnClearAllFaces" data-admin-only hidden class="text-[10px] text-rose-400 hover:underline">Xóa tất cả</button>
           </div>
           
           <div id="registeredList" class="space-y-1.5 max-h-36 overflow-y-auto pr-1">
@@ -996,6 +1002,7 @@
     <div class="text-xs" id="toastMessage">Thông báo ứng dụng</div>
   </div>
 
+  <script src="assets/session.js"></script>
   <script src="assets/app.js"></script>
 </body>
 </html>

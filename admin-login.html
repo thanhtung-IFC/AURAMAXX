@@ -1,0 +1,8 @@
+<!DOCTYPE html>
+<html lang="vi"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Đăng nhập admin · VisionFace</title><link rel="stylesheet" href="assets/auth.css"></head>
+<body data-login-role="admin">
+<header class="topbar"><a class="brand" href="/admin-login.html">VisionFace Pro</a><a href="/login.html">Đăng nhập người dùng →</a></header>
+<main class="login-layout">
+  <section><div class="eyebrow">Trung tâm quản trị</div><h1>Quản lý người dùng<br>và hồ sơ khuôn mặt.</h1><p class="muted">Xem chi tiết từng hồ sơ, kiểm tra các mẫu đã lưu và gán hồ sơ cho tài khoản. Khu vực này dành cho tài khoản được cấp quyền admin.</p><div class="role-links"><a href="/login.html">Người dùng</a><a href="/admin-login.html" aria-current="page">Admin</a></div></section>
+  <section class="card"><h2>Đăng nhập admin</h2><form id="loginForm"><label>Tên đăng nhập<input id="username" required minlength="3" maxlength="64" autocomplete="username" spellcheck="false"></label><label>Mật khẩu<input id="password" type="password" required maxlength="128" autocomplete="current-password"></label><button id="submitLogin" class="primary" type="submit">Vào trang quản trị</button></form><p id="loginMessage" class="message" role="status" aria-live="polite"></p><p class="muted">Tài khoản admin được tạo riêng bởi người quản lý hệ thống.</p></section>
+</main><script src="assets/session.js"></script><script src="assets/login.js"></script></body></html>

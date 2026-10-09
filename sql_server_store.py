@@ -29,6 +29,8 @@ class SqlServerFaceStore:
     _name = staticmethod(FaceStore._name)
     _vector = staticmethod(FaceStore._vector)
     _timestamps = staticmethod(FaceStore._timestamps)
+    _audit_action = staticmethod(FaceStore._audit_action)
+    _check_owner = staticmethod(FaceStore._check_owner)
 
     def __init__(self, connection):
         self.connection_string = connection
@@ -126,7 +128,8 @@ class SqlServerFaceStore:
                 GROUP BY p.id, p.name, p.created_at, p.display_date ORDER BY p.created_at, p.id
             """))
 
-    def register(self, name, vector, person_id=None, landmark_count=None, feature_version=FEATURE_VERSION):
+    def register(self, name, vector, person_id=None, landmark_count=None, feature_version=FEATURE_VERSION,
+                 owner_account_id=None, actor_id=None, access_account_id=None):
         name, vector_json = self._name(name), self._vector(vector)
         if not isinstance(feature_version, str) or not 1 <= len(feature_version) <= 64:
             raise ValueError("Invalid feature version")
@@ -142,7 +145,11 @@ class SqlServerFaceStore:
                 person_id = "usr_" + uuid.uuid4().hex
                 connection.execute("INSERT INTO dbo.people (id, name, created_at, display_date) VALUES (?, ?, ?, ?)",
                                    person_id, name, created_at, display_date)
+                if owner_account_id:
+                    connection.execute("INSERT INTO dbo.account_people (person_id, account_id) VALUES (?, ?)",
+                                       person_id, owner_account_id)
             else:
+                self._check_owner(connection, person_id, access_account_id)
                 row = connection.execute("SELECT name FROM dbo.people WHERE id = ?", person_id).fetchone()
                 if row is None:
                     raise KeyError(person_id)
@@ -159,6 +166,7 @@ class SqlServerFaceStore:
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """, "smp_" + uuid.uuid4().hex, person_id, vector_json, vector_hash,
                                    feature_version, VECTOR_DIMENSION, landmark_count, created_at)
+            self._audit_action(connection, actor_id, "person.sample_saved", person_id)
             return self._person_summary(connection, person_id)
 
     def matching_faces(self, feature_version=FEATURE_VERSION):
@@ -184,20 +192,23 @@ class SqlServerFaceStore:
         if not isinstance(person_id, str) or not person_id.strip() or len(person_id) > 128:
             raise ValueError("Invalid person ID")
 
-    def delete_person(self, person_id):
+    def delete_person(self, person_id, actor_id=None, access_account_id=None):
         self._validate_id(person_id)
         with self._lock, self._connect() as connection:
             self._write_lock(connection)
+            self._check_owner(connection, person_id, access_account_id)
             exists = connection.execute("SELECT id FROM dbo.people WHERE id = ?", person_id).fetchone()
             if exists is None:
                 return False
             connection.execute("DELETE FROM dbo.people WHERE id = ?", person_id)
+            self._audit_action(connection, actor_id, "person.deleted", person_id)
             return True
 
-    def clear(self):
+    def clear(self, actor_id=None):
         with self._lock, self._connect() as connection:
             self._write_lock(connection)
             connection.execute("DELETE FROM dbo.people")
+            self._audit_action(connection, actor_id, "people.cleared")
 
     def import_sqlite(self, source):
         """Import one consistent SQLite snapshot once; preserve IDs, dates and all samples."""

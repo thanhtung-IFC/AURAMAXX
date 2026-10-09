@@ -1,4 +1,5 @@
 
+    [hidden] { display: none !important; }
     body {
       background-color: #070a13;
       color: #f1f5f9;
@@ -39,4 +40,4 @@
       background: #334155;
       border-radius: 9999px;
     }
-  
+

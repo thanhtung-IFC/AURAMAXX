@@ -73,7 +73,7 @@
     const lblEngineDesc = document.getElementById('lblEngineDesc');
 
     const isLocalPage = ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname);
-    const PYTHON_BACKEND_URL = window.location.protocol === 'file:' || (isLocalPage && window.location.port !== '8000')
+    const PYTHON_BACKEND_URL = window.VisionAuth ? window.location.origin : window.location.protocol === 'file:' || (isLocalPage && window.location.port !== '8000')
       ? 'http://localhost:8000'
       : window.location.origin;
     let isPythonBackendAvailable = false;
@@ -1234,6 +1234,11 @@
         }
       }
 
+      if (typeof window !== 'undefined' && window.VisionAuth) {
+        registeredDatabase = [];
+        renderFaceListUI();
+        return;
+      }
       try {
         const data = localStorage.getItem(STORAGE_KEY);
         registeredDatabase = data ? JSON.parse(data) : [];
@@ -1244,6 +1249,7 @@
     }
 
     function saveRegisteredFaces() {
+      if (typeof window !== 'undefined' && window.VisionAuth) return;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(registeredDatabase));
       renderFaceListUI();
     }
@@ -1291,6 +1297,10 @@
         btn.addEventListener('click', async (e) => {
           const idx = parseInt(btn.getAttribute('data-index'), 10);
           const userId = btn.getAttribute('data-id');
+          if (typeof window !== 'undefined' && window.VisionAuth && !(usePythonEngine && isPythonBackendAvailable)) {
+            showToast("Cần kết nối máy chủ để xóa hồ sơ.", "error");
+            return;
+          }
 
           if (usePythonEngine && isPythonBackendAvailable && userId) {
             try {
@@ -1317,6 +1327,10 @@
     }
 
     async function registerCurrentFace(options = {}) {
+      if (typeof window !== 'undefined' && window.VisionAuth && !(usePythonEngine && isPythonBackendAvailable)) {
+        showToast("Cần kết nối máy chủ để lưu hồ sơ vào tài khoản.", "error");
+        return;
+      }
       if (!isCameraActive || !latestLandmarks) {
         showToast("Không tìm thấy khuôn mặt rõ nét để đăng ký!", "error");
         return;
@@ -1340,7 +1354,7 @@
           });
           const resJson = await resp.json();
           if (resp.ok && resJson.success) {
-            showToast(userId ? `Đã thêm mẫu cho: ${name}` : `[SQLite] Đã đăng ký: ${name}`, "success");
+            showToast(userId ? `Đã thêm mẫu cho: ${name}` : `Đã đăng ký: ${name}`, "success");
             inputPersonName.value = '';
             await loadRegisteredFaces();
             return;
@@ -1560,6 +1574,10 @@
     });
 
     btnClearAllFaces.addEventListener('click', async () => {
+      if (typeof window !== 'undefined' && window.VisionAuth && !(usePythonEngine && isPythonBackendAvailable)) {
+        showToast("Cần kết nối máy chủ để xóa hồ sơ.", "error");
+        return;
+      }
       if (registeredDatabase.length === 0) return;
       if (usePythonEngine && isPythonBackendAvailable) {
         try {

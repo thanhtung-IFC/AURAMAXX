@@ -35,13 +35,8 @@ Hệ thống hoạt động theo kiến trúc **Hybrid**:
 
 ## 🌐 Triển Khai Chạy 24/7 Không Phụ Thuộc Máy Tính Cá Nhân
 
-### Cách 1: Chạy Trực Tiếp Qua GitHub Pages (Miễn phí 100%, 0 server cần bật)
-1. Push mã nguồn lên GitHub Repository của bạn.
-2. Vào **Settings** của repository -> Chọn tab **Pages**.
-3. Tại mục **Build and deployment** -> **Source**: Chọn `Deploy from a branch`.
-4. Chọn nhánh `main` (hoặc `master`) và thư mục `/(root)` -> Bấm **Save**.
-5. Sau 1 phút, trang web sẽ online tại: `https://<ten-user>.github.io/<ten-repo>/`
-6. Trang web có sẵn **Client-Side AI Engine** tích hợp sẵn trong trình duyệt, bạn có thể bật camera trên điện thoại hoặc máy tính khác để sử dụng 24/7 mà không cần mở máy tính cá nhân.
+### GitHub Pages
+Bản có đăng nhập và phân quyền cần máy chủ Python phục vụ cả giao diện và API cùng origin. GitHub Pages chỉ phục vụ tệp tĩnh nên không chạy được tính năng tài khoản và database của bản này.
 
 ---
 
@@ -56,7 +51,7 @@ Nếu bạn muốn có thêm máy chủ Python chạy liên tục trên mạng �
    - **Build Command**: `pip install -r requirements.txt`
    - **Start Command**: `python server.py`
 4. Bấm **Deploy**. Bạn sẽ nhận được đường dẫn API HTTPS (ví dụ: `https://visionface-ai.onrender.com`).
-5. Copy đường dẫn này dán vào giao diện web để kết nối backend đám mây 24/7!
+5. Mở địa chỉ HTTPS của chính máy chủ để dùng giao diện và API cùng origin. Cấu hình database có lưu trữ bền vững, tạo admin bằng `manage_accounts.py`, và đặt `FACE_COOKIE_SECURE=true` khi phục vụ qua HTTPS.
 
 ---
 
@@ -74,10 +69,13 @@ python server.py
 
 Truy cập trên trình duyệt: `http://localhost:8000`
 
+Web yêu cầu đăng nhập. Xem [AUTHENTICATION.md](AUTHENTICATION.md) để tạo admin lần đầu, đăng ký tài khoản người dùng và quản lý từng hồ sơ. Admin đăng nhập tại `/admin-login.html`; người dùng tại `/login.html`.
+
 ## Cấu trúc mã nguồn
 
 - `index.html` và `real_time_face_landmark_liveness_tracker.html`: hai địa chỉ giao diện được giữ tương thích, cùng tải `assets/app.js` và `assets/app.css`. Khi sửa logic hoặc kiểu hiển thị, sửa các file trong `assets/`.
 - `server.py`: HTTP API và phục vụ giao diện.
+- `auth_store.py`, `manage_accounts.py`: tài khoản, phiên, quyền sở hữu hồ sơ và tạo/khôi phục admin; `admin.html` là trang quản trị.
 - `face_liveness_algorithms.py`: thuật toán đặc trưng khuôn mặt và liveness.
 - `face_aesthetic_analyzer.py`: phân tích ảnh chính diện và góc nghiêng.
 - `face_store.py`: lưu trữ SQLite; hướng dẫn sử dụng trong [DATABASE.md](DATABASE.md).
@@ -86,7 +84,7 @@ Truy cập trên trình duyệt: `http://localhost:8000`
 - Hai file thuật toán mang tên tiếng Việt là đường dẫn import tương thích, dùng lại module chính để tránh tồn tại thuật toán cũ khác phiên bản.
 - `main_tracker.py`: ứng dụng desktop tùy chọn, độc lập với web; cài bằng `pip install -r requirements-desktop.txt`.
 
-Khi triển khai trang tĩnh, cần đưa cả thư mục `assets/` lên cùng các file HTML.
+Khi triển khai, đưa cả thư mục `assets/` và các file HTML lên máy chủ Python.
 
 Kiểm tra sau khi sửa code:
 
