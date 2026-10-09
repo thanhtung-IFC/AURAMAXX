@@ -9,14 +9,14 @@ Bao gồm:
 4. Đường viền hàm & Cằm (Jawline Angle, Bigonial Width, Chin Sharpness, Bạnh/Thon)
 5. Tình trạng da (Skin Tone, Smoothness, Uniformity, Dark Circles, Oiliness, Redness)
 6. Kiểu tóc & Chân tóc (Hairline Shape, Hair Color, Lời khuyên khắc phục khuyết điểm)
-Tác giả: VisionAI Team
+Tác giả: AURAMAXX Team
 """
 
 import base64
 import io
 import math
 from typing import Dict, Any, List, Tuple, Optional
-
+ 
 import numpy as np
 from PIL import Image
 
@@ -631,7 +631,258 @@ def analyze_hair_and_hairline(image_pil: Image.Image, points: List[FaceAnalyzerP
 
 
 # =========================================================================
-# 7. HÀM TỔNG HỢP: COMPREHENSIVE FACE ANALYSIS (THANG ĐIỂM CHUẨN KHOA HỌC)
+# 7. PHÂN TÍCH GÓC NGHIÊNG (PROFILE / 3/4 VIEW - RICKETTS E-LINE & JAW ANGLE)
+# =========================================================================
+
+def analyze_profile_view(
+    points: List[FaceAnalyzerPoint],
+    img_w: int,
+    img_h: int
+) -> Dict[str, Any]:
+    """
+    Phân tích góc nghiêng (Profile View):
+    1. Đường thẩm mỹ Ricketts E-line (Pronasale -> Pogonion): Đánh giá độ nhô môi & cằm lẹm / cằm nhô.
+    2. Góc mũi môi (Nasolabial Angle): Đánh giá góc nghiêng trụ mũi với môi trên.
+    3. Đường sống mũi nghiêng (Nasal Bridge Slope): Thẳng, gồ xương (dorsal hump), hay tẹt/lõm (saddle).
+    4. Góc xương hàm nghiêng thực tế (True Gonial Angle).
+    5. Phát hiện hướng quay mặt (Side Profile: Left vs Right) từ độ chênh lệch mốc 2 bên.
+    """
+    pronasale = points[1]        # Đỉnh chóp mũi
+    subnasale = points[2]        # Chân trụ mũi
+    labrale_sup = points[0]      # Đỉnh viền môi trên
+    labrale_inf = points[17]     # Đáy viền môi dưới
+    pogonion = points[152]       # Điểm nhô nhất của cằm (Đáy cằm)
+    nasion = points[168]         # Gốc mũi giữa 2 mắt
+    glabella = points[9]         # Điểm giữa 2 chân mày
+
+    # Xác định hướng quay mặt profile (Quay trái hay quay phải)
+    dist_l = abs(points[234].px - points[1].px)
+    dist_r = abs(points[454].px - points[1].px)
+    is_left_profile = dist_l < dist_r  # Quay mặt sang trái (gò má trái gần mũi hơn hoặc ẩn)
+
+    gonion = points[172] if is_left_profile else points[397]
+    ear_tragus = points[234] if is_left_profile else points[454]
+
+    # 1. Đường thẩm mỹ Ricketts E-line (Pronasale [1] -> Pogonion [152])
+    # Tính khoảng cách từ môi trên [0] và môi dưới [17] tới đường E-line
+    eline_dist_upper = point_line_distance(labrale_sup, pronasale, pogonion)
+    eline_dist_lower = point_line_distance(labrale_inf, pronasale, pogonion)
+
+    # Đánh giá độ nhô cằm dựa trên mối tương quan giữa E-line và môi
+    # Trong nhân trắc học: Môi trên nên nằm sau đường E-line khoảng 2-4mm, môi dưới cách 1-2mm.
+    # Nếu môi nằm quá xa về phía trước đường E-line -> Cằm lẹm (Retrognathia) hoặc Môi hô (Bimaxillary protrusion).
+    # Nếu cằm vượt qua đường thẳng đứng -> Cằm nhô/gãy (Prognathia).
+    face_scale = dist_2d(nasion, pogonion) + 1e-6
+    norm_upper_lip = (eline_dist_upper / face_scale) * 100.0
+    norm_lower_lip = (eline_dist_lower / face_scale) * 100.0
+
+    if norm_lower_lip > 5.5:
+        chin_projection = "Cằm lẹm (Retrognathia) / Môi nhô trước đường E-line"
+        chin_projection_comment = "Đường E-line cho thấy cằm bị thụt lùi so với trục mũi và môi, làm góc nghiêng thiếu độ sắc nét."
+        chin_projection_score = 65.0
+    elif norm_lower_lip < -3.5:
+        chin_projection = "Cằm nhô / Cằm phát triển quá mức (Prognathia)"
+        chin_projection_comment = "Cằm phát triển chìa ra trước nhiều hơn trục thẩm mỹ E-line."
+        chin_projection_score = 72.0
+    else:
+        chin_projection = "Cằm đạt chuẩn tỷ lệ thẩm mỹ Ricketts E-line"
+        chin_projection_comment = "Cằm và môi có độ dốc hài hòa trên đường thẩm mỹ chuẩn, tỷ lệ cằm - mũi - môi cân đối."
+        chin_projection_score = 92.0
+
+    # 2. Góc mũi môi (Nasolabial Angle): Hợp bởi Glabella/Columella (Subnasale [2]) và Môi trên [0]
+    nasolabial_angle = angle_between_points(pronasale, subnasale, labrale_sup)
+    if nasolabial_angle < 85.0:
+        nasolabial_status = f"Góc mũi môi nhọn ({round(nasolabial_angle, 1)}° < 90°): Đầu mũi chúc xuống hoặc môi trên nhô"
+        nasolabial_score = 68.0
+    elif nasolabial_angle <= 108.0:
+        nasolabial_status = f"Góc mũi môi lý tưởng ({round(nasolabial_angle, 1)}°): Chuẩn thẩm mỹ nhân trắc học (90° - 105°)"
+        nasolabial_score = 93.0
+    else:
+        nasolabial_status = f"Góc mũi môi tù ({round(nasolabial_angle, 1)}° > 108°): Đầu mũi hếch hoặc góc trụ mũi mở rộng"
+        nasolabial_score = 70.0
+
+    # 3. Đường sống mũi nghiêng (Nasal Bridge Profile):
+    # Xét độ thẳng của đường nối Nasion [168] -> Pronasale [1] với điểm rhinion [6]
+    rhinion = points[6]
+    bridge_hump_dist = point_line_distance(rhinion, nasion, pronasale)
+    norm_hump = (bridge_hump_dist / face_scale) * 100.0
+
+    if norm_hump > 2.0:
+        bridge_slope = "Sống mũi gồ nhẹ (Dorsal Hump) ở phần xương chính mũi"
+        bridge_slope_type = "Gồ xương"
+    elif norm_hump < -2.2:
+        bridge_slope = "Sống mũi trũng / võng nhẹ (Saddle / Scooped profile)"
+        bridge_slope_type = "Võng / Tẹt nhẹ"
+    else:
+        bridge_slope = "Sống mũi thẳng tắp thanh thoát theo góc nhìn nghiêng"
+        bridge_slope_type = "Thẳng tự nhiên"
+
+    # 4. Góc xương hàm nghiêng thực tế (True Gonial Angle ở góc nhìn nghiêng)
+    profile_gonial_angle = angle_between_points(ear_tragus, gonion, pogonion)
+    if profile_gonial_angle < 118.0:
+        profile_jaw_desc = f"Góc hàm vuông vức sắc nét ({round(profile_gonial_angle, 1)}°): Khung xương hàm rõ nét, cá tính mạnh."
+    elif profile_gonial_angle <= 128.0:
+        profile_jaw_desc = f"Góc hàm nghiêng thanh tú ({round(profile_gonial_angle, 1)}°): Độ dốc xương hàm chuẩn tỷ lệ vàng."
+    else:
+        profile_jaw_desc = f"Góc hàm nghiêng mở rộng ({round(profile_gonial_angle, 1)}°): Viền hàm thoai thoải, đường quai hàm không quá gắt."
+
+    profile_aesthetic_score = round(
+        chin_projection_score * 0.40 +
+        nasolabial_score * 0.35 +
+        (90.0 if bridge_slope_type == "Thẳng tự nhiên" else 75.0) * 0.25,
+        1
+    )
+
+    return {
+        "profile_aesthetic_score": profile_aesthetic_score,
+        "view_side": "Góc nghiêng Trái" if is_left_profile else "Góc nghiêng Phải",
+        "ricketts_eline": {
+            "chin_projection": chin_projection,
+            "chin_comment": chin_projection_comment,
+            "upper_lip_offset_px": round(eline_dist_upper, 1),
+            "lower_lip_offset_px": round(eline_dist_lower, 1),
+            "score": chin_projection_score
+        },
+        "nasolabial_angle_deg": round(nasolabial_angle, 1),
+        "nasolabial_status": nasolabial_status,
+        "nasal_bridge_profile": {
+            "type": bridge_slope_type,
+            "description": bridge_slope
+        },
+        "profile_gonial_angle_deg": round(profile_gonial_angle, 1),
+        "profile_jaw_description": profile_jaw_desc,
+        "visual_guides": {
+            "eline": [
+                {"x": round(pronasale.px, 1), "y": round(pronasale.py, 1)},
+                {"x": round(pogonion.px, 1), "y": round(pogonion.py, 1)}
+            ],
+            "nasolabial_rays": [
+                {"x": round(pronasale.px, 1), "y": round(pronasale.py, 1)},
+                {"x": round(subnasale.px, 1), "y": round(subnasale.py, 1)},
+                {"x": round(labrale_sup.px, 1), "y": round(labrale_sup.py, 1)}
+            ],
+            "jaw_profile_triangle": [
+                {"x": round(ear_tragus.px, 1), "y": round(ear_tragus.py, 1)},
+                {"x": round(gonion.px, 1), "y": round(gonion.py, 1)},
+                {"x": round(pogonion.px, 1), "y": round(pogonion.py, 1)}
+            ]
+        }
+    }
+
+
+# =========================================================================
+# 8. HỢP NHẤT ĐA GÓC NHÌN (MULTI-VIEW FUSION: FRONTAL + PROFILE)
+# =========================================================================
+
+def run_multi_view_face_analysis(
+    frontal_b64: str,
+    frontal_landmarks: List[Dict[str, float]],
+    profile_b64: str,
+    profile_landmarks: List[Dict[str, float]],
+    img_width: int,
+    img_height: int
+) -> Dict[str, Any]:
+    """
+    Hợp nhất phân tích 2 góc chụp:
+    - Ảnh 1: Chính diện (Frontal) -> Đối xứng, Rule of Thirds, fWHR, Da, Tóc
+    - Ảnh 2: Góc nghiêng (Profile) -> Ricketts E-line, Độ nhô cằm, Sống mũi, Góc hàm thực tế
+    - Kết hợp để xác định Dáng mặt chuẩn xác 3D, loại bỏ hoàn toàn hiện tượng lệch kết quả do tư thế.
+    """
+    frontal_result = run_comprehensive_face_analysis(
+        image_base64=frontal_b64,
+        landmarks_data=frontal_landmarks,
+        img_width=img_width,
+        img_height=img_height
+    )
+    if not frontal_result.get("success"):
+        return frontal_result
+
+    # Giải mã và đo góc nghiêng
+    actual_w = img_width
+    actual_h = img_height
+    try:
+        if "," in profile_b64:
+            clean_b64 = profile_b64.split(",", 1)[1]
+        else:
+            clean_b64 = profile_b64
+        p_bytes = base64.b64decode(clean_b64)
+        p_img = Image.open(io.BytesIO(p_bytes))
+        if actual_w <= 0:
+            actual_w = p_img.size[0]
+        if actual_h <= 0:
+            actual_h = p_img.size[1]
+    except Exception:
+        pass
+
+    profile_points = [FaceAnalyzerPoint(p.get("x", 0), p.get("y", 0), p.get("z", 0), actual_w, actual_h) for p in profile_landmarks]
+    if len(profile_points) < 468:
+        profile_analysis = None
+    else:
+        profile_analysis = analyze_profile_view(profile_points, actual_w, actual_h)
+
+    # 3D Invariant Face Shape Fusion (Hợp nhất dáng mặt 3D chuẩn xác)
+    # Kết hợp fWHR của mặt chính diện + tỷ lệ xương hàm + độ nhô cằm ở góc nghiêng
+    f_shape = frontal_result["proportions"]["face_shape"]
+    fwhr = frontal_result["proportions"]["length_to_width_ratio"]
+    jaw_angle_front = frontal_result["jawline"]["average_jaw_angle_deg"]
+    
+    if profile_analysis:
+        p_gonial = profile_analysis["profile_gonial_angle_deg"]
+        chin_proj = profile_analysis["ricketts_eline"]["chin_projection"]
+        
+        # Cross-validation để chốt dáng mặt không bao giờ nhảy sai:
+        if fwhr > 1.55:
+            unified_shape = "Mặt Dài / Chữ Nhật (Oblong)"
+            unified_desc = "Tỷ lệ chiều dài khuôn mặt lớn cả ở góc chính diện lẫn nghiêng. Viền hàm dài thon."
+        elif fwhr < 1.25:
+            if p_gonial < 120.0 or jaw_angle_front < 120.0:
+                unified_shape = "Mặt Vuông (Square)"
+                unified_desc = "Khung xương hàm bạnh và góc cạnh xác thực từ cả 2 góc nhìn. Khuôn mặt nam tính, sắc nét."
+            else:
+                unified_shape = "Mặt Tròn (Round)"
+                unified_desc = "Tỷ lệ dài và rộng tương đương, đường viền hàm và má cong mềm, không có góc xương thô."
+        elif "lẹm" in chin_proj and fwhr < 1.35:
+            unified_shape = "Mặt Tròn (Round / Cằm lẹm)"
+            unified_desc = "Góc nghiêng xác nhận độ lùi cằm làm phần dưới khuôn mặt ngắn hơn góc nhìn chính diện."
+        elif jaw_angle_front > 124.0 and (120.0 <= p_gonial <= 130.0):
+            unified_shape = "Mặt Trái Xoan (Oval)"
+            unified_desc = "Dáng mặt cân đối chuẩn mực xác nhận từ cả góc thẳng lẫn góc nghiêng, tỷ lệ các góc xương hài hòa."
+        else:
+            unified_shape = f_shape
+            unified_desc = frontal_result["proportions"]["face_shape_description"]
+
+        # Cập nhật kết quả dáng mặt thống nhất
+        frontal_result["proportions"]["face_shape"] = unified_shape
+        frontal_result["proportions"]["face_shape_description"] = unified_desc
+        frontal_result["proportions"]["is_3d_multi_view_verified"] = True
+
+    # Điểm hài hòa tổng thể đa chiều (Multi-View 3D Harmony Score)
+    # Mặt chính diện (70%) + Góc nghiêng (30%)
+    if profile_analysis:
+        p_score = profile_analysis["profile_aesthetic_score"]
+        f_score = frontal_result["overall_harmony_score"]
+        multi_score = round(f_score * 0.70 + p_score * 0.30, 1)
+        frontal_result["overall_harmony_score"] = multi_score
+        frontal_result["profile"] = profile_analysis
+        
+        # Cập nhật cấp bậc
+        if multi_score >= 85.0:
+            frontal_result["overall_grade"] = "Hài Hòa Xuất Sắc (Chuẩn 3D Nhân Trắc Học)"
+        elif multi_score >= 75.0:
+            frontal_result["overall_grade"] = "Khá Cân Đối (Đạt Chuẩn Thẩm Mỹ Đa Chiều)"
+        elif multi_score >= 63.0:
+            frontal_result["overall_grade"] = "Mức Trung Bình Phổ Biến (Tồn Tại Khuyết Điểm Tự Nhiên)"
+        elif multi_score >= 50.0:
+            frontal_result["overall_grade"] = "Mất Cân Đối Nhẹ (Có Khuyết Điểm Cần Chú Ý)"
+        else:
+            frontal_result["overall_grade"] = "Bất Đối Xứng Rõ Rệt (Nhiều Điểm Lệch Khỏi Chuẩn)"
+
+    frontal_result["is_multi_view"] = True
+    return frontal_result
+
+
+# =========================================================================
+# 9. HÀM TỔNG HỢP: COMPREHENSIVE FACE ANALYSIS (THANG ĐIỂM CHUẨN KHOA HỌC)
 # =========================================================================
 
 def run_comprehensive_face_analysis(

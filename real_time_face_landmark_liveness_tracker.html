@@ -195,27 +195,94 @@
         <div id="shutterFlash" class="absolute inset-0 pointer-events-none opacity-0 z-30 transition-all duration-150"></div>
       </div>
 
-      <!-- Thanh công cụ Chụp & Phân Tích Khuôn Mặt -->
-      <div class="flex flex-wrap items-center justify-between gap-3 p-3 bg-surface-800/90 border border-surface-700 rounded-2xl shadow-lg">
-        <div class="flex items-center gap-2">
-          <button id="btnCaptureAnalyze" class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 via-teal-400 to-blue-600 hover:brightness-110 text-slate-950 font-bold text-xs shadow-lg shadow-cyan-500/25 transition duration-150 transform active:scale-95">
-            <i class="fa-solid fa-camera-retro text-sm"></i>
-            <span>Chụp & Phân Tích Khuôn Mặt</span>
-          </button>
+      <!-- Thanh công cụ Chụp Đa Chiều 2 Lần (Frontal + Profile 3/4) & Phân Tích Thẩm Mỹ -->
+      <div class="p-3.5 bg-surface-800/90 border border-surface-700 rounded-2xl shadow-lg flex flex-col gap-3">
+        <!-- Hướng dẫn bước chụp hiện tại -->
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-surface-700/80 pb-2.5">
+          <div class="flex items-center gap-2">
+            <span id="badgeCaptureStep" class="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold bg-cyan-950 text-cyan-300 border border-cyan-700 flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+              <span>BƯỚC 1/2: MẶT CHÍNH DIỆN</span>
+            </span>
+            <span id="txtCaptureStepDesc" class="text-xs text-slate-300 font-medium">
+              Nhìn thẳng vào camera (Góc quay Yaw ~ 0°)
+            </span>
+          </div>
 
-          <label class="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-surface-700 hover:bg-surface-600 text-slate-200 text-xs font-semibold cursor-pointer transition">
-            <i class="fa-solid fa-arrow-up-from-bracket"></i>
-            <span>Tải Ảnh Lên</span>
-            <input type="file" id="inputUploadImage" accept="image/*" class="hidden">
-          </label>
+          <div class="flex items-center gap-3 text-xs font-mono">
+            <label class="flex items-center gap-1.5 cursor-pointer text-slate-300 select-none">
+              <input type="checkbox" id="chkShowGuideLines" checked class="accent-cyan-400 rounded">
+              <span class="text-[11px]">Khung căn chỉnh</span>
+            </label>
+            <span id="lblCaptureGuide" class="text-[11px] text-cyan-400 font-semibold">💡 Nhìn thẳng vào camera</span>
+          </div>
         </div>
 
-        <div class="flex items-center gap-4 text-xs font-mono">
-          <label class="flex items-center gap-1.5 cursor-pointer text-slate-300 select-none">
-            <input type="checkbox" id="chkShowGuideLines" checked class="accent-cyan-400 rounded">
-            <span class="text-[11px]">Khung căn chỉnh</span>
-          </label>
-          <span id="lblCaptureGuide" class="text-[11px] text-cyan-400 hidden sm:inline">💡 Căn khuôn mặt vào giữa khung</span>
+        <!-- Thumbnails xem trước 2 lần chụp & Nút thao tác -->
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <!-- Cụm Thumbnails 2 góc -->
+          <div class="flex items-center gap-3">
+            <!-- Box Ảnh 1: Chính diện -->
+            <div id="thumbBoxFrontal" class="relative w-20 h-16 rounded-xl bg-surface-900 border-2 border-dashed border-cyan-500/60 overflow-hidden flex flex-col items-center justify-center text-center p-1 group">
+              <img id="imgThumbFrontal" class="w-full h-full object-cover hidden" alt="Chính diện">
+              <div id="placeholderFrontal" class="flex flex-col items-center text-slate-400 group-hover:text-cyan-400 transition">
+                <i class="fa-regular fa-face-smile text-base mb-0.5"></i>
+                <span class="text-[9px] font-mono leading-none">Chính diện</span>
+              </div>
+              <button id="btnRetakeFrontal" class="absolute top-1 right-1 w-5 h-5 rounded-full bg-slate-900/90 text-rose-400 hover:text-white hover:bg-rose-600 items-center justify-center text-[10px] hidden" title="Chụp lại mặt chính diện">
+                <i class="fa-solid fa-rotate-left"></i>
+              </button>
+              <span id="checkFrontalDone" class="absolute bottom-1 left-1 w-4 h-4 rounded-full bg-emerald-500 text-slate-950 items-center justify-center text-[9px] font-bold hidden">
+                <i class="fa-solid fa-check"></i>
+              </span>
+            </div>
+
+            <!-- Mũi tên chuyển tiếp -->
+            <div class="text-slate-500 text-xs font-bold">
+              <i class="fa-solid fa-arrow-right"></i>
+            </div>
+
+            <!-- Box Ảnh 2: Góc nghiêng -->
+            <div id="thumbBoxProfile" class="relative w-20 h-16 rounded-xl bg-surface-900 border-2 border-dashed border-surface-700 overflow-hidden flex flex-col items-center justify-center text-center p-1 group">
+              <img id="imgThumbProfile" class="w-full h-full object-cover hidden" alt="Góc nghiêng">
+              <div id="placeholderProfile" class="flex flex-col items-center text-slate-500">
+                <i class="fa-solid fa-head-side text-base mb-0.5"></i>
+                <span class="text-[9px] font-mono leading-none">Nghiêng 30-45°</span>
+              </div>
+              <button id="btnRetakeProfile" class="absolute top-1 right-1 w-5 h-5 rounded-full bg-slate-900/90 text-rose-400 hover:text-white hover:bg-rose-600 items-center justify-center text-[10px] hidden" title="Chụp lại góc nghiêng">
+                <i class="fa-solid fa-rotate-left"></i>
+              </button>
+              <span id="checkProfileDone" class="absolute bottom-1 left-1 w-4 h-4 rounded-full bg-emerald-500 text-slate-950 items-center justify-center text-[9px] font-bold hidden">
+                <i class="fa-solid fa-check"></i>
+              </span>
+            </div>
+          </div>
+
+          <!-- Các nút hành động: Chụp / Phân tích / Reset / Tải ảnh -->
+          <div class="flex items-center gap-2 flex-wrap">
+            <!-- Nút Chụp ảnh góc hiện tại -->
+            <button id="btnCaptureCurrentStep" class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:brightness-110 text-slate-950 font-bold text-xs shadow-lg shadow-cyan-500/25 transition transform active:scale-95">
+              <i class="fa-solid fa-camera text-sm"></i>
+              <span id="lblBtnCapture">Chụp Mặt Chính Diện</span>
+            </button>
+
+            <!-- Nút Kích hoạt phân tích hợp nhất 2 góc -->
+            <button id="btnRunMultiViewAnalysis" disabled class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-500 hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/25 transition transform active:scale-95">
+              <i class="fa-solid fa-wand-magic-sparkles text-sm"></i>
+              <span>Phân Tích Đa Chiều 3D</span>
+            </button>
+
+            <!-- Nút Reset Chụp lại từ đầu -->
+            <button id="btnResetTwoShot" class="px-2.5 py-2.5 rounded-xl bg-surface-700 hover:bg-surface-600 text-slate-300 hover:text-rose-400 text-xs font-semibold transition" title="Làm mới lại cả 2 lần chụp">
+              <i class="fa-solid fa-rotate-right"></i>
+            </button>
+
+            <label class="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-surface-700 hover:bg-surface-600 text-slate-200 text-xs font-semibold cursor-pointer transition">
+              <i class="fa-solid fa-arrow-up-from-bracket"></i>
+              <span class="hidden sm:inline">Tải Ảnh</span>
+              <input type="file" id="inputUploadImage" accept="image/*" class="hidden">
+            </label>
+          </div>
         </div>
       </div>
 
@@ -495,6 +562,19 @@
 
         <!-- Cột trái (5 Cột): Ảnh Chụp Snapshot + Lớp Trắc Hình -->
         <div class="lg:col-span-5 flex flex-col gap-4">
+          <!-- Thanh chọn góc nhìn xem lại ảnh báo cáo (Chính diện / Góc nghiêng) -->
+          <div class="flex items-center justify-between p-1.5 bg-surface-800 border border-surface-700 rounded-xl text-xs">
+            <span class="text-slate-400 text-[11px] font-medium pl-1">Góc hiển thị:</span>
+            <div class="flex items-center gap-1">
+              <button id="btnTabModalFrontal" class="px-3 py-1 rounded-lg bg-cyan-500 text-slate-950 font-bold text-[11px] transition">
+                Chính Diện
+              </button>
+              <button id="btnTabModalProfile" class="px-3 py-1 rounded-lg bg-surface-900 text-slate-400 hover:text-slate-200 text-[11px] transition">
+                Góc Nghiêng
+              </button>
+            </div>
+          </div>
+
           <div class="relative w-full aspect-[4/3] bg-black rounded-2xl overflow-hidden border border-surface-700 shadow-inner group">
             <canvas id="snapshotReportCanvas" class="w-full h-full object-cover"></canvas>
             
@@ -732,6 +812,62 @@
             </div>
           </div>
 
+          <!-- Mục 4.5: Phân Tích Chuyên Sâu Góc Nghiêng & Ricketts E-line (Hiển thị khi chụp 2 lần) -->
+          <div id="panelProfileDiagnostics" class="bg-surface-800/90 border border-cyan-800/60 rounded-2xl p-4 shadow-sm">
+            <div class="flex items-center justify-between border-b border-surface-700 pb-2.5 mb-3">
+              <div class="flex items-center gap-2">
+                <div class="w-7 h-7 rounded-lg bg-cyan-950 text-cyan-400 flex items-center justify-center font-bold">
+                  <i class="fa-solid fa-head-side text-xs"></i>
+                </div>
+                <div>
+                  <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                    <span>Trắc Diện Góc Nghiêng (Profile View)</span>
+                    <span class="text-[9px] px-1.5 py-0.2 rounded bg-cyan-950 text-cyan-300 border border-cyan-700 font-mono">Đa Chiều 3D</span>
+                  </h3>
+                  <span class="text-[10px] text-slate-400">Đường thẩm mỹ Ricketts E-line & Độ nhô cằm / mũi</span>
+                </div>
+              </div>
+              <div class="text-right">
+                <span id="txtProfileAestheticScore" class="text-base font-mono font-bold text-cyan-400">0%</span>
+                <span class="text-[10px] text-slate-400 block font-mono" id="txtProfileViewSide">Góc nghiêng</span>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs mb-3">
+              <!-- E-line & Cằm -->
+              <div class="bg-surface-900 p-2.5 rounded-xl border border-surface-700">
+                <div class="flex items-center justify-between text-[10px] text-slate-400 mb-1">
+                  <span>Đường Ricketts E-line:</span>
+                  <span id="txtElineScore" class="font-mono text-cyan-400 font-bold">0%</span>
+                </div>
+                <strong id="txtChinProjection" class="text-xs font-bold text-white block">Cằm chuẩn E-line</strong>
+                <p id="txtChinProjectionComment" class="text-[10px] text-slate-400 mt-1 leading-snug"></p>
+              </div>
+
+              <!-- Góc mũi môi & Sống mũi -->
+              <div class="bg-surface-900 p-2.5 rounded-xl border border-surface-700">
+                <div class="flex items-center justify-between text-[10px] text-slate-400 mb-1">
+                  <span>Góc Mũi Môi (Nasolabial):</span>
+                  <span id="txtNasolabialDeg" class="font-mono text-emerald-400 font-bold">96.0°</span>
+                </div>
+                <strong id="txtNasalBridgeProfile" class="text-xs font-bold text-white block">Sống mũi thẳng thanh thoát</strong>
+                <p id="txtNasolabialStatus" class="text-[10px] text-slate-400 mt-1 leading-snug"></p>
+              </div>
+            </div>
+
+            <!-- Góc xương hàm góc nghiêng thực tế -->
+            <div class="p-2.5 rounded-xl bg-surface-900/90 border border-surface-700 text-[11px] flex items-start gap-2">
+              <i class="fa-solid fa-angle text-cyan-400 text-xs mt-0.5"></i>
+              <div class="flex-1">
+                <div class="flex items-center justify-between">
+                  <span class="text-slate-300 font-medium">Góc hàm trắc diện (Profile Gonial):</span>
+                  <strong id="txtProfileGonialDeg" class="font-mono text-cyan-400">122.5°</strong>
+                </div>
+                <p id="txtProfileJawDesc" class="text-slate-400 mt-0.5 text-[10px] leading-relaxed"></p>
+              </div>
+            </div>
+          </div>
+
           <!-- Mục 5: Tình Trạng Da (Skin Health) -->
           <div class="bg-surface-800/90 border border-surface-700 rounded-2xl p-4 shadow-sm">
             <div class="flex items-center justify-between border-b border-surface-700 pb-2.5 mb-3">
@@ -951,8 +1087,26 @@
     let usePythonEngine = true;
     let isBackendFrameInFlight = false;
 
-    // Các phần tử Chụp Ảnh & Phân Tích Toàn Diện
-    const btnCaptureAnalyze = document.getElementById('btnCaptureAnalyze');
+    // Các phần tử Chụp Ảnh Đa Chiều 2 Lần & Phân Tích Toàn Diện
+    const badgeCaptureStep = document.getElementById('badgeCaptureStep');
+    const txtCaptureStepDesc = document.getElementById('txtCaptureStepDesc');
+    const btnCaptureCurrentStep = document.getElementById('btnCaptureCurrentStep');
+    const lblBtnCapture = document.getElementById('lblBtnCapture');
+    const btnRunMultiViewAnalysis = document.getElementById('btnRunMultiViewAnalysis');
+    const btnResetTwoShot = document.getElementById('btnResetTwoShot');
+    const thumbBoxFrontal = document.getElementById('thumbBoxFrontal');
+    const imgThumbFrontal = document.getElementById('imgThumbFrontal');
+    const placeholderFrontal = document.getElementById('placeholderFrontal');
+    const btnRetakeFrontal = document.getElementById('btnRetakeFrontal');
+    const checkFrontalDone = document.getElementById('checkFrontalDone');
+    const thumbBoxProfile = document.getElementById('thumbBoxProfile');
+    const imgThumbProfile = document.getElementById('imgThumbProfile');
+    const placeholderProfile = document.getElementById('placeholderProfile');
+    const btnRetakeProfile = document.getElementById('btnRetakeProfile');
+    const checkProfileDone = document.getElementById('checkProfileDone');
+
+    // Tương thích ngược với các handler cũ nếu có
+    const btnCaptureAnalyze = document.getElementById('btnCaptureAnalyze') || btnCaptureCurrentStep;
     const inputUploadImage = document.getElementById('inputUploadImage');
     const chkShowGuideLines = document.getElementById('chkShowGuideLines');
     const lblCaptureGuide = document.getElementById('lblCaptureGuide');
@@ -969,6 +1123,21 @@
     const snapshotCtx = snapshotReportCanvas.getContext('2d');
     const chkModalShowLines = document.getElementById('chkModalShowLines');
     const chkModalShowPoints = document.getElementById('chkModalShowPoints');
+    const btnTabModalFrontal = document.getElementById('btnTabModalFrontal');
+    const btnTabModalProfile = document.getElementById('btnTabModalProfile');
+
+    // Các phần tử Chẩn Đoán Trắc Diện Góc Nghiêng (Profile Diagnostics)
+    const panelProfileDiagnostics = document.getElementById('panelProfileDiagnostics');
+    const txtProfileAestheticScore = document.getElementById('txtProfileAestheticScore');
+    const txtProfileViewSide = document.getElementById('txtProfileViewSide');
+    const txtElineScore = document.getElementById('txtElineScore');
+    const txtChinProjection = document.getElementById('txtChinProjection');
+    const txtChinProjectionComment = document.getElementById('txtChinProjectionComment');
+    const txtNasolabialDeg = document.getElementById('txtNasolabialDeg');
+    const txtNasalBridgeProfile = document.getElementById('txtNasalBridgeProfile');
+    const txtNasolabialStatus = document.getElementById('txtNasolabialStatus');
+    const txtProfileGonialDeg = document.getElementById('txtProfileGonialDeg');
+    const txtProfileJawDesc = document.getElementById('txtProfileJawDesc');
 
     // Điểm số & Nhãn Modal
     const badgeOverallGrade = document.getElementById('badgeOverallGrade');
@@ -1042,6 +1211,12 @@
     // Trạng thái ảnh snapshot và báo cáo
     let currentAnalysisReport = null;
     let currentSnapshotImage = null;
+    let currentModalActiveTab = 'frontal'; // 'frontal' | 'profile'
+
+    // Trạng thái Chụp 2 lần (Two-Step Multi-View State)
+    let captureStep = 1; // 1: Mặt chính diện | 2: Góc nghiêng
+    let frontalCaptureData = null; // { image: b64, landmarks: [...] }
+    let profileCaptureData = null; // { image: b64, landmarks: [...] }
     let isAnalyzingSnapshot = false;
 
     // Biến trạng thái toàn cục
@@ -2113,61 +2288,121 @@
     // CÁC HÀM XỬ LÝ CHỤP ẢNH & BÁO CÁO PHÂN TÍCH THẨM MỸ TOÀN DIỆN
     // =========================================================================
 
+    // =========================================================================
+    // CÁC HÀM XỬ LÝ CHỤP ẢNH ĐA CHIỀU 2 LẦN (FRONTAL + PROFILE) & PHÂN TÍCH
+    // =========================================================================
+
+    function updateCaptureStepUI() {
+      if (captureStep === 1) {
+        badgeCaptureStep.className = "px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold bg-cyan-950 text-cyan-300 border border-cyan-700 flex items-center gap-1.5";
+        badgeCaptureStep.innerHTML = '<span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span><span>BƯỚC 1/2: MẶT CHÍNH DIỆN</span>';
+        txtCaptureStepDesc.innerText = "Nhìn thẳng vào camera (Góc quay Yaw ~ 0°)";
+        lblBtnCapture.innerText = "Chụp Mặt Chính Diện";
+        thumbBoxFrontal.className = "relative w-20 h-16 rounded-xl bg-surface-900 border-2 border-dashed border-cyan-500 overflow-hidden flex flex-col items-center justify-center text-center p-1 group ring-2 ring-cyan-500/30";
+        thumbBoxProfile.className = "relative w-20 h-16 rounded-xl bg-surface-900 border-2 border-dashed border-surface-700 overflow-hidden flex flex-col items-center justify-center text-center p-1 group";
+      } else {
+        badgeCaptureStep.className = "px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold bg-indigo-950 text-indigo-300 border border-indigo-700 flex items-center gap-1.5";
+        badgeCaptureStep.innerHTML = '<span class="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span><span>BƯỚC 2/2: GÓC NGHIÊNG MẶT</span>';
+        txtCaptureStepDesc.innerText = "Quay mặt sang trái hoặc phải một góc khoảng 30° - 45°";
+        lblBtnCapture.innerText = "Chụp Góc Nghiêng (30°- 45°)";
+        thumbBoxProfile.className = "relative w-20 h-16 rounded-xl bg-surface-900 border-2 border-dashed border-indigo-500 overflow-hidden flex flex-col items-center justify-center text-center p-1 group ring-2 ring-indigo-500/30";
+      }
+
+      // Kích hoạt nút Phân tích đa chiều khi đã chụp đủ cả 2 góc
+      if (frontalCaptureData && profileCaptureData) {
+        btnRunMultiViewAnalysis.disabled = false;
+        btnRunMultiViewAnalysis.classList.remove('opacity-40', 'cursor-not-allowed');
+      } else {
+        btnRunMultiViewAnalysis.disabled = true;
+        btnRunMultiViewAnalysis.classList.add('opacity-40', 'cursor-not-allowed');
+      }
+    }
+
     function drawOvalAlignmentGuide(w, h, landmarks) {
       const cx = w / 2;
       const cy = h / 2;
       const rx = w * 0.22;
       const ry = h * 0.36;
 
-      let isAligned = false;
+      let isPositionAligned = false;
+      let isPoseAngleAligned = false;
+      let currentYaw = 0;
+
       if (landmarks && landmarks.length > 0) {
         const nose = landmarks[1];
         if (nose) {
           const nx = nose.x * w;
           const ny = nose.y * h;
           const normDist = ((nx - cx) * (nx - cx)) / (rx * rx) + ((ny - cy) * (ny - cy)) / (ry * ry);
-          if (normDist <= 0.85) {
-            isAligned = true;
+          if (normDist <= 0.95) {
+            isPositionAligned = true;
+          }
+        }
+
+        const pose = calculateHeadPose(landmarks);
+        currentYaw = Math.abs(pose.yaw);
+
+        if (captureStep === 1) {
+          // Bước 1: Mặt chính diện (Yaw phải nhỏ, trong khoảng 0° - 10°)
+          if (currentYaw <= 10.0) {
+            isPoseAngleAligned = true;
+          }
+        } else {
+          // Bước 2: Góc nghiêng 3/4 (Yaw nên từ 20° đến 60°)
+          if (currentYaw >= 18.0 && currentYaw <= 65.0) {
+            isPoseAngleAligned = true;
           }
         }
       }
+
+      const isReady = isPositionAligned && isPoseAngleAligned;
 
       canvasCtx.save();
       canvasCtx.beginPath();
       canvasCtx.ellipse(cx, cy, rx, ry, 0, 0, 2 * Math.PI);
       canvasCtx.setLineDash([8, 6]);
-      canvasCtx.lineWidth = isAligned ? 2.5 : 1.8;
-      canvasCtx.strokeStyle = isAligned ? 'rgba(16, 185, 129, 0.85)' : 'rgba(6, 182, 212, 0.55)';
+      canvasCtx.lineWidth = isReady ? 2.5 : 1.8;
+      canvasCtx.strokeStyle = isReady ? 'rgba(16, 185, 129, 0.9)' : (isPositionAligned ? 'rgba(250, 204, 21, 0.8)' : 'rgba(6, 182, 212, 0.55)');
       canvasCtx.stroke();
       canvasCtx.setLineDash([]);
 
       canvasCtx.font = '11px "JetBrains Mono", monospace';
       canvasCtx.textAlign = 'center';
-      if (isAligned) {
-        canvasCtx.fillStyle = '#10b981';
-        canvasCtx.fillText("✓ VỊ TRÍ CHUẨN - SẴN SÀNG CHỤP", cx, cy - ry - 14);
-        if (lblCaptureGuide) lblCaptureGuide.innerText = "✨ Khuôn mặt chuẩn! Bấm nút Chụp để phân tích.";
+
+      if (captureStep === 1) {
+        if (isReady) {
+          canvasCtx.fillStyle = '#10b981';
+          canvasCtx.fillText("✓ MẶT CHÍNH DIỆN CHUẨN - SẴN SÀNG CHỤP BƯỚC 1", cx, cy - ry - 14);
+          if (lblCaptureGuide) lblCaptureGuide.innerText = "✨ Góc chính diện chuẩn! Bấm chụp để lưu bước 1.";
+        } else if (currentYaw > 10.0) {
+          canvasCtx.fillStyle = '#f59e0b';
+          canvasCtx.fillText(`HÃY NHÌN THẲNG LẠI (Đang nghiêng ${Math.round(currentYaw)}°)`, cx, cy - ry - 14);
+          if (lblCaptureGuide) lblCaptureGuide.innerText = "⚠️ Hãy nhìn thẳng vào ống kính camera.";
+        } else {
+          canvasCtx.fillStyle = 'rgba(6, 182, 212, 0.75)';
+          canvasCtx.fillText("CĂN CHỈNH MẶT VÀO GIỮA KHUNG", cx, cy - ry - 14);
+          if (lblCaptureGuide) lblCaptureGuide.innerText = "💡 Đưa mặt vào giữa khung elip.";
+        }
       } else {
-        canvasCtx.fillStyle = 'rgba(6, 182, 212, 0.75)';
-        canvasCtx.fillText("CĂN CHỈNH MẶT VÀO KHUNG ELIP", cx, cy - ry - 14);
-        if (lblCaptureGuide) lblCaptureGuide.innerText = "💡 Hãy đưa mặt vào giữa khung elip";
+        // Bước 2: Hướng dẫn quay mặt
+        if (isReady) {
+          canvasCtx.fillStyle = '#10b981';
+          canvasCtx.fillText(`✓ GÓC NGHIÊNG CHUẨN (${Math.round(currentYaw)}°) - SẴN SÀNG CHỤP BƯỚC 2`, cx, cy - ry - 14);
+          if (lblCaptureGuide) lblCaptureGuide.innerText = "✨ Góc nghiêng hoàn hảo! Bấm chụp bước 2.";
+        } else if (currentYaw < 18.0) {
+          canvasCtx.fillStyle = '#38bdf8';
+          canvasCtx.fillText("QUAY MẶT SANG BÊN (30° - 45°)", cx, cy - ry - 14);
+          if (lblCaptureGuide) lblCaptureGuide.innerText = "👉 Hãy quay mặt sang một bên khoảng 30° - 45°";
+        } else {
+          canvasCtx.fillStyle = '#f59e0b';
+          canvasCtx.fillText("QUAY QUÁ MẠNH (HÃY GIỮ GÓC 30° - 45°)", cx, cy - ry - 14);
+          if (lblCaptureGuide) lblCaptureGuide.innerText = "⚠️ Quay mặt vừa phải (khoảng 30° - 45°)";
+        }
       }
       canvasCtx.restore();
     }
 
-    async function captureAndAnalyzeFace(customSnapshotB64 = null) {
-      if (isAnalyzingSnapshot) return;
-
-      if (!customSnapshotB64 && (!isCameraActive || !latestLandmarks)) {
-        showToast("Vui lòng bật camera và căn chỉnh mặt trước khi chụp!", "error");
-        return;
-      }
-
-      isAnalyzingSnapshot = true;
-      btnCaptureAnalyze.disabled = true;
-      btnCaptureAnalyze.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i><span>Đang phân tích...</span>';
-
-      // Kích hoạt hiệu ứng đèn flash
+    function triggerShutterFlash() {
       if (shutterFlash) {
         shutterFlash.classList.add('flash-active');
         setTimeout(() => {
@@ -2176,36 +2411,153 @@
           setTimeout(() => shutterFlash.classList.remove('flash-fade'), 400);
         }, 120);
       }
+    }
 
-      showToast(isPythonBackendAvailable ? "Đang gửi ảnh sang Python Aesthetic Engine phân tích..." : "Đang phân tích trực tiếp trên trình duyệt (Client Engine)...", "info");
+    // Chụp theo bước (Bước 1: Frontal, Bước 2: Profile)
+    async function captureCurrentStepShot() {
+      if (!isCameraActive || !latestLandmarks) {
+        showToast("Vui lòng bật camera và căn chỉnh mặt trước khi chụp!", "error");
+        return;
+      }
+
+      triggerShutterFlash();
+
+      const snapshotDataUrl = canvasElement.toDataURL('image/jpeg', 0.95);
+      const rawPoints = latestLandmarks.map(pt => ({ x: pt.x, y: pt.y, z: pt.z || 0 }));
+
+      if (captureStep === 1) {
+        // Lưu ảnh mặt chính diện
+        frontalCaptureData = {
+          image: snapshotDataUrl,
+          landmarks: rawPoints,
+          width: canvasElement.width,
+          height: canvasElement.height
+        };
+
+        // Cập nhật Thumbnail Frontal
+        imgThumbFrontal.src = snapshotDataUrl;
+        imgThumbFrontal.classList.remove('hidden');
+        placeholderFrontal.classList.add('hidden');
+        btnRetakeFrontal.classList.remove('hidden');
+        checkFrontalDone.classList.remove('hidden');
+
+        showToast("✓ Đã chụp ảnh Mặt Chính Diện! Giờ hãy quay mặt 30°- 45° để chụp góc nghiêng.", "success");
+
+        // Tự động chuyển sang bước 2 nếu chưa có profile
+        if (!profileCaptureData) {
+          captureStep = 2;
+        }
+        updateCaptureStepUI();
+
+      } else {
+        // Lưu ảnh góc nghiêng
+        profileCaptureData = {
+          image: snapshotDataUrl,
+          landmarks: rawPoints,
+          width: canvasElement.width,
+          height: canvasElement.height
+        };
+
+        // Cập nhật Thumbnail Profile
+        imgThumbProfile.src = snapshotDataUrl;
+        imgThumbProfile.classList.remove('hidden');
+        placeholderProfile.classList.add('hidden');
+        btnRetakeProfile.classList.remove('hidden');
+        checkProfileDone.classList.remove('hidden');
+
+        showToast("✓ Đã chụp ảnh Góc Nghiêng thành công! Đã đủ 2 góc chụp.", "success");
+        updateCaptureStepUI();
+
+        // Tự động mở phân tích đa chiều
+        setTimeout(() => {
+          triggerMultiViewAnalysis();
+        }, 350);
+      }
+    }
+
+    function retakeStepShot(step) {
+      captureStep = step;
+      if (step === 1) {
+        frontalCaptureData = null;
+        imgThumbFrontal.classList.add('hidden');
+        placeholderFrontal.classList.remove('hidden');
+        btnRetakeFrontal.classList.add('hidden');
+        checkFrontalDone.classList.add('hidden');
+        showToast("Hãy căn chỉnh mặt chính diện và bấm chụp lại.", "info");
+      } else {
+        profileCaptureData = null;
+        imgThumbProfile.classList.add('hidden');
+        placeholderProfile.classList.remove('hidden');
+        btnRetakeProfile.classList.add('hidden');
+        checkProfileDone.classList.add('hidden');
+        showToast("Hãy quay mặt góc nghiêng 30°- 45° và bấm chụp lại.", "info");
+      }
+      updateCaptureStepUI();
+    }
+
+    function resetTwoShotCapture() {
+      frontalCaptureData = null;
+      profileCaptureData = null;
+      captureStep = 1;
+
+      imgThumbFrontal.classList.add('hidden');
+      placeholderFrontal.classList.remove('hidden');
+      btnRetakeFrontal.classList.add('hidden');
+      checkFrontalDone.classList.add('hidden');
+
+      imgThumbProfile.classList.add('hidden');
+      placeholderProfile.classList.remove('hidden');
+      btnRetakeProfile.classList.add('hidden');
+      checkProfileDone.classList.add('hidden');
+
+      updateCaptureStepUI();
+      showToast("Đã làm mới quy trình chụp 2 lần.", "info");
+    }
+
+    // Kích hoạt phân tích hợp nhất đa chiều
+    async function triggerMultiViewAnalysis() {
+      if (isAnalyzingSnapshot) return;
+
+      if (!frontalCaptureData) {
+        showToast("Bạn cần chụp ảnh mặt chính diện trước!", "error");
+        captureStep = 1;
+        updateCaptureStepUI();
+        return;
+      }
+
+      isAnalyzingSnapshot = true;
+      btnRunMultiViewAnalysis.disabled = true;
+      btnRunMultiViewAnalysis.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i><span>Đang phân tích 3D...</span>';
+
+      showToast(isPythonBackendAvailable ? "Đang gửi dữ liệu 2 góc chụp tới Python Multi-View Engine..." : "Đang hợp nhất phân tích đa chiều trực tiếp (Client Engine)...", "info");
 
       try {
-        let snapshotDataUrl = customSnapshotB64;
-        let landmarksToSend = latestLandmarks;
-
-        if (!snapshotDataUrl) {
-          snapshotDataUrl = canvasElement.toDataURL('image/jpeg', 0.95);
-        }
-
-        const rawPoints = [];
-        for (let i = 0; i < landmarksToSend.length; i++) {
-          const pt = landmarksToSend[i];
-          rawPoints.push({ x: pt.x, y: pt.y, z: pt.z || 0 });
-        }
-
         let data = null;
+
         if (isPythonBackendAvailable) {
           try {
+            const payload = {
+              width: frontalCaptureData.width || canvasElement.width,
+              height: frontalCaptureData.height || canvasElement.height,
+              frontal: {
+                image: frontalCaptureData.image,
+                landmarks: frontalCaptureData.landmarks
+              }
+            };
+
+            if (profileCaptureData) {
+              payload.profile = {
+                image: profileCaptureData.image,
+                landmarks: profileCaptureData.landmarks
+              };
+            }
+
             const resp = await fetch(`${PYTHON_BACKEND_URL}/api/analyze_face`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                image: snapshotDataUrl,
-                landmarks: rawPoints,
-                width: canvasElement.width,
-                height: canvasElement.height
-              })
+              body: JSON.stringify(payload)
             });
+
             if (resp.ok) {
               const resJson = await resp.json();
               if (resJson.success) {
@@ -2213,29 +2565,217 @@
               }
             }
           } catch (fetchErr) {
-            console.warn("Python backend không phản hồi, tự động dùng Client Engine:", fetchErr);
+            console.warn("Python backend không phản hồi, fallback sang Client Multi-View Engine:", fetchErr);
           }
         }
 
-        // Tự động fallback sang Client Engine nếu server offline hoặc chạy trực tiếp trên GitHub Pages
+        // Tự động fallback sang Client Engine nếu máy chủ offline
         if (!data) {
-          data = runClientAestheticAnalysis(rawPoints, canvasElement.width, canvasElement.height, snapshotDataUrl);
+          data = runClientMultiViewAnalysis(frontalCaptureData, profileCaptureData);
         }
 
         currentAnalysisReport = data;
-        currentSnapshotImage = snapshotDataUrl;
+        currentSnapshotImage = frontalCaptureData.image;
+        currentModalActiveTab = 'frontal';
 
-        displayAnalysisReport(data, snapshotDataUrl);
-        showToast("Đã phân tích thẩm mỹ & sinh trắc học thành công!", "success");
+        displayAnalysisReport(data, frontalCaptureData.image);
+        showToast("Đã hoàn tất phân tích đa chiều chuẩn xác 3D!", "success");
 
       } catch (err) {
-        console.error("Lỗi phân tích khuôn mặt:", err);
+        console.error("Lỗi phân tích đa chiều:", err);
         showToast(`Lỗi phân tích: ${err.message}`, "error");
       } finally {
         isAnalyzingSnapshot = false;
-        btnCaptureAnalyze.disabled = false;
-        btnCaptureAnalyze.innerHTML = '<i class="fa-solid fa-camera-retro text-sm"></i><span>Chụp & Phân Tích Khuôn Mặt</span>';
+        btnRunMultiViewAnalysis.disabled = false;
+        btnRunMultiViewAnalysis.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles text-sm"></i><span>Phân Tích Đa Chiều 3D</span>';
       }
+    }
+
+    // Hàm tương thích ngược (Hỗ trợ tải ảnh lên 1 ảnh đơn)
+    async function captureAndAnalyzeFace(customSnapshotB64 = null) {
+      if (customSnapshotB64) {
+        frontalCaptureData = {
+          image: customSnapshotB64,
+          landmarks: latestLandmarks.map(p => ({ x: p.x, y: p.y, z: p.z || 0 })),
+          width: canvasElement.width,
+          height: canvasElement.height
+        };
+        imgThumbFrontal.src = customSnapshotB64;
+        imgThumbFrontal.classList.remove('hidden');
+        placeholderFrontal.classList.add('hidden');
+        checkFrontalDone.classList.remove('hidden');
+        btnRetakeFrontal.classList.remove('hidden');
+        triggerMultiViewAnalysis();
+        return;
+      }
+      captureCurrentStepShot();
+    }
+
+    // =========================================================================
+    // CLIENT-SIDE MULTI-VIEW ENGINE (TỰ HỢP NHẤT TRÊN JS CHO GITHUB PAGES)
+    // =========================================================================
+    function runClientMultiViewAnalysis(frontalData, profileData) {
+      const fResult = runClientAestheticAnalysis(
+        frontalData.landmarks,
+        frontalData.width || 640,
+        frontalData.height || 480,
+        frontalData.image
+      );
+
+      if (!profileData) {
+        return fResult;
+      }
+
+      // Phân tích góc nghiêng client-side
+      const pPoints = profileData.landmarks;
+      const pW = profileData.width || 640;
+      const pH = profileData.height || 480;
+
+      function d2d(p1, p2) {
+        return Math.hypot((p1.x - p2.x) * pW, (p1.y - p2.y) * pH);
+      }
+      function pLineDist(p, a, b) {
+        const px = p.x * pW, py = p.y * pH;
+        const ax = a.x * pW, ay = a.y * pH;
+        const bx = b.x * pW, by = b.y * pH;
+        const abx = bx - ax, aby = by - ay;
+        const mag = Math.hypot(abx, aby) + 1e-6;
+        return (abx * (py - ay) - aby * (px - ax)) / mag;
+      }
+      function angleDeg(a, b, c) {
+        const abx = (a.x - b.x) * pW, aby = (a.y - b.y) * pH;
+        const cbx = (c.x - b.x) * pW, cby = (c.y - b.y) * pH;
+        const dot = abx * cbx + aby * cby;
+        const mag = Math.hypot(abx, aby) * Math.hypot(cbx, cby) + 1e-6;
+        return Math.acos(Math.max(-1, Math.min(1, dot / mag))) * (180 / Math.PI);
+      }
+
+      const pronasale = pPoints[1];
+      const subnasale = pPoints[2];
+      const labraleSup = pPoints[0];
+      const labraleInf = pPoints[17];
+      const pogonion = pPoints[152];
+      const nasion = pPoints[168];
+      const rhinion = pPoints[6];
+
+      const distL = Math.abs((pPoints[234].x - pPoints[1].x) * pW);
+      const distR = Math.abs((pPoints[454].x - pPoints[1].x) * pW);
+      const isLeftProfile = distL < distR;
+
+      const gonion = isLeftProfile ? pPoints[172] : pPoints[397];
+      const earTragus = isLeftProfile ? pPoints[234] : pPoints[454];
+
+      const elineDistUpper = pLineDist(labraleSup, pronasale, pogonion);
+      const elineDistLower = pLineDist(labraleInf, pronasale, pogonion);
+      const faceScale = d2d(nasion, pogonion) + 1e-6;
+      const normLowerLip = (elineDistLower / faceScale) * 100.0;
+
+      let chinProj = "Cằm đạt chuẩn tỷ lệ thẩm mỹ Ricketts E-line";
+      let chinComment = "Cằm và môi có độ dốc hài hòa trên đường thẩm mỹ chuẩn.";
+      let chinScore = 92.0;
+
+      if (normLowerLip > 5.5) {
+        chinProj = "Cằm lẹm (Retrognathia) / Môi nhô trước đường E-line";
+        chinComment = "Đường E-line cho thấy cằm bị thụt lùi so với trục mũi và môi, làm góc nghiêng thiếu độ sắc nét.";
+        chinScore = 65.0;
+      } else if (normLowerLip < -3.5) {
+        chinProj = "Cằm nhô / Cằm phát triển quá mức (Prognathia)";
+        chinComment = "Cằm phát triển chìa ra trước nhiều hơn trục thẩm mỹ E-line.";
+        chinScore = 72.0;
+      }
+
+      const nasolabialDeg = Math.round(angleDeg(pronasale, subnasale, labraleSup) * 10) / 10;
+      let nasolabialStatus = nasolabialDeg >= 90 && nasolabialDeg <= 106 ? `Góc mũi môi lý tưởng (${nasolabialDeg}°)` :
+                             nasolabialDeg < 90 ? `Góc mũi môi nhọn (${nasolabialDeg}° < 90°)` : `Góc mũi môi tù (${nasolabialDeg}° > 106°)`;
+
+      const humpDist = pLineDist(rhinion, nasion, pronasale);
+      const normHump = (humpDist / faceScale) * 100.0;
+      let bridgeType = "Thẳng tự nhiên";
+      let bridgeDesc = "Sống mũi thẳng tắp thanh thoát theo góc nhìn nghiêng.";
+      if (normHump > 2.0) {
+        bridgeType = "Gồ xương nhẹ";
+        bridgeDesc = "Sống mũi gồ nhẹ (Dorsal Hump) ở phần xương chính mũi.";
+      } else if (normHump < -2.2) {
+        bridgeType = "Võng / Tẹt nhẹ";
+        bridgeDesc = "Sống mũi trũng võng nhẹ ở góc nghiêng.";
+      }
+
+      const pGonial = Math.round(angleDeg(earTragus, gonion, pogonion) * 10) / 10;
+      let pJawDesc = pGonial < 118 ? `Góc hàm vuông vức sắc nét (${pGonial}°)` :
+                     pGonial <= 128 ? `Góc hàm nghiêng thanh tú (${pGonial}°)` : `Góc hàm nghiêng mở rộng (${pGonial}°)`;
+
+      const pScore = Math.round((chinScore * 0.40 + (nasolabialDeg >= 90 && nasolabialDeg <= 106 ? 92 : 72) * 0.35 + 85 * 0.25) * 10) / 10;
+
+      const profileAnalysis = {
+        profile_aesthetic_score: pScore,
+        view_side: isLeftProfile ? "Góc nghiêng Trái" : "Góc nghiêng Phải",
+        ricketts_eline: {
+          chin_projection: chinProj,
+          chin_comment: chinComment,
+          upper_lip_offset_px: Math.round(elineDistUpper * 10) / 10,
+          lower_lip_offset_px: Math.round(elineDistLower * 10) / 10,
+          score: chinScore
+        },
+        nasolabial_angle_deg: nasolabialDeg,
+        nasolabial_status: nasolabialStatus,
+        nasal_bridge_profile: {
+          type: bridgeType,
+          description: bridgeDesc
+        },
+        profile_gonial_angle_deg: pGonial,
+        profile_jaw_description: pJawDesc,
+        visual_guides: {
+          eline: [
+            { x: pronasale.x * pW, y: pronasale.y * pH },
+            { x: pogonion.x * pW, y: pogonion.y * pH }
+          ],
+          nasolabial_rays: [
+            { x: pronasale.x * pW, y: pronasale.y * pH },
+            { x: subnasale.x * pW, y: subnasale.y * pH },
+            { x: labraleSup.x * pW, y: labraleSup.y * pH }
+          ],
+          jaw_profile_triangle: [
+            { x: earTragus.x * pW, y: earTragus.y * pH },
+            { x: gonion.x * pW, y: gonion.y * pH },
+            { x: pogonion.x * pW, y: pogonion.y * pH }
+          ]
+        }
+      };
+
+      // 3D Invariant Face Shape Cross-Check
+      const fwhr = fResult.proportions.length_to_width_ratio;
+      const frontJaw = fResult.jawline.average_jaw_angle_deg;
+
+      if (fwhr > 1.55) {
+        fResult.proportions.face_shape = "Mặt Dài / Chữ Nhật (Oblong)";
+        fResult.proportions.face_shape_description = "Tỷ lệ chiều dài khuôn mặt lớn xác nhận từ cả góc thẳng lẫn nghiêng.";
+      } else if (fwhr < 1.25) {
+        if (pGonial < 120 || frontJaw < 120) {
+          fResult.proportions.face_shape = "Mặt Vuông (Square)";
+          fResult.proportions.face_shape_description = "Khung xương hàm bạnh và góc cạnh xác thực từ 2 góc chụp.";
+        } else {
+          fResult.proportions.face_shape = "Mặt Tròn (Round)";
+          fResult.proportions.face_shape_description = "Đường nét má và hàm mềm mại bầu bĩnh, góc xương không gắt.";
+        }
+      } else if (chinProj.includes("lẹm") && fwhr < 1.35) {
+        fResult.proportions.face_shape = "Mặt Tròn (Round / Cằm lẹm)";
+        fResult.proportions.face_shape_description = "Góc nghiêng xác nhận độ lùi cằm làm phần dưới mặt trông ngắn hơn.";
+      } else if (frontJaw > 124 && (pGonial >= 120 && pGonial <= 130)) {
+        fResult.proportions.face_shape = "Mặt Trái Xoan (Oval)";
+        fResult.proportions.face_shape_description = "Dáng mặt cân đối chuẩn mực xác nhận từ cả 2 góc nhìn.";
+      }
+
+      fResult.profile = profileAnalysis;
+      fResult.is_multi_view = true;
+      fResult.overall_harmony_score = Math.round((fResult.overall_harmony_score * 0.70 + pScore * 0.30) * 10) / 10;
+
+      const sc = fResult.overall_harmony_score;
+      fResult.overall_grade = sc >= 85 ? "Hài Hòa Xuất Sắc (Chuẩn 3D Nhân Trắc Học)" :
+                              sc >= 75 ? "Khá Cân Đối (Đạt Chuẩn Thẩm Mỹ Đa Chiều)" :
+                              sc >= 63 ? "Mức Trung Bình Phổ Biến (Tồn Tại Khuyết Điểm Tự Nhiên)" :
+                              sc >= 50 ? "Mất Cân Đối Nhẹ (Có Khuyết Điểm Cần Chú Ý)" : "Bất Đối Xứng Rõ Rệt";
+
+      return fResult;
     }
 
     // =========================================================================
@@ -2575,6 +3115,32 @@
       txtJawEvaluation.innerText = data.jawline.jawline_evaluation;
       txtChinFlaw.innerText = data.jawline.chin_flaw || data.jawline.jawline_evaluation;
 
+      // 5.5. Chẩn Đoán Trắc Diện Góc Nghiêng (Profile Diagnostics - Hiển thị khi có dữ liệu)
+      if (data.profile && panelProfileDiagnostics) {
+        panelProfileDiagnostics.classList.remove('hidden');
+        txtProfileAestheticScore.innerText = `${data.profile.profile_aesthetic_score}%`;
+        txtProfileViewSide.innerText = data.profile.view_side || "Góc nghiêng";
+
+        const pRicketts = data.profile.ricketts_eline;
+        if (pRicketts) {
+          txtElineScore.innerText = `${pRicketts.score}%`;
+          txtChinProjection.innerText = pRicketts.chin_projection;
+          txtChinProjectionComment.innerText = pRicketts.chin_comment;
+        }
+
+        txtNasolabialDeg.innerText = `${data.profile.nasolabial_angle_deg}°`;
+        txtNasolabialStatus.innerText = data.profile.nasolabial_status;
+
+        if (data.profile.nasal_bridge_profile) {
+          txtNasalBridgeProfile.innerText = data.profile.nasal_bridge_profile.description;
+        }
+
+        txtProfileGonialDeg.innerText = `${data.profile.profile_gonial_angle_deg}°`;
+        txtProfileJawDesc.innerText = data.profile.profile_jaw_description;
+      } else if (panelProfileDiagnostics) {
+        panelProfileDiagnostics.classList.add('hidden');
+      }
+
       // 6. Tình Trạng Da (Skin Health) - Chẩn đoán ROI thực tế
       txtSkinSmoothScore.innerText = `${data.skin.smoothness_score}%`;
       txtSkinSmoothness.innerText = `${data.skin.smoothness_score}%`;
@@ -2708,8 +3274,54 @@
       img.src = currentSnapshotImage;
     }
 
-    function closeAnalysisReport() {
-      modalAnalysisReport.classList.add('hidden');
+    function switchModalView(tab) {
+      if (!currentAnalysisReport) return;
+      currentModalActiveTab = tab;
+
+      if (tab === 'frontal') {
+        btnTabModalFrontal.className = "px-3 py-1 rounded-lg bg-cyan-500 text-slate-950 font-bold text-[11px] transition";
+        btnTabModalProfile.className = "px-3 py-1 rounded-lg bg-surface-900 text-slate-400 hover:text-slate-200 text-[11px] transition";
+        if (frontalCaptureData && frontalCaptureData.image) {
+          currentSnapshotImage = frontalCaptureData.image;
+        }
+      } else {
+        btnTabModalProfile.className = "px-3 py-1 rounded-lg bg-cyan-500 text-slate-950 font-bold text-[11px] transition";
+        btnTabModalFrontal.className = "px-3 py-1 rounded-lg bg-surface-900 text-slate-400 hover:text-slate-200 text-[11px] transition";
+        if (profileCaptureData && profileCaptureData.image) {
+          currentSnapshotImage = profileCaptureData.image;
+        }
+      }
+      drawReportCanvasOverlay();
+    }
+
+    if (btnTabModalFrontal) {
+      btnTabModalFrontal.addEventListener('click', () => switchModalView('frontal'));
+    }
+    if (btnTabModalProfile) {
+      btnTabModalProfile.addEventListener('click', () => switchModalView('profile'));
+    }
+
+    // Gắn sự kiện các nút Quy Trình Chụp 2 Lần
+    if (btnCaptureCurrentStep) {
+      btnCaptureCurrentStep.addEventListener('click', captureCurrentStepShot);
+    }
+    if (btnRunMultiViewAnalysis) {
+      btnRunMultiViewAnalysis.addEventListener('click', triggerMultiViewAnalysis);
+    }
+    if (btnResetTwoShot) {
+      btnResetTwoShot.addEventListener('click', resetTwoShotCapture);
+    }
+    if (btnRetakeFrontal) {
+      btnRetakeFrontal.addEventListener('click', (e) => {
+        e.stopPropagation();
+        retakeStepShot(1);
+      });
+    }
+    if (btnRetakeProfile) {
+      btnRetakeProfile.addEventListener('click', (e) => {
+        e.stopPropagation();
+        retakeStepShot(2);
+      });
     }
 
     // Gắn sự kiện các nút Chụp & Modal Báo Cáo

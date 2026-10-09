@@ -1,7 +1,7 @@
 """
 Module: face_liveness_algorithms.py
 Mô tả: Module thuật toán xử lý đặc trưng khuôn mặt, đo lường sinh trắc học và kiểm tra Liveness (Anti-Spoofing).
-Tác giả: VisionAI Team
+Tác giả:  AURAMAXX Team
 """
 
 import math

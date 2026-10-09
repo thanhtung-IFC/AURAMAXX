@@ -32,7 +32,10 @@ from face_liveness_algorithms import (
     LivenessChallengeEngine,
     analyze_frame_landmarks
 )
-from face_aesthetic_analyzer import run_comprehensive_face_analysis
+from face_aesthetic_analyzer import (
+    run_comprehensive_face_analysis,
+    run_multi_view_face_analysis
+)
 
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", 8000))
@@ -201,12 +204,44 @@ class VisionFaceRequestHandler(SimpleHTTPRequestHandler):
                 "state": global_challenge_engine.get_state()
             })
 
-        # 5. API Phân Tích Toàn Diện Khuôn Mặt (Ảnh chụp snapshot: Đối xứng, Tỷ lệ vàng, Mũi, Hàm, Da, Tóc)
+        # 5. API Phân Tích Toàn Diện Khuôn Mặt (Hỗ trợ cả 1 ảnh hoặc Hệ 2 lần chụp: Chính diện + Góc nghiêng)
         elif path == "/api/analyze_face":
-            image_b64 = payload.get("image", "")
-            landmarks_raw = payload.get("landmarks", [])
             w = int(payload.get("width", 640))
             h = int(payload.get("height", 480))
+
+            # Trường hợp 1: Chụp 2 lần (Multi-View: Frontal + Profile)
+            if "frontal" in payload and "profile" in payload:
+                frontal_data = payload.get("frontal", {})
+                profile_data = payload.get("profile", {})
+                
+                f_img = frontal_data.get("image", "")
+                f_lm = frontal_data.get("landmarks", [])
+                p_img = profile_data.get("image", "")
+                p_lm = profile_data.get("landmarks", [])
+
+                if not f_img or not f_lm or len(f_lm) < 468:
+                    self._send_json({"success": False, "error": "Thiếu dữ liệu ảnh chính diện hoặc không đủ điểm mốc"}, 400)
+                    return
+
+                try:
+                    result = run_multi_view_face_analysis(
+                        frontal_b64=f_img,
+                        frontal_landmarks=f_lm,
+                        profile_b64=p_img,
+                        profile_landmarks=p_lm,
+                        img_width=w,
+                        img_height=h
+                    )
+                    self._send_json(result)
+                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
+                    self._send_json({"success": False, "error": f"Lỗi phân tích đa chiều: {str(e)}"}, 500)
+                return
+
+            # Trường hợp 2: Single-View (Tương thích ngược)
+            image_b64 = payload.get("image", "")
+            landmarks_raw = payload.get("landmarks", [])
 
             if not image_b64:
                 self._send_json({"success": False, "error": "Thiếu dữ liệu hình ảnh (Base64)"}, 400)
