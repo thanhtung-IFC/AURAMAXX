@@ -17,6 +17,7 @@ PASSWORDS = PasswordHasher(time_cost=2, memory_cost=19456, parallelism=1)
 DUMMY_HASH = PASSWORDS.hash(secrets.token_urlsafe(32))
 SESSION_SECONDS = 8 * 60 * 60
 AUTH_SCHEMA_VERSION = "2"
+MAX_ADMIN_ACCOUNTS = 3
 PUBLIC_COLUMNS = "id, username, display_name, role, is_active, must_change_password, created_at, last_login"
 
 
@@ -115,13 +116,18 @@ class AuthStore:
         identifier = "acc_" + uuid.uuid4().hex
         with self.faces._connect() as connection:
             self.write_lock(connection)
+            if role == "admin":
+                admin_count = connection.execute("SELECT COUNT(*) FROM accounts WHERE role = 'admin'").fetchone()[0]
+                if admin_count >= MAX_ADMIN_ACCOUNTS:
+                    raise AuthError("Đã đạt giới hạn 3 tài khoản admin.", 409)
             if connection.execute("SELECT id FROM accounts WHERE username = ?", (username,)).fetchone():
                 raise AuthError("Tên đăng nhập đã được sử dụng.", 409)
             connection.execute("""INSERT INTO accounts
                 (id, username, display_name, password_hash, role, is_active, must_change_password, created_at)
                 VALUES (?, ?, ?, ?, ?, 1, ?, ?)""",
                 (identifier, username, display_name, hashed, role, int(force_change), FaceStore._timestamps()[0]))
-            self.audit(connection, actor_id or identifier, "account.created", identifier)
+            action = "account.admin_created" if role == "admin" else "account.created"
+            self.audit(connection, actor_id or identifier, action, identifier)
         return self.account(identifier)
 
     def account(self, identifier):
@@ -229,19 +235,19 @@ class AuthStore:
                 "people": [person for person in self.admin_people() if person["account_id"] == identifier]}
 
     @staticmethod
-    def require_user_account(connection, identifier):
+    def require_managed_account(connection, actor, identifier):
         row = connection.execute("SELECT username, role FROM accounts WHERE id = ?", (identifier,)).fetchone()
         if not row:
             raise AuthError("Không tìm thấy tài khoản.", 404)
-        if row[1] != "user":
-            raise AuthError("Mục này quản lý tài khoản người dùng. Admin đổi mật khẩu ở trang Tài khoản cá nhân.", 403)
+        if identifier == actor:
+            raise AuthError("Admin quản lý tài khoản cá nhân tại trang Tài khoản.", 403)
         return row
 
     def update_account(self, actor, identifier, username, display_name):
         username, display_name = self.username(username), FaceStore._name(display_name)
         with self.faces._connect() as connection:
             self.write_lock(connection)
-            current = self.require_user_account(connection, identifier)
+            current = self.require_managed_account(connection, actor, identifier)
             if connection.execute("SELECT id FROM accounts WHERE username = ? AND id <> ?", (username, identifier)).fetchone():
                 raise AuthError("Tên đăng nhập đã được sử dụng.", 409)
             connection.execute("UPDATE accounts SET username = ?, display_name = ? WHERE id = ?", (username, display_name, identifier))
@@ -254,7 +260,7 @@ class AuthStore:
         hashed = PASSWORDS.hash(password)
         with self.faces._connect() as connection:
             self.write_lock(connection)
-            self.require_user_account(connection, identifier)
+            self.require_managed_account(connection, actor, identifier)
             connection.execute("UPDATE accounts SET password_hash = ?, must_change_password = 1 WHERE id = ?", (hashed, identifier))
             connection.execute("DELETE FROM auth_sessions WHERE account_id = ?", (identifier,))
             self.audit(connection, actor, "account.password_reset", identifier)
@@ -263,7 +269,7 @@ class AuthStore:
     def revoke_user_sessions(self, actor, identifier):
         with self.faces._connect() as connection:
             self.write_lock(connection)
-            self.require_user_account(connection, identifier)
+            self.require_managed_account(connection, actor, identifier)
             connection.execute("DELETE FROM auth_sessions WHERE account_id = ?", (identifier,))
             self.audit(connection, actor, "account.sessions_revoked", identifier)
 
@@ -314,8 +320,14 @@ class AuthStore:
             row = connection.execute("SELECT role FROM accounts WHERE id = ?", (identifier,)).fetchone()
             if not row:
                 raise AuthError("Không tìm thấy tài khoản.", 404)
-            if not active and (identifier == actor or row[0] == "admin"):
-                raise AuthError("Không thể khóa tài khoản admin tại đây.", 400)
+            if not active and identifier == actor:
+                raise AuthError("Không thể khóa chính tài khoản đang đăng nhập.", 400)
+            if not active and row[0] == "admin":
+                active_admins = connection.execute(
+                    "SELECT COUNT(*) FROM accounts WHERE role = 'admin' AND is_active = 1"
+                ).fetchone()[0]
+                if active_admins <= 1:
+                    raise AuthError("Cần giữ ít nhất một admin đang hoạt động.", 400)
             connection.execute("UPDATE accounts SET is_active = ? WHERE id = ?", (int(active), identifier))
             if not active:
                 connection.execute("DELETE FROM auth_sessions WHERE account_id = ?", (identifier,))

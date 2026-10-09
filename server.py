@@ -354,6 +354,13 @@ class VisionFaceRequestHandler(SimpleHTTPRequestHandler):
             self.require_session("admin")
             if "role" in payload:
                 raise AuthError("Không được thay đổi quyền tài khoản qua thao tác này.")
+            if path == "/api/admin/accounts/admin":
+                password = payload.get("temporary_password")
+                password = secrets.token_urlsafe(18) if password in (None, "") else self.auth.password(password)
+                account = self.auth.create_account(payload.get("username"), payload.get("display_name"), password,
+                                                   role="admin", force_change=True, actor_id=session["id"])
+                self._send_json({"success": True, "account": account, "temporary_password": password}, 201)
+                return
             if path == "/api/admin/accounts":
                 password = payload.get("temporary_password")
                 password = secrets.token_urlsafe(18) if password in (None, "") else self.auth.password(password)

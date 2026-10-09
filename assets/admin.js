@@ -1,5 +1,5 @@
 (() => {
-  const state = { people: [], accounts: [], selected: null, selectedAccount: null };
+  const state = { people: [], accounts: [], selected: null, selectedAccount: null, currentAccount: null };
   const byId = id => document.getElementById(id);
   const text = (tag, value, className) => {
     const node = document.createElement(tag); node.textContent = value ?? '—';
@@ -108,7 +108,7 @@
       const row = document.createElement('tr'); const identity = document.createElement('td');
       identity.append(text('div', account.username), text('div', account.id, 'mono muted'));
       const action = document.createElement('td');
-      if (account.role !== 'admin') {
+      if (account.id !== state.currentAccount?.id) {
         const button = text('button', account.is_active ? 'Khóa' : 'Mở khóa');
         button.dataset.action = 'toggle-status';
         button.addEventListener('click', async () => {
@@ -148,11 +148,11 @@
     const info = document.createElement('dl');
     for (const [label, value] of [['ID tài khoản', account.id], ['Tên đăng nhập', account.username], ['Quyền', account.role === 'admin' ? 'Admin' : 'Người dùng'], ['Trạng thái', account.is_active ? 'Hoạt động' : 'Đã khóa'], ['Ngày tạo', date(account.created_at)], ['Đăng nhập cuối', date(account.last_login)], ['Phiên hoạt động', account.active_sessions], ['Mật khẩu', account.must_change_password ? 'Mật khẩu tạm · cần đổi khi đăng nhập' : 'Đã thiết lập']]) info.append(text('dt', label), text('dd', value));
     panel.append(info);
-    if (account.role === 'user') {
+    if (account.id !== state.currentAccount?.id) {
       const form = document.createElement('form'); form.id = 'editAccountForm'; form.className = 'account-form';
       const usernameLabel = text('label', 'Tên đăng nhập'); const username = document.createElement('input');
       username.id = 'editUsername'; username.value = account.username; username.required = true; username.minLength = 3; username.maxLength = 64; username.pattern = '[A-Za-z0-9_.\\-]+'; usernameLabel.append(username);
-      const nameLabel = text('label', 'Họ tên người dùng'); const name = document.createElement('input');
+      const nameLabel = text('label', account.role === 'admin' ? 'Tên hiển thị admin' : 'Họ tên người dùng'); const name = document.createElement('input');
       name.id = 'editDisplayName'; name.value = account.display_name; name.required = true; name.maxLength = 120; nameLabel.append(name);
       const save = text('button', 'Lưu thông tin', 'primary'); save.type = 'submit'; form.append(usernameLabel, nameLabel, save);
       form.addEventListener('submit', async event => {
@@ -163,7 +163,7 @@
         } catch (error) { message(error.message); }
         finally { save.disabled = false; }
       });
-      panel.append(form, text('h3', 'Cấp lại mật khẩu'));
+      panel.append(form, text('h3', account.role === 'admin' ? 'Cấp lại mật khẩu admin' : 'Cấp lại mật khẩu'));
       const reset = document.createElement('form'); reset.id = 'resetUserPasswordForm'; reset.className = 'account-form';
       const label = text('label', 'Mật khẩu tạm mới (bỏ trống để tạo ngẫu nhiên)'); const password = document.createElement('input');
       password.id = 'resetTemporaryPassword'; password.type = 'password'; password.minLength = 12; password.maxLength = 128; password.autocomplete = 'new-password'; label.append(password);
@@ -179,14 +179,14 @@
         finally { issue.disabled = false; }
       });
       panel.append(reset);
-      const revoke = text('button', 'Đăng xuất mọi phiên của người dùng'); revoke.id = 'revokeUserSessions';
+      const revoke = text('button', 'Đăng xuất mọi phiên của tài khoản'); revoke.id = 'revokeUserSessions';
       revoke.addEventListener('click', async () => {
         revoke.disabled = true;
         try { await request(`/api/admin/accounts/${encodeURIComponent(id)}/sessions/revoke`, {}); await showAccountDetail(id); message('Đã thu hồi các phiên đăng nhập.', true); }
         catch (error) { message(error.message); revoke.disabled = false; }
       });
       panel.append(revoke);
-    } else panel.append(text('p', 'Đổi mật khẩu admin tại trang Tài khoản cá nhân.', 'muted'));
+    } else panel.append(text('p', 'Đổi mật khẩu tại trang Tài khoản cá nhân. Admin khác có thể thu hồi phiên hoặc cấp mật khẩu tạm cho tài khoản này.', 'muted'));
     panel.append(text('h3', 'Hồ sơ khuôn mặt liên kết'));
     for (const person of account.people) {
       const button = text('button', `${person.name} · ${person.sample_count} mẫu`); button.dataset.action = 'linked-person';
@@ -201,9 +201,12 @@
   byId('createAccountForm').addEventListener('submit', async event => {
     event.preventDefault(); const form = event.currentTarget; const button = form.querySelector('button'); button.disabled = true;
     try {
-      const data = await request('/api/admin/accounts', { username: byId('createUsername').value.trim(), display_name: byId('createDisplayName').value.trim(), temporary_password: byId('createTemporaryPassword').value });
+      const role = byId('createAccountRole').value;
+      const endpoint = role === 'admin' ? '/api/admin/accounts/admin' : '/api/admin/accounts';
+      const data = await request(endpoint, { username: byId('createUsername').value.trim(), display_name: byId('createDisplayName').value.trim(), temporary_password: byId('createTemporaryPassword').value });
       form.reset(); await load(); await showAccountDetail(data.account.id);
-      showTemporaryPassword(data.account.username, data.temporary_password); message('Đã tạo tài khoản người dùng với mật khẩu tạm.', true);
+      showTemporaryPassword(data.account.username, data.temporary_password);
+      message(role === 'admin' ? 'Đã tạo admin. Gửi mật khẩu tạm riêng cho quản trị viên; họ phải đổi mật khẩu khi đăng nhập.' : 'Đã tạo tài khoản người dùng với mật khẩu tạm.', true);
     } catch (error) { message(error.message); }
     finally { button.disabled = false; }
   });
@@ -221,13 +224,21 @@
     const body = byId('auditRows'); body.replaceChildren();
     const databaseLabel = {sqlserver: 'SQL Server', postgres: 'Supabase PostgreSQL', sqlite: 'SQLite'}[data.storage.backend] || data.storage.backend;
     byId('auditSource').textContent = `Nguồn dữ liệu: ${databaseLabel} · ${data.storage.table}`;
-    const labels = { 'account.created': 'Tạo tài khoản', 'account.updated': 'Sửa thông tin tài khoản', 'account.password_reset': 'Admin đặt lại mật khẩu', 'account.sessions_revoked': 'Thu hồi phiên đăng nhập', 'account.login': 'Đăng nhập', 'account.password_changed': 'Đổi mật khẩu', 'account.enabled': 'Mở khóa tài khoản', 'account.disabled': 'Khóa tài khoản', 'person.updated': 'Sửa / gán hồ sơ', 'person.sample_saved': 'Lưu mẫu khuôn mặt', 'person.deleted': 'Xóa hồ sơ', 'people.cleared': 'Xóa toàn bộ hồ sơ' };
+    const labels = { 'account.created': 'Tạo tài khoản', 'account.admin_created': 'Tạo tài khoản admin', 'account.updated': 'Sửa thông tin tài khoản', 'account.password_reset': 'Admin đặt lại mật khẩu', 'account.sessions_revoked': 'Thu hồi phiên đăng nhập', 'account.login': 'Đăng nhập', 'account.password_changed': 'Đổi mật khẩu', 'account.enabled': 'Mở khóa tài khoản', 'account.disabled': 'Khóa tài khoản', 'person.updated': 'Sửa / gán hồ sơ', 'person.sample_saved': 'Lưu mẫu khuôn mặt', 'person.deleted': 'Xóa hồ sơ', 'people.cleared': 'Xóa toàn bộ hồ sơ' };
     for (const item of data.events) { const row = document.createElement('tr'); row.append(text('td', date(item.created_at)), text('td', item.actor || 'Hệ thống'), text('td', labels[item.action] || item.action), text('td', item.target_id || '—', 'mono')); body.append(row); }
     if (!data.events.length) { const row = document.createElement('tr'); const cell = text('td', 'Chưa có nhật ký thao tác.', 'empty'); cell.colSpan = 4; row.append(cell); body.append(row); }
   }
   async function load() {
     const [people, accounts] = await Promise.all([request('/api/admin/people'), request('/api/admin/accounts')]);
     state.people = people.people; state.accounts = accounts.accounts;
+    const adminCount = state.accounts.filter(account => account.role === 'admin').length;
+    const capacityNote = byId('adminCapacityNote');
+    if (capacityNote) {
+      const adminOption = byId('createAccountRole').querySelector('option[value="admin"]');
+      adminOption.disabled = adminCount >= 3;
+      if (adminCount >= 3 && byId('createAccountRole').value === 'admin') byId('createAccountRole').value = 'user';
+      capacityNote.textContent = `Hiện có ${adminCount}/3 tài khoản admin. Tài khoản admin bị khóa vẫn tính vào giới hạn; cần giữ ít nhất một admin đang hoạt động.`;
+    }
     byId('accountCount').textContent = state.accounts.length;
     byId('peopleCount').textContent = state.people.length;
     byId('sampleCount').textContent = state.people.reduce((sum, person) => sum + person.sample_count, 0);
@@ -249,6 +260,7 @@
   VisionAuth.ready.then(async ({ account }) => {
     if (!account || account.role !== 'admin') return window.location.assign('/admin-login.html');
     if (account.must_change_password) return window.location.assign('/account.html');
+    state.currentAccount = account;
     try { await load(); } catch (error) { message(error.message); }
   });
 })();

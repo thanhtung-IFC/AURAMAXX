@@ -40,20 +40,20 @@ Các hồ sơ có sẵn, ví dụ Tùng, được giữ nguyên và ban đầu *
 
 Admin xem mọi hồ sơ; người dùng chỉ xem, thêm mẫu, nhận dạng và xóa hồ sơ thuộc tài khoản mình. Tài khoản người dùng không truy cập được API quản trị và không được xóa toàn bộ database. Các mẫu hiện lưu vector đặc trưng, chưa lưu ảnh chân dung gốc hay kết quả phân tích lâu dài.
 
-Trong tab **Tài khoản**, admin xem họ tên, quyền, trạng thái, lần đăng nhập gần nhất và khóa/mở khóa người dùng. Khóa tài khoản thu hồi các phiên đăng nhập. Tab **Nhật ký** hiển thị 100 thao tác gần đây được thực hiện qua ứng dụng; thay đổi trực tiếp trong SSMS không đi qua nhật ký ứng dụng.
+Trong tab **T?i kho?n**, admin xem h? t?n, quy?n, tr?ng th?i, l?n ??ng nh?p g?n nh?t v? kh?a/m? kh?a t?i kho?n ng??i d?ng ho?c admin kh?c. C? th? t?o t?i ?a 3 t?i kho?n admin (t?nh c? t?i kho?n b? kh?a); h? th?ng lu?n gi? ?t nh?t m?t admin ?ang ho?t ??ng v? kh?ng cho admin t? kh?a m?nh. Kh?a t?i kho?n thu h?i c?c phi?n ??ng nh?p. Tab **Nh?t k?** hi?n th? 100 thao t?c g?n ??y ???c th?c hi?n qua ?ng d?ng; thay ??i tr?c ti?p trong SSMS kh?ng ?i qua nh?t k? ?ng d?ng.
 
 ## Quản lý thông tin đăng nhập và mật khẩu người dùng
 
 Trong **Tài khoản → Chi tiết**, admin xem ID tài khoản, tên đăng nhập, họ tên, trạng thái, ngày tạo, lần đăng nhập cuối, số phiên hoạt động và các hồ sơ khuôn mặt đang liên kết. Có thể mở hồ sơ từ trang chi tiết tài khoản, hoặc chọn **Xem tài khoản đăng nhập** trong chi tiết hồ sơ để chuyển theo chiều ngược lại.
 
-- **Tạo tài khoản người dùng:** nhập họ tên và tên đăng nhập. Mật khẩu tạm có thể tự nhập (12–128 ký tự) hoặc để trống để tạo ngẫu nhiên. Tài khoản mới luôn có quyền người dùng.
-- **Lưu thông tin:** chỉnh sửa tên đăng nhập và họ tên của tài khoản người dùng. Đổi tên đăng nhập thu hồi các phiên cũ; người dùng đăng nhập lại bằng tên mới. Tên hồ sơ khuôn mặt được quản lý riêng, các liên kết giữ nguyên theo ID.
-- **Đặt lại mật khẩu:** cấp mật khẩu tạm mới, thu hồi mọi phiên cũ và buộc người dùng đổi mật khẩu khi đăng nhập. Mật khẩu trước đó không dùng được nữa.
+- **T?o t?i kho?n:** ch?n quy?n ng??i d?ng ho?c admin, nh?p h? t?n v? t?n ??ng nh?p. C? t?i ?a 3 t?i kho?n admin; m?t kh?u t?m c? th? t? nh?p (12?128 k? t?) ho?c ?? tr?ng ?? t?o ng?u nhi?n. Admin m?i ph?i ??i m?t kh?u ? l?n ??ng nh?p ??u ti?n.
+- **L?u th?ng tin:** ch?nh s?a t?n ??ng nh?p v? h? t?n c?a t?i kho?n kh?c, g?m c? admin. ??i t?n ??ng nh?p thu h?i c?c phi?n c?; ng??i d?ng ??ng nh?p l?i b?ng t?n m?i. T?n h? s? khu?n m?t ???c qu?n l? ri?ng, c?c li?n k?t gi? nguy?n theo ID.
+- **??t l?i m?t kh?u:** c?p m?t kh?u t?m m?i, thu h?i m?i phi?n c? v? bu?c t?i kho?n ???c c?p l?i m?t kh?u ??i m?t kh?u khi ??ng nh?p. M?t kh?u tr??c ?? kh?ng d?ng ???c n?a.
 - **Đăng xuất mọi phiên của người dùng:** thu hồi các phiên hiện có mà không đổi mật khẩu.
 
 Mật khẩu tạm vừa cấp xuất hiện trong khung riêng; bấm **Hiện mật khẩu** để đọc và cung cấp trực tiếp cho người dùng. Khung này được xóa khi đóng, chuyển tab, chọn tài khoản khác hoặc tải lại trang. Mật khẩu hiện tại không thể xem lại vì SQL Server chỉ lưu băm Argon2id trong `accounts.password_hash`; mật khẩu tạm cũng được băm trước khi lưu. Mật khẩu không được ghi vào nhật ký, LocalStorage hay SessionStorage. Nếu không còn mật khẩu tạm, admin có thể cấp lại.
 
-Các thao tác trên ghi nhật ký `account.created`, `account.updated`, `account.password_reset`, `account.sessions_revoked` với ID admin thực hiện và ID tài khoản được quản lý. Mục này quản lý tài khoản người dùng; admin đổi mật khẩu của mình ở **Tài khoản** trên thanh điều hướng. Đặt lại mật khẩu admin khi quên dùng lệnh CLI ở phần đầu hướng dẫn.
+C?c thao t?c tr?n ghi nh?t k? `account.created`, `account.admin_created`, `account.updated`, `account.password_reset`, `account.sessions_revoked` v?i ID admin th?c hi?n v? ID t?i kho?n ???c qu?n l?. M?c n?y qu?n l? t?i kho?n ng??i d?ng v? admin kh?c; admin ??i m?t kh?u c?a m?nh ? **T?i kho?n** tr?n thanh ?i?u h??ng.
 
 Nhật ký được lưu trong `VisionFaceDB.dbo.audit_logs` khi chọn backend SQL Server, cùng database với tài khoản và khuôn mặt. Tab Nhật ký hiển thị nguồn dữ liệu; bấm **Làm mới** để tải lại. Trong SSMS, kết nối `localhost\SQLEXPRESS`, Refresh mục **Databases → VisionFaceDB → Tables**, rồi mở `dbo.audit_logs`. Mở [sql/inspect_audit.sql](sql/inspect_audit.sql) và bấm **F5** để xem nhật ký kèm tên tài khoản, lọc theo tài khoản/thao tác/ID/ngày UTC, thống kê và đối chiếu dữ liệu khuôn mặt. Có thể dùng **Save Results As…** ở bảng kết quả để xuất dữ liệu.
 
