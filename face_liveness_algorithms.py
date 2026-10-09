@@ -307,7 +307,7 @@ def analyze_frame_landmarks(landmarks_data: List[Dict[str, float]],
     if registered_db:
         best_match = None
         min_dist = float("inf")
-        match_threshold = 0.38
+        match_threshold = 0.44
 
         for user in registered_db:
             dist = compare_face_vectors(current_vector, user.get("vector", []))
