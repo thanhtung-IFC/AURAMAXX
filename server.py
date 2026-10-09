@@ -18,6 +18,9 @@ if sys.stdout.encoding != 'utf-8':
     except Exception:
         pass
 
+from functools import partial
+from pathlib import Path
+
 from http import HTTPStatus
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from typing import Dict, Any, List
@@ -39,7 +42,8 @@ from face_aesthetic_analyzer import (
 
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", 8000))
-DATABASE_FILE = "face_database.json"
+BASE_DIR = Path(__file__).resolve().parent
+DATABASE_FILE = BASE_DIR / "face_database.json"
 
 # Biến toàn cục quản lý Database và Liveness Engine
 registered_faces: List[Dict[str, Any]] = []
@@ -291,7 +295,8 @@ class VisionFaceRequestHandler(SimpleHTTPRequestHandler):
 def run_server():
     load_database()
     server_address = (HOST, PORT)
-    httpd = HTTPServer(server_address, VisionFaceRequestHandler)
+    handler = partial(VisionFaceRequestHandler, directory=str(BASE_DIR))
+    httpd = HTTPServer(server_address, handler)
     print("=" * 65)
     print(f"🚀 VisionFace AI Server đang chạy tại: http://localhost:{PORT}")
     print(f"📡 API Endpoint phân tích: http://localhost:{PORT}/api/process")

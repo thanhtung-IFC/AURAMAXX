@@ -113,11 +113,10 @@ def calculate_head_pose(landmarks: List[LandmarkPoint]) -> Dict[str, Any]:
     chin = landmarks[152]
 
     # Tính Yaw (Quay ngang)
-    face_width = euclidean_distance(left_cheek, right_cheek) + 1e-6
-    dist_left = euclidean_distance(left_cheek, nose)
-    dist_right = euclidean_distance(nose, right_cheek)
-    yaw_ratio = (dist_left - dist_right) / face_width
-    yaw_angle = round(yaw_ratio * 75.0, 1)
+    yaw_angle = round(math.degrees(math.atan2(
+        left_cheek.z - right_cheek.z,
+        max(1e-6, right_cheek.x - left_cheek.x)
+    )), 1)
 
     # Tính Pitch (Ngẩng / Cúi)
     face_height = euclidean_distance(forehead, chin) + 1e-6

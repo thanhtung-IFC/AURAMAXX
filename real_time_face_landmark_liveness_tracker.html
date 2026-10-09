@@ -222,6 +222,20 @@
           </div>
         </div>
 
+
+        <div class="rounded-xl border border-surface-700 bg-surface-900/70 p-3 space-y-2" aria-live="polite">
+          <div class="flex flex-wrap items-center justify-between gap-2 text-xs">
+            <span id="captureAngleTarget" class="text-slate-400">Chính diện: góc ước tính ≤ 10°</span>
+            <span id="captureAngleValue" class="font-mono text-cyan-300">Chưa có mặt</span>
+          </div>
+          <div class="h-2 rounded-full bg-surface-700 overflow-hidden"><div id="captureAngleFill" class="h-full rounded-full bg-cyan-400 transition-all" style="width:0%"></div></div>
+          <div class="flex flex-wrap justify-between gap-2 text-[11px]">
+            <span id="captureTrackingHint" class="text-slate-300">Đưa mặt vào khung và giữ máy ngang tầm mắt.</span>
+            <span id="captureStability" class="font-mono text-amber-300">Chờ căn chỉnh</span>
+          </div>
+          <button id="btnCancelAutoCapture" class="hidden text-xs text-rose-300 underline" type="button">Hủy chờ tự chụp</button>
+          <p class="text-[10px] text-slate-500">Ở bước 2, bấm bật tự chụp rồi quay từ từ. Giữ cả hai mắt còn nhìn thấy; nếu mất mặt, quay lại một chút. Góc hiển thị là ước tính để căn chỉnh.</p>
+        </div>
         <!-- Thumbnails xem trước 2 lần chụp & Nút thao tác -->
         <div class="flex flex-wrap items-center justify-between gap-3">
           <!-- Cụm Thumbnails 2 góc -->
@@ -251,7 +265,7 @@
               <img id="imgThumbProfile" class="w-full h-full object-cover hidden" alt="Góc nghiêng">
               <div id="placeholderProfile" class="flex flex-col items-center text-slate-500">
                 <i class="fa-solid fa-head-side text-base mb-0.5"></i>
-                <span class="text-[9px] font-mono leading-none">Nghiêng 30-45°</span>
+                <span class="text-[9px] font-mono leading-none">Nghiêng nhẹ</span>
               </div>
               <button id="btnRetakeProfile" class="absolute top-1 right-1 w-5 h-5 rounded-full bg-slate-900/90 text-rose-400 hover:text-white hover:bg-rose-600 items-center justify-center text-[10px] hidden" title="Chụp lại góc nghiêng">
                 <i class="fa-solid fa-rotate-left"></i>
@@ -603,6 +617,7 @@
             </div>
           </div>
 
+          <p id="profileGuideLegend" class="hidden text-[11px] text-slate-400">Vàng: mũi–cằm (E-line) · Xanh dương: góc mũi–môi · Xanh lá: đường hàm.</p>
           <!-- Công tắc bật tắt lớp gióng đồ họa trên ảnh -->
           <div class="p-3 bg-surface-800/80 border border-surface-700 rounded-xl flex items-center justify-between text-xs">
             <span class="text-slate-300 font-medium">Lớp hiển thị trắc hình:</span>
@@ -1097,7 +1112,10 @@
     const lblEngineStatus = document.getElementById('lblEngineStatus');
     const lblEngineDesc = document.getElementById('lblEngineDesc');
 
-    const PYTHON_BACKEND_URL = window.location.origin.includes('8000') ? window.location.origin : 'http://localhost:8000';
+    const isLocalPage = ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname);
+    const PYTHON_BACKEND_URL = window.location.protocol === 'file:' || (isLocalPage && window.location.port !== '8000')
+      ? 'http://localhost:8000'
+      : window.location.origin;
     let isPythonBackendAvailable = false;
     let usePythonEngine = true;
     let isBackendFrameInFlight = false;
@@ -1233,6 +1251,15 @@
     let frontalCaptureData = null; // { image: b64, landmarks: [...] }
     let profileCaptureData = null; // { image: b64, landmarks: [...] }
     let isAnalyzingSnapshot = false;
+    let captureFrame = null;
+    let captureFrameCanvas = null;
+    let captureStableSince = null;
+    let captureStableFrames = 0;
+    let previousCapturePose = null;
+    let profileCaptureArmed = false;
+    let profileArmTimeout = null;
+    const CAPTURE_STABLE_MS = 600;
+    const CAPTURE_MAX_AGE_MS = 300;
 
     // Quản lý đồng bộ phần cứng Camera (Laptop & USB rời)
     let activeCameraDeviceId = null;
@@ -1240,11 +1267,15 @@
     const CAMERA_STORAGE_KEY = 'visionface_preferred_cam_v1';
     let knownCameraDeviceIds = new Set();
     let isProcessingFrame = false;
+    let inferenceFrameCanvas = null;
+    let lastInferenceVideoTime = -1;
     let frameCallbackId = null;
 
     // Biến trạng thái toàn cục
     let isCameraActive = false;
     let faceMesh = null;
+    let faceMeshSetupPromise = null;
+    let isUploadingImage = false;
     let currentStream = null;
     let latestLandmarks = null;
     let isMirrored = true;
@@ -1268,39 +1299,54 @@
     const STORAGE_KEY = 'visionface_registered_users_v1';
     let registeredDatabase = [];
 
+    function createFaceMeshEngine() {
+      if (typeof FaceMesh !== 'function') {
+        throw new Error("Không tải được MediaPipe. Hãy kiểm tra kết nối mạng và tải lại trang.");
+      }
+      const engine = new FaceMesh({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+      });
+      engine.setOptions({
+        maxNumFaces: 1,
+        refineLandmarks: true,
+        minDetectionConfidence: 0.35,
+        minTrackingConfidence: 0.35
+      });
+      return engine;
+    }
+
     async function setupFaceMeshEngine() {
-      try {
-        aiStatusText.innerText = "Đang tải MediaPipe FaceMesh...";
-        
-        faceMesh = new FaceMesh({
-          locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
-        });
-
-        faceMesh.setOptions({
-          maxNumFaces: 1,
-          refineLandmarks: true, // Lấy chi tiết iris và viền môi
-          minDetectionConfidence: 0.35,
-          minTrackingConfidence: 0.35
-        });
-
-        faceMesh.onResults(handleMeshResults);
-
+      if (faceMesh) return faceMesh;
+      if (faceMeshSetupPromise) return faceMeshSetupPromise;
+      faceMeshSetupPromise = (async () => {
+        let engine = null;
         try {
-          if (typeof faceMesh.initialize === 'function') {
-            await faceMesh.initialize();
+          aiStatusText.innerText = "Đang tải MediaPipe FaceMesh...";
+          engine = createFaceMeshEngine();
+          engine.onResults(handleMeshResults);
+          if (typeof engine.initialize === 'function') {
+            await engine.initialize();
           }
-        } catch (initErr) {
-          console.warn("FaceMesh pre-initialize:", initErr);
+          faceMesh = engine;
+          aiIndicator.className = "w-2.5 h-2.5 rounded-full bg-emerald-400";
+          aiStatusText.innerText = "Mô hình AI Sẵn sàng";
+          showToast("Mô hình FaceMesh đã tải thành công!", "success");
+          return faceMesh;
+        } catch (error) {
+          console.error("Lỗi khi tải FaceMesh:", error);
+          if (engine && typeof engine.close === 'function') {
+            await engine.close().catch(() => {});
+          }
+          aiIndicator.className = "w-2.5 h-2.5 rounded-full bg-rose-500 animate-none";
+          aiStatusText.innerText = "Lỗi nạp mô hình AI";
+          showToast(error.message || "Không thể tải mô hình AI từ CDN.", "error");
+          return null;
         }
-
-        aiIndicator.className = "w-2.5 h-2.5 rounded-full bg-emerald-400";
-        aiStatusText.innerText = "Mô hình AI Sẵn sàng";
-        showToast("Mô hình FaceMesh đã tải thành công!", "success");
-      } catch (error) {
-        console.error("Lỗi khi tải FaceMesh:", error);
-        aiIndicator.className = "w-2.5 h-2.5 rounded-full bg-rose-500 animate-none";
-        aiStatusText.innerText = "Lỗi nạp mô hình AI";
-        showToast("Không thể tải mô hình AI từ CDN. Hãy kiểm tra kết nối mạng.", "error");
+      })();
+      try {
+        return await faceMeshSetupPromise;
+      } finally {
+        faceMeshSetupPromise = null;
       }
     }
 
@@ -1408,7 +1454,7 @@
 
     // Lắng nghe sự kiện cắm/rút camera rời USB (Hot-plugging) kèm debounce
     let deviceChangeDebounceTimer = null;
-    navigator.mediaDevices.addEventListener('devicechange', () => {
+    navigator.mediaDevices?.addEventListener('devicechange', () => {
       clearTimeout(deviceChangeDebounceTimer);
       deviceChangeDebounceTimer = setTimeout(async () => {
         await enumerateVideoDevices(true);
@@ -1424,46 +1470,71 @@
       }
     }
 
-    // Vòng lặp xử lý video frame chuẩn xác & hiển thị video trực tiếp độc lập với AI
+    // Vẽ camera độc lập với kết quả AI, kể cả khi mô hình gặp lỗi.
     function startFrameProcessingLoop() {
       cancelVideoFrameLoop();
 
       async function onCameraFrame() {
         if (!isCameraActive) return;
-
-        if (videoElement.readyState >= 2 && !videoElement.paused && !videoElement.ended && videoElement.videoWidth > 0 && videoElement.videoHeight > 0) {
-          const w = canvasElement.width;
-          const h = canvasElement.height;
-
-          // 1. Nếu FaceMesh đã sẵn sàng, gửi video frame cho AI nhận diện
-          if (faceMesh && !isProcessingFrame) {
-            isProcessingFrame = true;
-            const startStamp = performance.now();
-            try {
-              await faceMesh.send({ image: videoElement });
-              const latency = Math.round(performance.now() - startStamp);
-              lblLatency.innerText = `${latency}ms`;
-            } catch (err) {
-              console.warn("FaceMesh send frame error:", err);
-            } finally {
-              isProcessingFrame = false;
-            }
-          } else if (!faceMesh) {
-            // 2. Khi FaceMesh đang nạp CDN hoặc chưa sẵn sàng: VẪN VẼ VIDEO TRỰC TIẾP LÊN CANVAS
-            // Đảm bảo người dùng THẤY HÌNH ẢNH CAMERA NGAY LẬP TỨC, không bao giờ bị màn hình đen
-            updateFpsCounter();
+        try {
+          if (videoElement.readyState >= 2 && !videoElement.paused && !videoElement.ended && videoElement.videoWidth > 0 && videoElement.videoHeight > 0) {
+            if (faceMesh && videoElement.currentTime === lastInferenceVideoTime) return;
+            const w = canvasElement.width;
+            const h = canvasElement.height;
             canvasCtx.save();
-            canvasCtx.clearRect(0, 0, w, h);
-            canvasCtx.drawImage(videoElement, 0, 0, w, h);
-            if (chkShowGuideLines && chkShowGuideLines.checked) {
-              drawOvalAlignmentGuide(w, h, null);
+            try {
+              canvasCtx.clearRect(0, 0, w, h);
+              canvasCtx.drawImage(videoElement, 0, 0, w, h);
+              if (!faceMesh && chkShowGuideLines?.checked) {
+                drawOvalAlignmentGuide(w, h, null);
+              }
+            } finally {
+              canvasCtx.restore();
             }
-            canvasCtx.restore();
-          }
-        }
 
-        if (isCameraActive) {
-          frameCallbackId = requestAnimationFrame(onCameraFrame);
+            if (faceMesh && !isProcessingFrame) {
+              isProcessingFrame = true;
+              const engine = faceMesh;
+              const startStamp = performance.now();
+              try {
+                // Đóng băng đúng khung hình đưa vào AI để ảnh và landmarks khớp nhau.
+                if (!inferenceFrameCanvas) inferenceFrameCanvas = document.createElement('canvas');
+                const scale = Math.min(1, 1280 / Math.max(videoElement.videoWidth, videoElement.videoHeight));
+                const inputWidth = Math.round(videoElement.videoWidth * scale);
+                const inputHeight = Math.round(videoElement.videoHeight * scale);
+                if (inferenceFrameCanvas.width !== inputWidth) inferenceFrameCanvas.width = inputWidth;
+                if (inferenceFrameCanvas.height !== inputHeight) inferenceFrameCanvas.height = inputHeight;
+                inferenceFrameCanvas.getContext('2d').drawImage(videoElement, 0, 0, inputWidth, inputHeight);
+                lastInferenceVideoTime = videoElement.currentTime;
+                await engine.send({ image: inferenceFrameCanvas });
+                lblLatency.innerText = `${Math.round(performance.now() - startStamp)}ms`;
+              } catch (err) {
+                console.error("FaceMesh send frame error:", err);
+                faceMesh = null;
+                latestLandmarks = null;
+                cancelProfileAutoCapture();
+                updateCaptureTracking(null);
+                matchCard.classList.add('opacity-0', 'translate-y-2');
+                aiIndicator.className = "w-2.5 h-2.5 rounded-full bg-rose-500";
+                aiStatusText.innerText = "Lỗi xử lý AI";
+                faceStatusBadge.innerHTML = '<span>AI GẶP LỖI</span>';
+                showToast(`AI không xử lý được camera: ${err.message || err}. Hãy tải lại trang để thử lại.`, "error");
+                if (typeof engine.close === 'function') {
+                  try { await engine.close(); } catch (closeError) { console.warn(closeError); }
+                }
+              } finally {
+                isProcessingFrame = false;
+              }
+            } else if (!faceMesh) {
+              updateFpsCounter();
+            }
+          }
+        } catch (err) {
+          console.error("Lỗi hiển thị khung hình camera:", err);
+        } finally {
+          if (isCameraActive) {
+            frameCallbackId = requestAnimationFrame(onCameraFrame);
+          }
         }
       }
 
@@ -1476,10 +1547,16 @@
         frameCallbackId = null;
       }
       isProcessingFrame = false;
+      lastInferenceVideoTime = -1;
     }
 
     async function startCameraStream(targetDeviceId = null) {
       if (isCameraActive) return;
+      if (!navigator.mediaDevices?.getUserMedia) {
+        showToast("Trình duyệt không cho truy cập camera. Hãy mở web bằng HTTPS hoặc http://localhost:8000.", "error");
+        return;
+      }
+      if (!faceMesh) setupFaceMeshEngine();
 
       const deviceId = targetDeviceId || cameraSelect.value || undefined;
       const resConfig = getResolutionPreset(resolutionSelect.value);
@@ -1658,6 +1735,8 @@
       } catch (e) {}
 
       isCameraActive = false;
+      cancelProfileAutoCapture();
+      updateCaptureTracking(null);
       updateCameraSyncUI();
       overlayStandby.classList.remove('hidden');
       standbyTitle.innerText = "Camera Đang Tắt";
@@ -1712,11 +1791,9 @@
       const forehead = pts[10];
       const chin = pts[152];
 
-      const faceWidth = calcDistance(leftCheek, rightCheek) + 0.0001;
-      const leftDist = calcDistance(leftCheek, nose);
-      const rightDist = calcDistance(nose, rightCheek);
-      const yawRatio = (leftDist - rightDist) / faceWidth;
-      const yaw = Math.round(yawRatio * 75);
+      // Chênh lệch độ sâu hai má thay đổi khi quay đầu (góc ước tính).
+      const yaw = Math.round(Math.atan2((leftCheek.z || 0) - (rightCheek.z || 0),
+        Math.max(0.0001, rightCheek.x - leftCheek.x)) * 180 / Math.PI);
 
       const faceHeight = calcDistance(forehead, chin) + 0.0001;
       const topDist = calcDistance(forehead, nose);
@@ -1750,7 +1827,7 @@
 
       const vector = [];
       for (const idx of anchorIndices) {
-        const pt = landmarks[idx];
+        const pt = landmarks[idx] || center;
         vector.push((pt.x - center.x) / scale);
         vector.push((pt.y - center.y) / scale);
         vector.push(((pt.z || 0) - (center.z || 0)) / scale);
@@ -1783,6 +1860,7 @@
       if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
         const landmarks = results.multiFaceLandmarks[0];
         latestLandmarks = landmarks;
+        updateCaptureTracking(landmarks, results.image || videoElement);
 
         faceStatusBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span><span>ĐANG THEO DÕI</span>';
         faceStatusBadge.className = 'flex items-center gap-1.5 bg-surface-900/85 backdrop-blur px-3 py-1.2 rounded-lg border border-emerald-900/60 text-[11px] font-mono text-emerald-400';
@@ -1858,10 +1936,13 @@
 
       } else {
         latestLandmarks = null;
+        updateCaptureTracking(null);
         if (chkShowGuideLines && chkShowGuideLines.checked) {
           drawOvalAlignmentGuide(w, h, null);
         }
-        if (lblCaptureGuide) lblCaptureGuide.innerText = "💡 Hãy đưa khuôn mặt vào giữa khung";
+        if (lblCaptureGuide) lblCaptureGuide.innerText = captureStep === 2
+          ? "Quay lại nhẹ để thấy cả hai mắt; giữ mặt trong khung."
+          : "Đưa khuôn mặt vào giữa khung.";
         faceStatusBadge.innerHTML = '<span class="w-2 h-2 rounded-full bg-rose-500"></span><span>KHÔNG CÓ MẶT</span>';
         faceStatusBadge.className = 'flex items-center gap-1.5 bg-surface-900/85 backdrop-blur px-3 py-1.2 rounded-lg border border-rose-900/60 text-[11px] font-mono text-rose-400';
         matchCard.classList.add('opacity-0', 'translate-y-2');
@@ -2524,7 +2605,112 @@
     // CÁC HÀM XỬ LÝ CHỤP ẢNH ĐA CHIỀU 2 LẦN (FRONTAL + PROFILE) & PHÂN TÍCH
     // =========================================================================
 
+
+    function evaluateCapturePose(landmarks, step, baselineYaw = 0, aspectRatio = 4 / 3) {
+      const invalid = { ready: false, yaw: null, message: step === 2
+        ? "Mất mặt: quay lại một chút để thấy cả hai mắt, rồi quay chậm."
+        : "Đưa khuôn mặt vào khung." };
+      if (!landmarks || landmarks.length < 468) return invalid;
+      const needed = [1, 10, 152, 234, 454, 33, 263];
+      if (needed.some(i => !landmarks[i] || !Number.isFinite(landmarks[i].x)
+        || !Number.isFinite(landmarks[i].y) || !Number.isFinite(landmarks[i].z ?? 0))) return invalid;
+      const yaw = calculateHeadPose(landmarks).yaw - baselineYaw;
+      const absYaw = Math.abs(yaw);
+      const result = { ready: false, yaw, message: "" };
+      const outline = [10, 152, 234, 454].map(i => landmarks[i]);
+      if (outline.some(p => p.x < 0.025 || p.x > 0.975 || p.y < 0.025 || p.y > 0.975)) {
+        return { ...result, message: "Mặt bị cắt: đưa cả trán và cằm vào khung." };
+      }
+      const height = landmarks[152].y - landmarks[10].y;
+      if (height < 0.25) return { ...result, message: "Đưa mặt gần camera hơn một chút." };
+      if (height > 0.88) return { ...result, message: "Lùi ra một chút để mặt không bị cắt." };
+      const eyeL = landmarks[33], eyeR = landmarks[263];
+      const roll = Math.atan2(eyeR.y - eyeL.y, Math.max(0.001, (eyeR.x - eyeL.x) * aspectRatio)) * 180 / Math.PI;
+      if (Math.abs(roll) > 12) return { ...result, message: "Giữ đầu thẳng, không nghiêng vai hoặc cúi đầu." };
+      if (step === 1 && absYaw > 10) return { ...result, message: "Nhìn thẳng vào ống kính để lưu ảnh chính diện." };
+      if (step === 2 && absYaw < 15) return { ...result, message: "Quay từ từ sang trái hoặc phải; vẫn để thấy cả hai mắt." };
+      if (step === 2 && absYaw > 40) return { ...result, message: "Quay lại nhẹ: góc quá lớn dễ làm mất nhận diện." };
+      return { ...result, ready: true, message: "Đúng góc, giữ yên một chút." };
+    }
+
+    function cancelProfileAutoCapture() {
+      profileCaptureArmed = false;
+      if (profileArmTimeout !== null) clearTimeout(profileArmTimeout);
+      profileArmTimeout = null;
+      document.getElementById('btnCancelAutoCapture')?.classList.add('hidden');
+      if (captureStep === 2) lblBtnCapture.innerText = "Bật tự chụp góc nghiêng";
+    }
+
+    function resetCaptureStability() {
+      captureStableSince = null;
+      captureStableFrames = 0;
+      previousCapturePose = null;
+      captureFrame = null;
+    }
+
+    function renderCaptureAssist(quality, stableMs = 0) {
+      const setText = (id, value) => { const el = document.getElementById(id); if (el) el.innerText = value; };
+      setText('captureAngleTarget', captureStep === 1
+        ? "Chính diện: góc ước tính ≤ 10°" : "Nghiêng nhẹ: góc tương đối ước tính 15–40°");
+      setText('captureAngleValue', quality.yaw === null ? "Chưa có mặt" : "≈ " + Math.round(Math.abs(quality.yaw)) + "°");
+      setText('captureTrackingHint', quality.message);
+      const stable = Math.min(100, Math.floor(stableMs / CAPTURE_STABLE_MS * 100));
+      setText('captureStability', quality.ready
+        ? (stable >= 100 ? "Sẵn sàng chụp" : "Giữ yên · " + stable + "%")
+        : (profileCaptureArmed ? "Đang chờ đúng góc…" : "Chờ căn chỉnh"));
+      const fill = document.getElementById('captureAngleFill');
+      if (fill) {
+        fill.style.width = quality.yaw === null ? "0%" : Math.min(100, Math.abs(quality.yaw) / 50 * 100) + "%";
+        fill.style.backgroundColor = quality.ready ? '#34d399' : '#fbbf24';
+      }
+      if (lblCaptureGuide) lblCaptureGuide.innerText = quality.message;
+    }
+
+    function updateCaptureTracking(landmarks, image) {
+      const now = performance.now();
+      const baseline = captureStep === 2 ? (frontalCaptureData?.poseYaw || 0) : 0;
+      const quality = evaluateCapturePose(landmarks, captureStep, baseline,
+        (videoElement.videoWidth || 640) / (videoElement.videoHeight || 480));
+      if (!landmarks || !quality.ready) {
+        resetCaptureStability();
+        renderCaptureAssist(quality);
+        return;
+      }
+      const nose = landmarks[1];
+      const previous = previousCapturePose;
+      const moving = !previous || now - previous.time > 250
+        || Math.abs(quality.yaw - previous.yaw) > 4
+        || Math.hypot(nose.x - previous.x, nose.y - previous.y) > 0.018;
+      if (moving) { captureStableSince = now; captureStableFrames = 0; }
+      captureStableFrames++;
+      previousCapturePose = { time: now, yaw: quality.yaw, x: nose.x, y: nose.y };
+      const stableMs = now - captureStableSince;
+      const stable = stableMs >= CAPTURE_STABLE_MS && captureStableFrames >= 4;
+      if (!captureFrameCanvas) captureFrameCanvas = document.createElement('canvas');
+      const width = image?.videoWidth || image?.naturalWidth || image?.width || videoElement.videoWidth;
+      const height = image?.videoHeight || image?.naturalHeight || image?.height || videoElement.videoHeight;
+      if (!image || !width || !height) {
+        resetCaptureStability();
+        renderCaptureAssist({ ...quality, ready: false, message: "Đang chờ hình camera rõ nét." });
+        return;
+      }
+      if (captureFrameCanvas.width !== width) captureFrameCanvas.width = width;
+      if (captureFrameCanvas.height !== height) captureFrameCanvas.height = height;
+      captureFrameCanvas.getContext('2d').drawImage(image, 0, 0, width, height);
+      captureFrame = {
+        canvas: captureFrameCanvas, width, height, time: now, stable, step: captureStep,
+        deviceId: activeCameraDeviceId, poseYaw: calculateHeadPose(landmarks).yaw,
+        relativeYaw: quality.yaw, landmarks: landmarks.map(p => ({ x:p.x, y:p.y, z:p.z || 0 }))
+      };
+      renderCaptureAssist(quality, stableMs);
+      if (stable && captureStep === 2 && profileCaptureArmed && !isAnalyzingSnapshot) {
+        void captureCurrentStepShot({ automatic: true });
+      }
+    }
+
     function updateCaptureStepUI() {
+      resetCaptureStability();
+      renderCaptureAssist(evaluateCapturePose(null, captureStep));
       if (captureStep === 1) {
         badgeCaptureStep.className = "px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold bg-cyan-950 text-cyan-300 border border-cyan-700 flex items-center gap-1.5";
         badgeCaptureStep.innerHTML = '<span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span><span>BƯỚC 1/2: MẶT CHÍNH DIỆN</span>';
@@ -2535,13 +2721,13 @@
       } else {
         badgeCaptureStep.className = "px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold bg-indigo-950 text-indigo-300 border border-indigo-700 flex items-center gap-1.5";
         badgeCaptureStep.innerHTML = '<span class="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span><span>BƯỚC 2/2: GÓC NGHIÊNG MẶT</span>';
-        txtCaptureStepDesc.innerText = "Quay mặt sang trái hoặc phải một góc khoảng 30° - 45°";
-        lblBtnCapture.innerText = "Chụp Góc Nghiêng (30°- 45°)";
+        txtCaptureStepDesc.innerText = "Bật tự chụp, quay từ từ sang một bên và giữ cả hai mắt còn nhìn thấy.";
+        lblBtnCapture.innerText = "Bật tự chụp góc nghiêng";
         thumbBoxProfile.className = "relative w-20 h-16 rounded-xl bg-surface-900 border-2 border-dashed border-indigo-500 overflow-hidden flex flex-col items-center justify-center text-center p-1 group ring-2 ring-indigo-500/30";
       }
 
       // Kích hoạt nút Phân tích đa chiều khi đã chụp đủ cả 2 góc
-      if (frontalCaptureData && profileCaptureData) {
+      if (frontalCaptureData) {
         btnRunMultiViewAnalysis.disabled = false;
         btnRunMultiViewAnalysis.classList.remove('opacity-40', 'cursor-not-allowed');
       } else {
@@ -2550,87 +2736,18 @@
       }
     }
 
+
     function drawOvalAlignmentGuide(w, h, landmarks) {
-      const cx = w / 2;
-      const cy = h / 2;
-      const rx = w * 0.22;
-      const ry = h * 0.36;
-
-      let isPositionAligned = false;
-      let isPoseAngleAligned = false;
-      let currentYaw = 0;
-
-      if (landmarks && landmarks.length > 0) {
-        const nose = landmarks[1];
-        if (nose) {
-          const nx = nose.x * w;
-          const ny = nose.y * h;
-          const normDist = ((nx - cx) * (nx - cx)) / (rx * rx) + ((ny - cy) * (ny - cy)) / (ry * ry);
-          if (normDist <= 0.95) {
-            isPositionAligned = true;
-          }
-        }
-
-        const pose = calculateHeadPose(landmarks);
-        currentYaw = Math.abs(pose.yaw);
-
-        if (captureStep === 1) {
-          // Bước 1: Mặt chính diện (Yaw phải nhỏ, trong khoảng 0° - 10°)
-          if (currentYaw <= 10.0) {
-            isPoseAngleAligned = true;
-          }
-        } else {
-          // Bước 2: Góc nghiêng 3/4 (Yaw nên từ 20° đến 60°)
-          if (currentYaw >= 18.0 && currentYaw <= 65.0) {
-            isPoseAngleAligned = true;
-          }
-        }
-      }
-
-      const isReady = isPositionAligned && isPoseAngleAligned;
-
+      const quality = evaluateCapturePose(landmarks, captureStep,
+        captureStep === 2 ? (frontalCaptureData?.poseYaw || 0) : 0,
+        (videoElement.videoWidth || 640) / (videoElement.videoHeight || 480));
       canvasCtx.save();
       canvasCtx.beginPath();
-      canvasCtx.ellipse(cx, cy, rx, ry, 0, 0, 2 * Math.PI);
+      canvasCtx.ellipse(w / 2, h / 2, w * 0.25, h * 0.39, 0, 0, Math.PI * 2);
       canvasCtx.setLineDash([8, 6]);
-      canvasCtx.lineWidth = isReady ? 2.5 : 1.8;
-      canvasCtx.strokeStyle = isReady ? 'rgba(16, 185, 129, 0.9)' : (isPositionAligned ? 'rgba(250, 204, 21, 0.8)' : 'rgba(6, 182, 212, 0.55)');
+      canvasCtx.lineWidth = quality.ready ? 2.5 : 1.8;
+      canvasCtx.strokeStyle = quality.ready ? '#34d399' : '#fbbf24';
       canvasCtx.stroke();
-      canvasCtx.setLineDash([]);
-
-      canvasCtx.font = '11px "JetBrains Mono", monospace';
-      canvasCtx.textAlign = 'center';
-
-      if (captureStep === 1) {
-        if (isReady) {
-          canvasCtx.fillStyle = '#10b981';
-          canvasCtx.fillText("✓ MẶT CHÍNH DIỆN CHUẨN - SẴN SÀNG CHỤP BƯỚC 1", cx, cy - ry - 14);
-          if (lblCaptureGuide) lblCaptureGuide.innerText = "✨ Góc chính diện chuẩn! Bấm chụp để lưu bước 1.";
-        } else if (currentYaw > 10.0) {
-          canvasCtx.fillStyle = '#f59e0b';
-          canvasCtx.fillText(`HÃY NHÌN THẲNG LẠI (Đang nghiêng ${Math.round(currentYaw)}°)`, cx, cy - ry - 14);
-          if (lblCaptureGuide) lblCaptureGuide.innerText = "⚠️ Hãy nhìn thẳng vào ống kính camera.";
-        } else {
-          canvasCtx.fillStyle = 'rgba(6, 182, 212, 0.75)';
-          canvasCtx.fillText("CĂN CHỈNH MẶT VÀO GIỮA KHUNG", cx, cy - ry - 14);
-          if (lblCaptureGuide) lblCaptureGuide.innerText = "💡 Đưa mặt vào giữa khung elip.";
-        }
-      } else {
-        // Bước 2: Hướng dẫn quay mặt
-        if (isReady) {
-          canvasCtx.fillStyle = '#10b981';
-          canvasCtx.fillText(`✓ GÓC NGHIÊNG CHUẨN (${Math.round(currentYaw)}°) - SẴN SÀNG CHỤP BƯỚC 2`, cx, cy - ry - 14);
-          if (lblCaptureGuide) lblCaptureGuide.innerText = "✨ Góc nghiêng hoàn hảo! Bấm chụp bước 2.";
-        } else if (currentYaw < 18.0) {
-          canvasCtx.fillStyle = '#38bdf8';
-          canvasCtx.fillText("QUAY MẶT SANG BÊN (30° - 45°)", cx, cy - ry - 14);
-          if (lblCaptureGuide) lblCaptureGuide.innerText = "👉 Hãy quay mặt sang một bên khoảng 30° - 45°";
-        } else {
-          canvasCtx.fillStyle = '#f59e0b';
-          canvasCtx.fillText("QUAY QUÁ MẠNH (HÃY GIỮ GÓC 30° - 45°)", cx, cy - ry - 14);
-          if (lblCaptureGuide) lblCaptureGuide.innerText = "⚠️ Quay mặt vừa phải (khoảng 30° - 45°)";
-        }
-      }
       canvasCtx.restore();
     }
 
@@ -2646,100 +2763,88 @@
     }
 
     // Chụp theo bước (Bước 1: Frontal, Bước 2: Profile)
-    async function captureCurrentStepShot() {
-      if (!isCameraActive || !latestLandmarks) {
-        showToast("Vui lòng bật camera và căn chỉnh mặt trước khi chụp!", "error");
+
+    async function captureCurrentStepShot(options = {}) {
+      if (isAnalyzingSnapshot || isUploadingImage) return;
+      if (!isCameraActive) {
+        showToast("Bật camera trước khi chụp.", "info");
         return;
       }
-
-      // Kiểm tra đồng bộ thiết bị: Bước 2 bắt buộc dùng đúng camera đã chụp ở Bước 1
-      if (captureStep === 2 && frontalCaptureData && frontalCaptureData.deviceId) {
-        if (frontalCaptureData.deviceId !== activeCameraDeviceId) {
-          const proceed = confirm(
-            "⚠️ Cảnh báo thiết bị không đồng bộ!\n\n" +
-            "Ảnh góc nghiêng đang dùng camera khác với ảnh chính diện.\n" +
-            "Để kết quả thẩm mỹ chính xác, hệ thống yêu cầu 2 lần chụp phải từ CÙNG 1 CAMERA.\n\n" +
-            "Bấm OK để chụp lại từ Bước 1 bằng camera hiện tại, hoặc Cancel để chọn lại đúng camera cũ."
-          );
-          if (proceed) {
-            retakeStepShot(1);
-          }
-          return;
+      if (captureStep === 2 && !frontalCaptureData) {
+        showToast("Chụp ảnh chính diện trước.", "info");
+        return;
+      }
+      if (captureStep === 2 && frontalCaptureData.deviceId
+        && frontalCaptureData.deviceId !== activeCameraDeviceId) {
+        cancelProfileAutoCapture();
+        showToast("Camera đã đổi. Hãy chụp lại ảnh chính diện bằng camera hiện tại.", "error");
+        return;
+      }
+      const frame = captureFrame;
+      const usable = latestLandmarks && frame && frame.stable && frame.step === captureStep
+        && frame.deviceId === activeCameraDeviceId && performance.now() - frame.time <= CAPTURE_MAX_AGE_MS;
+      if (!usable) {
+        if (captureStep === 2 && !options.automatic) {
+          if (profileCaptureArmed) { cancelProfileAutoCapture(); return; }
+          profileCaptureArmed = true;
+          lblBtnCapture.innerText = "Đang chờ góc nghiêng…";
+          document.getElementById('btnCancelAutoCapture')?.classList.remove('hidden');
+          profileArmTimeout = setTimeout(() => {
+            cancelProfileAutoCapture();
+            showToast("Chưa lấy được góc nghiêng. Nhìn thẳng để bắt lại mặt rồi thử lại.", "info");
+          }, 20000);
+          showToast("Đã bật tự chụp: quay chậm, giữ cả hai mắt còn thấy và giữ yên khi thanh báo xanh.", "info");
+        } else if (!options.automatic) {
+          showToast("Nhìn thẳng và giữ yên cho đến khi báo sẵn sàng.", "info");
         }
+        return;
       }
-
-      triggerShutterFlash();
-
-      // Chụp ảnh sạch từ videoElement với độ phân giải cảm biến gốc của camera
-      const snapCanvas = document.createElement('canvas');
-      const snapW = videoElement.videoWidth || canvasElement.width || 640;
-      const snapH = videoElement.videoHeight || canvasElement.height || 480;
-      snapCanvas.width = snapW;
-      snapCanvas.height = snapH;
-      const snapCtx = snapCanvas.getContext('2d');
-      if (isMirrored) {
-        snapCtx.translate(snapW, 0);
-        snapCtx.scale(-1, 1);
-      }
-      snapCtx.drawImage(videoElement, 0, 0, snapW, snapH);
-      const snapshotDataUrl = snapCanvas.toDataURL('image/jpeg', 0.95);
-      const rawPoints = latestLandmarks.map(pt => ({ x: pt.x, y: pt.y, z: pt.z || 0 }));
-
-      if (captureStep === 1) {
-        // Lưu ảnh mặt chính diện kèm định danh camera
-        frontalCaptureData = {
-          image: snapshotDataUrl,
-          landmarks: rawPoints,
-          width: snapW,
-          height: snapH,
-          deviceId: activeCameraDeviceId,
-          cameraLabel: activeCameraLabel
+      cancelProfileAutoCapture();
+      try {
+        // Ảnh và landmarks từ cùng một lần suy luận; ảnh lưu không lật gương.
+        const snapshotDataUrl = frame.canvas.toDataURL('image/jpeg', 0.95);
+        const data = {
+          image: snapshotDataUrl, landmarks: frame.landmarks.map(p => ({...p})),
+          width: frame.width, height: frame.height,
+          deviceId: frame.deviceId, cameraLabel: activeCameraLabel,
+          poseYaw: frame.poseYaw, relativeYaw: frame.relativeYaw
         };
-
-        // Cập nhật Thumbnail Frontal
-        imgThumbFrontal.src = snapshotDataUrl;
-        imgThumbFrontal.classList.remove('hidden');
-        placeholderFrontal.classList.add('hidden');
-        btnRetakeFrontal.classList.remove('hidden');
-        checkFrontalDone.classList.remove('hidden');
-
-        showToast("✓ Đã chụp ảnh Mặt Chính Diện! Giờ hãy quay mặt 30°- 45° để chụp góc nghiêng.", "success");
-
-        // Tự động chuyển sang bước 2 nếu chưa có profile
-        if (!profileCaptureData) {
+        triggerShutterFlash();
+        if (captureStep === 1) {
+          frontalCaptureData = data;
+          profileCaptureData = null;
+          imgThumbProfile.classList.add('hidden');
+          placeholderProfile.classList.remove('hidden');
+          btnRetakeProfile.classList.add('hidden');
+          checkProfileDone.classList.add('hidden');
+          imgThumbFrontal.src = snapshotDataUrl;
+          imgThumbFrontal.classList.remove('hidden');
+          placeholderFrontal.classList.add('hidden');
+          btnRetakeFrontal.classList.remove('hidden');
+          checkFrontalDone.classList.remove('hidden');
           captureStep = 2;
+          updateCaptureStepUI();
+          showToast("Đã lưu chính diện. Bấm bật tự chụp góc nghiêng rồi quay đầu từ từ.", "success");
+        } else {
+          profileCaptureData = data;
+          imgThumbProfile.src = snapshotDataUrl;
+          imgThumbProfile.classList.remove('hidden');
+          placeholderProfile.classList.add('hidden');
+          btnRetakeProfile.classList.remove('hidden');
+          checkProfileDone.classList.remove('hidden');
+          updateCaptureStepUI();
+          showToast("Đã bắt được góc nghiêng ổn định. Bạn có thể nhìn thẳng lại.", "success");
+          await triggerMultiViewAnalysis();
         }
-        updateCaptureStepUI();
-
-      } else {
-        // Lưu ảnh góc nghiêng kèm định danh camera
-        profileCaptureData = {
-          image: snapshotDataUrl,
-          landmarks: rawPoints,
-          width: snapW,
-          height: snapH,
-          deviceId: activeCameraDeviceId,
-          cameraLabel: activeCameraLabel
-        };
-
-        // Cập nhật Thumbnail Profile
-        imgThumbProfile.src = snapshotDataUrl;
-        imgThumbProfile.classList.remove('hidden');
-        placeholderProfile.classList.add('hidden');
-        btnRetakeProfile.classList.remove('hidden');
-        checkProfileDone.classList.remove('hidden');
-
-        showToast("✓ Đã chụp ảnh Góc Nghiêng thành công (Đồng bộ cùng 1 camera)!", "success");
-        updateCaptureStepUI();
-
-        // Tự động mở phân tích đa chiều
-        setTimeout(() => {
-          triggerMultiViewAnalysis();
-        }, 350);
+      } catch (error) {
+        console.error("Lỗi chụp ảnh:", error);
+        showToast("Không thể lưu ảnh: " + error.message, "error");
       }
     }
 
     function retakeStepShot(step) {
+      cancelProfileAutoCapture();
+      if (step === 1) { resetTwoShotCapture(); return; }
       captureStep = step;
       if (step === 1) {
         frontalCaptureData = null;
@@ -2754,12 +2859,13 @@
         placeholderProfile.classList.remove('hidden');
         btnRetakeProfile.classList.add('hidden');
         checkProfileDone.classList.add('hidden');
-        showToast("Hãy quay mặt góc nghiêng 30°- 45° và bấm chụp lại.", "info");
+        showToast("Bật tự chụp góc nghiêng, sau đó quay đầu từ từ.", "info");
       }
       updateCaptureStepUI();
     }
 
     function resetTwoShotCapture() {
+      cancelProfileAutoCapture();
       frontalCaptureData = null;
       profileCaptureData = null;
       captureStep = 1;
@@ -2781,6 +2887,7 @@
     // Kích hoạt phân tích hợp nhất đa chiều
     async function triggerMultiViewAnalysis() {
       if (isAnalyzingSnapshot) return;
+      cancelProfileAutoCapture();
 
       if (!frontalCaptureData) {
         showToast("Bạn cần chụp ảnh mặt chính diện trước!", "error");
@@ -2803,13 +2910,17 @@
             const payload = {
               width: frontalCaptureData.width || canvasElement.width,
               height: frontalCaptureData.height || canvasElement.height,
-              frontal: {
-                image: frontalCaptureData.image,
-                landmarks: frontalCaptureData.landmarks
-              }
+              image: frontalCaptureData.image,
+              landmarks: frontalCaptureData.landmarks
             };
 
             if (profileCaptureData) {
+              payload.frontal = {
+                image: frontalCaptureData.image,
+                landmarks: frontalCaptureData.landmarks
+              };
+              delete payload.image;
+              delete payload.landmarks;
               payload.profile = {
                 image: profileCaptureData.image,
                 landmarks: profileCaptureData.landmarks
@@ -2856,23 +2967,34 @@
     }
 
     // Hàm tương thích ngược (Hỗ trợ tải ảnh lên 1 ảnh đơn)
-    async function captureAndAnalyzeFace(customSnapshotB64 = null) {
+    async function captureAndAnalyzeFace(customSnapshotB64 = null, snapshotLandmarks = latestLandmarks, snapshotWidth = canvasElement.width, snapshotHeight = canvasElement.height) {
       if (customSnapshotB64) {
+        cancelProfileAutoCapture();
+        if (!snapshotLandmarks || snapshotLandmarks.length < 468) {
+          throw new Error("Không tìm thấy khuôn mặt rõ nét trong ảnh tải lên!");
+        }
+        profileCaptureData = null;
+        imgThumbProfile.classList.add('hidden');
+        placeholderProfile.classList.remove('hidden');
+        btnRetakeProfile.classList.add('hidden');
+        checkProfileDone.classList.add('hidden');
         frontalCaptureData = {
           image: customSnapshotB64,
-          landmarks: latestLandmarks.map(p => ({ x: p.x, y: p.y, z: p.z || 0 })),
-          width: canvasElement.width,
-          height: canvasElement.height
+          landmarks: snapshotLandmarks.map(p => ({ x: p.x, y: p.y, z: p.z || 0 })),
+          width: snapshotWidth,
+          height: snapshotHeight
         };
         imgThumbFrontal.src = customSnapshotB64;
         imgThumbFrontal.classList.remove('hidden');
         placeholderFrontal.classList.add('hidden');
         checkFrontalDone.classList.remove('hidden');
         btnRetakeFrontal.classList.remove('hidden');
-        triggerMultiViewAnalysis();
+        captureStep = 2;
+        updateCaptureStepUI();
+        await triggerMultiViewAnalysis();
         return;
       }
-      captureCurrentStepShot();
+      await captureCurrentStepShot();
     }
 
     // =========================================================================
@@ -3299,32 +3421,61 @@
       };
     }
 
-    function handleImageUpload(e) {
+    async function handleImageUpload(e) {
       const file = e.target.files && e.target.files[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const dataUrl = event.target.result;
-        const img = new Image();
-        img.onload = async () => {
-          showToast("Đang phát hiện điểm mốc trên ảnh tải lên...", "info");
-          if (!faceMesh) {
-            await setupFaceMeshEngine();
-          }
-          await faceMesh.send({ image: img });
-          setTimeout(() => {
-            if (latestLandmarks) {
-              captureAndAnalyzeFace(dataUrl);
-            } else {
-              showToast("Không tìm thấy khuôn mặt rõ nét trong ảnh tải lên!", "error");
-            }
-          }, 350);
-        };
-        img.src = dataUrl;
-      };
-      reader.readAsDataURL(file);
       e.target.value = '';
+      if (!file) return;
+      if (isUploadingImage || isAnalyzingSnapshot) {
+        showToast("Đang xử lý ảnh, vui lòng chờ hoàn tất.", "info");
+        return;
+      }
+
+      isUploadingImage = true;
+      let imageMesh = null;
+      try {
+        const dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => reject(new Error("Không thể đọc tệp ảnh."));
+          reader.onabort = () => reject(new Error("Đã hủy đọc tệp ảnh."));
+          reader.readAsDataURL(file);
+        });
+        const img = await new Promise((resolve, reject) => {
+          const image = new Image();
+          image.onload = () => resolve(image);
+          image.onerror = () => reject(new Error("Không thể mở ảnh. Hãy dùng ảnh JPG hoặc PNG hợp lệ."));
+          image.src = dataUrl;
+        });
+        showToast("Đang phát hiện điểm mốc trên ảnh tải lên...", "info");
+
+        // Mô hình riêng cho ảnh tĩnh: camera không thể ghi đè kết quả.
+        let imageLandmarks = null;
+        imageMesh = createFaceMeshEngine();
+        imageMesh.onResults((results) => {
+          const points = results.multiFaceLandmarks && results.multiFaceLandmarks[0];
+          imageLandmarks = points ? points.map(p => ({ x: p.x, y: p.y, z: p.z || 0 })) : null;
+        });
+        if (typeof imageMesh.initialize === 'function') {
+          await imageMesh.initialize();
+        }
+        await imageMesh.send({ image: img });
+        if (!imageLandmarks || imageLandmarks.length < 468) {
+          throw new Error("Không tìm thấy khuôn mặt rõ nét trong ảnh tải lên!");
+        }
+        await captureAndAnalyzeFace(dataUrl, imageLandmarks, img.naturalWidth, img.naturalHeight);
+      } catch (error) {
+        console.error("Lỗi xử lý ảnh tải lên:", error);
+        showToast(error.message || "Không thể xử lý ảnh tải lên.", "error");
+      } finally {
+        if (imageMesh && typeof imageMesh.close === 'function') {
+          try {
+            await imageMesh.close();
+          } catch (closeError) {
+            console.warn("Không thể đóng mô hình ảnh:", closeError);
+          }
+        }
+        isUploadingImage = false;
+      }
     }
 
     function displayAnalysisReport(data, snapshotDataUrl) {
@@ -3483,25 +3634,52 @@
       drawReportCanvasOverlay();
 
       // Mở modal
+      document.getElementById('profileGuideLegend')?.classList.add('hidden');
       modalAnalysisReport.classList.remove('hidden');
+    }
+
+    function closeAnalysisReport() {
+      modalAnalysisReport.classList.add('hidden');
     }
 
     function drawReportCanvasOverlay() {
       if (!currentAnalysisReport || !currentSnapshotImage) return;
 
+      const snapshotTab = currentModalActiveTab;
+      const snapshotUrl = currentSnapshotImage;
+      const report = currentAnalysisReport;
+      const snapshotPoints = snapshotTab === 'profile' ? profileCaptureData?.landmarks : frontalCaptureData?.landmarks;
       const img = new Image();
       img.onload = () => {
+        if (currentModalActiveTab !== snapshotTab || currentSnapshotImage !== snapshotUrl) return;
         snapshotReportCanvas.width = img.width;
         snapshotReportCanvas.height = img.height;
         snapshotCtx.clearRect(0, 0, img.width, img.height);
         snapshotCtx.drawImage(img, 0, 0, img.width, img.height);
 
-        const rep = currentAnalysisReport;
-        const g = rep.visual_guides;
-        if (!g) return;
+        const rep = report;
+        const g = snapshotTab === 'profile' ? rep.profile?.visual_guides : rep.visual_guides;
+        // Báo cáo vẫn vẽ điểm mốc nếu không có đường hướng dẫn.
 
         // Vẽ các đường trắc hình
-        if (chkModalShowLines.checked) {
+        if (chkModalShowLines.checked && g) {
+          if (snapshotTab === 'profile') {
+            const drawGuide = (points, color, label) => {
+              if (!points || points.length < 2) return;
+              snapshotCtx.beginPath();
+              snapshotCtx.moveTo(points[0].x, points[0].y);
+              for (const point of points.slice(1)) snapshotCtx.lineTo(point.x, point.y);
+              snapshotCtx.strokeStyle = color;
+              snapshotCtx.lineWidth = Math.max(2, img.width / 500);
+              snapshotCtx.stroke();
+              snapshotCtx.fillStyle = color;
+              snapshotCtx.font = Math.max(12, img.width / 75) + "px sans-serif";
+              snapshotCtx.fillText(label, points[0].x + 8, points[0].y - 8);
+            };
+            drawGuide(g.eline, '#fbbf24', 'E-line: mũi – cằm');
+            drawGuide(g.nasolabial_rays, '#38bdf8', 'Góc mũi – môi');
+            drawGuide(g.jaw_profile_triangle, '#34d399', 'Đường hàm');
+          }
           // Trục giữa đối xứng
           if (g.midline && g.midline.length >= 2) {
             snapshotCtx.beginPath();
@@ -3557,11 +3735,12 @@
         }
 
         // Vẽ các điểm mốc ngũ quan
-        if (chkModalShowPoints.checked && latestLandmarks) {
+        const reportLandmarks = snapshotPoints;
+        if (chkModalShowPoints.checked && reportLandmarks) {
           snapshotCtx.fillStyle = '#06b6d4';
           const points = [1, 33, 133, 362, 263, 61, 291, 10, 152, 234, 454, 172, 397];
           for (const idx of points) {
-            const pt = latestLandmarks[idx];
+            const pt = reportLandmarks[idx];
             if (pt) {
               snapshotCtx.beginPath();
               snapshotCtx.arc(pt.x * img.width, pt.y * img.height, 3.5, 0, 2 * Math.PI);
@@ -3570,12 +3749,14 @@
           }
         }
       };
-      img.src = currentSnapshotImage;
+      img.src = snapshotUrl;
     }
 
     function switchModalView(tab) {
       if (!currentAnalysisReport) return;
+      if (tab === 'profile' && (!profileCaptureData || !currentAnalysisReport.profile)) return;
       currentModalActiveTab = tab;
+      document.getElementById('profileGuideLegend')?.classList.toggle('hidden', tab !== 'profile');
 
       if (tab === 'frontal') {
         btnTabModalFrontal.className = "px-3 py-1 rounded-lg bg-cyan-500 text-slate-950 font-bold text-[11px] transition";
@@ -3592,6 +3773,8 @@
       }
       drawReportCanvasOverlay();
     }
+
+    document.getElementById('btnCancelAutoCapture')?.addEventListener('click', cancelProfileAutoCapture);
 
     if (btnTabModalFrontal) {
       btnTabModalFrontal.addEventListener('click', () => switchModalView('frontal'));
@@ -3624,7 +3807,9 @@
     }
 
     // Gắn sự kiện các nút Chụp & Modal Báo Cáo
-    btnCaptureAnalyze.addEventListener('click', () => captureAndAnalyzeFace());
+    if (btnCaptureAnalyze && btnCaptureAnalyze !== btnCaptureCurrentStep) {
+      btnCaptureAnalyze.addEventListener('click', () => captureAndAnalyzeFace());
+    }
     inputUploadImage.addEventListener('change', handleImageUpload);
     btnCloseReportModal.addEventListener('click', closeAnalysisReport);
     btnFinishReport.addEventListener('click', closeAnalysisReport);

@@ -953,10 +953,7 @@ def run_multi_view_face_analysis(
             clean_b64 = profile_b64
         p_bytes = base64.b64decode(clean_b64)
         p_img = Image.open(io.BytesIO(p_bytes))
-        if actual_w <= 0:
-            actual_w = p_img.size[0]
-        if actual_h <= 0:
-            actual_h = p_img.size[1]
+        actual_w, actual_h = p_img.size
     except Exception:
         pass
 
