@@ -1,6 +1,5 @@
 # Thư viện tùy chọn chạy ứng dụng Desktop OpenCV (main_tracker.py)
-pillow>=10.0.0
-numpy>=1.24.0
+-r requirements.txt
 opencv-python>=4.8.0
 mediapipe>=0.10.0
 

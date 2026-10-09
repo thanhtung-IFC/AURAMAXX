@@ -1,8 +1,8 @@
 ﻿
 'use strict';
 const assert = require('node:assert/strict');
-const fs = require('node:fs'), vm = require('node:vm'), path = require('node:path');
-const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+const vm = require('node:vm');
+const html = require('./web_source.cjs')();
 function section(start,end) {
   const a=html.indexOf(start),b=html.indexOf(end,a+start.length);
   assert(a>=0&&b>a,start); return html.slice(a,b);

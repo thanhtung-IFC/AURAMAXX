@@ -1,12 +1,10 @@
 
 'use strict';
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
 const vm = require('node:vm');
-const path = require('node:path');
-const root = path.resolve(__dirname, '..');
-const html = fs.readFileSync(path.join(root, 'real_time_face_landmark_liveness_tracker.html'), 'utf8');
-assert.equal(html, fs.readFileSync(path.join(root, 'index.html'), 'utf8'));
+const loadWebSource = require('./web_source.cjs');
+const html = loadWebSource('real_time_face_landmark_liveness_tracker.html');
+assert.equal(html, loadWebSource('index.html'));
 for (const script of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)) {
   if (script[1].trim()) new vm.Script(script[1]);
 }

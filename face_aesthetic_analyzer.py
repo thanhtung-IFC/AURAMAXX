@@ -15,7 +15,7 @@ Tác giả: AURAMAXX Team
 import base64
 import io
 import math
-from typing import Dict, Any, List, Tuple, Optional
+from typing import Dict, Any, List, Optional
  
 import numpy as np
 from PIL import Image
@@ -570,7 +570,6 @@ def analyze_skin_condition(image_pil: Image.Image, points: List[FaceAnalyzerPoin
     roi_forehead = _crop_skin_roi(np_img, points[151], roi_radius)
 
     roi_under_eye_l = _crop_skin_roi(np_img, points[111], int(roi_radius * 0.75))
-    roi_under_eye_r = _crop_skin_roi(np_img, points[340], int(roi_radius * 0.75))
 
     valid_rois = [r for r in [roi_left_cheek, roi_right_cheek, roi_forehead] if r is not None and r.size > 0]
     if not valid_rois:
@@ -799,7 +798,6 @@ def analyze_profile_view(
     labrale_inf = points[17]     # Đáy viền môi dưới
     pogonion = points[152]       # Điểm nhô nhất của cằm (Đáy cằm)
     nasion = points[168]         # Gốc mũi giữa 2 mắt
-    glabella = points[9]         # Điểm giữa 2 chân mày
 
     # Xác định hướng quay mặt profile (Quay trái hay quay phải)
     dist_l = abs(points[234].px - points[1].px)
@@ -819,7 +817,6 @@ def analyze_profile_view(
     # Nếu môi nằm quá xa về phía trước đường E-line -> Cằm lẹm (Retrognathia) hoặc Môi hô (Bimaxillary protrusion).
     # Nếu cằm vượt qua đường thẳng đứng -> Cằm nhô/gãy (Prognathia).
     face_scale = dist_2d(nasion, pogonion) + 1e-6
-    norm_upper_lip = (eline_dist_upper / face_scale) * 100.0
     norm_lower_lip = (eline_dist_lower / face_scale) * 100.0
 
     if norm_lower_lip > 5.5:

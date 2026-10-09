@@ -278,7 +278,8 @@ class LivenessChallengeEngine:
 
 def analyze_frame_landmarks(landmarks_data: List[Dict[str, float]], 
                             registered_db: Optional[List[Dict[str, Any]]] = None,
-                            challenge_engine: Optional[LivenessChallengeEngine] = None) -> Dict[str, Any]:
+                            challenge_engine: Optional[LivenessChallengeEngine] = None,
+                            *, validated_points: Optional[List[LandmarkPoint]] = None) -> Dict[str, Any]:
     """
     Hàm phân tích tổng hợp một frame landmarks:
     - Chuyển đổi dữ liệu thô sang LandmarkPoint
@@ -292,7 +293,10 @@ def analyze_frame_landmarks(landmarks_data: List[Dict[str, float]],
             "message": "Không đủ điểm mốc landmarks hoặc không nhận diện được mặt"
         }
 
-    points = [LandmarkPoint(p.get("x", 0), p.get("y", 0), p.get("z", 0)) for p in landmarks_data]
+    # Backend can reuse points already constructed during input validation.
+    points = validated_points if validated_points is not None else [
+        LandmarkPoint(p.get("x", 0), p.get("y", 0), p.get("z", 0)) for p in landmarks_data
+    ]
 
     # 1. Tính toán sinh trắc học
     left_ear, right_ear, ear = calculate_ear(points)

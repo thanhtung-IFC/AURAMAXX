@@ -60,7 +60,6 @@ def main():
 
         # Lật gương khung hình
         frame = cv2.flip(frame, 1)
-        h, w, _ = frame.shape
 
         # Chuyển đổi BGR -> RGB cho MediaPipe
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)

@@ -74,3 +74,27 @@ python server.py
 
 Truy cập trên trình duyệt: `http://localhost:8000`
 
+## Cấu trúc mã nguồn
+
+- `index.html` và `real_time_face_landmark_liveness_tracker.html`: hai địa chỉ giao diện được giữ tương thích, cùng tải `assets/app.js` và `assets/app.css`. Khi sửa logic hoặc kiểu hiển thị, sửa các file trong `assets/`.
+- `server.py`: HTTP API và phục vụ giao diện.
+- `face_liveness_algorithms.py`: thuật toán đặc trưng khuôn mặt và liveness.
+- `face_aesthetic_analyzer.py`: phân tích ảnh chính diện và góc nghiêng.
+- `face_store.py`: lưu trữ SQLite; hướng dẫn sử dụng trong [DATABASE.md](DATABASE.md).
+- `sql_server_store.py`, `database_config.py`: lưu trữ SQL Server và chọn backend; hướng dẫn trong [DATABASE_SQLSERVER.md](DATABASE_SQLSERVER.md).
+- `manage_database.py`: tạo schema SQL Server, sao lưu và chuyển dữ liệu từ SQLite. `sql/inspect.sql` dùng để xem dữ liệu thật trong SSMS.
+- Hai file thuật toán mang tên tiếng Việt là đường dẫn import tương thích, dùng lại module chính để tránh tồn tại thuật toán cũ khác phiên bản.
+- `main_tracker.py`: ứng dụng desktop tùy chọn, độc lập với web; cài bằng `pip install -r requirements-desktop.txt`.
+
+Khi triển khai trang tĩnh, cần đưa cả thư mục `assets/` lên cùng các file HTML.
+
+Kiểm tra sau khi sửa code:
+
+```powershell
+.\.venv\Scripts\python.exe -B -m unittest discover -s tests -p 'test_*.py'
+.\.venv\Scripts\python.exe -B tests/check_profile_backend.py
+node tests/check_web.cjs
+node tests/check_profile_capture.cjs
+node tests/check_database_ui.cjs
+```
+
