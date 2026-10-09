@@ -179,20 +179,140 @@ def analyze_facial_symmetry(points: List[FaceAnalyzerPoint], img_w: int, img_h: 
 
 
 # =========================================================================
-# 2. TỶ LỆ KHUÔN MẶT & DÁNG MẶT (FACIAL PROPORTIONS - PHÂN TÍCH TRUNG THỰC)
+# 2. TỶ LỆ KHUÔN MẶT & DÁNG MẶT (FACIAL PROPORTIONS - CHUẨN NHÂN TRẮC HỌC)
 # =========================================================================
 
-def analyze_facial_proportions(points: List[FaceAnalyzerPoint], img_w: int, img_h: int) -> Dict[str, Any]:
+def estimate_true_trichion(
+    points: List[FaceAnalyzerPoint],
+    img_w: int,
+    img_h: int,
+    image_pil: Optional[Image.Image] = None
+) -> FaceAnalyzerPoint:
+    """
+    Xác định điểm chân tóc thực tế (Trichion) thay vì dùng thô điểm mốc số 10.
+    MediaPipe Face Mesh chỉ vẽ đến phần trên của xương trán (Landmark 10), cách chân mày một khoảng
+    chỉ bằng ~0.60 - 0.65 lần tầng giữa, khiến trán luôn bị nhận nhầm là thấp/ngắn dù thực tế trán cao.
+    
+    Thuật toán:
+    1. Thiết lập trục thẳng đứng khuôn mặt từ Chân mày (Landmark 9) qua đỉnh trán mesh (Landmark 10).
+    2. Nếu có ảnh pixel (PIL Image): Quét dọc trục từ mốc 10 ngược lên trên, phân tích gradient màu sắc
+       và độ sáng (luminance) so với vùng da trán (mốc 151, 10). Điểm có sự chuyển tiếp sắc tố rõ nét
+       (tóc/chân tóc) chính là Trichion thực tế.
+    3. Nếu không tìm thấy tóc rõ ràng hoặc không có ảnh: Áp dụng chuẩn nhân trắc học Farkas
+       (khoảng cách Glabella -> Trichion chuẩn xấp xỉ 1.50 - 1.55 lần Glabella -> Mốc 10).
+    4. Trả về FaceAnalyzerPoint đại diện cho đường chân tóc thực sự.
+    """
+    glabella = points[9]
+    pt10 = points[10]
+
+    # Vector hướng dọc trán từ 9 lên 10
+    dx = pt10.px - glabella.px
+    dy = pt10.py - glabella.py
+    dist_9_10 = math.hypot(dx, dy)
+    if dist_9_10 < 1.0:
+        dist_9_10 = 1.0
+
+    ux = dx / dist_9_10
+    uy = dy / dist_9_10
+
+    # Ước lượng khoảng cách tham chiếu tầng giữa & dưới
+    mid_h = dist_2d(points[9], points[2])
+    low_h = dist_2d(points[2], points[152])
+    ref_third = (mid_h + low_h) / 2.0 if (mid_h + low_h) > 0 else dist_9_10 * 1.5
+
+    # Khoảng cách mặc định theo chuẩn nhân trắc học
+    default_upper_h = max(dist_9_10 * 1.45, min(dist_9_10 * 1.85, ref_third * 0.98))
+    detected_upper_h = None
+
+    if image_pil is not None:
+        try:
+            img_rgb = image_pil.convert("RGB")
+            np_img = np.array(img_rgb)
+            im_h, im_w = np_img.shape[:2]
+
+            # Lấy mẫu màu da trán tại mốc 151 và 10
+            sample_pts = [points[151], points[10]]
+            skin_pixels = []
+            for sp in sample_pts:
+                cx, cy = int(sp.px), int(sp.py)
+                for oy in range(-2, 3):
+                    for ox in range(-2, 3):
+                        x_i, y_i = cx + ox, cy + oy
+                        if 0 <= x_i < im_w and 0 <= y_i < im_h:
+                            skin_pixels.append(np_img[y_i, x_i])
+            
+            if skin_pixels:
+                mean_skin = np.mean(skin_pixels, axis=0) # [R, G, B]
+                skin_lum = 0.299 * mean_skin[0] + 0.587 * mean_skin[1] + 0.114 * mean_skin[2]
+
+                # Quét từ mốc 10 ngược lên trên
+                min_step = int(dist_9_10 * 1.05)
+                max_step = int(min(dist_9_10 * 2.15, max(dist_9_10 * 1.35, ref_third * 1.35)))
+
+                consecutive_hair_count = 0
+                hair_hit_t = None
+
+                for t in range(min_step, max_step, 2):
+                    cur_px = int(round(glabella.px + ux * t))
+                    cur_py = int(round(glabella.py + uy * t))
+
+                    if not (0 <= cur_px < im_w and 0 <= cur_py < im_h):
+                        break
+
+                    pixel = np_img[cur_py, cur_px]
+                    p_lum = 0.299 * pixel[0] + 0.587 * pixel[1] + 0.114 * pixel[2]
+                    color_diff = math.sqrt(
+                        (float(pixel[0]) - mean_skin[0]) ** 2 +
+                        (float(pixel[1]) - mean_skin[1]) ** 2 +
+                        (float(pixel[2]) - mean_skin[2]) ** 2
+                    )
+
+                    # Tóc thường tối màu hơn da trán (lum drop > 20) hoặc đổi màu rõ nét (color diff > 40)
+                    is_hair = (skin_lum - p_lum > 20.0) or (color_diff > 40.0)
+                    if is_hair:
+                        consecutive_hair_count += 1
+                        if consecutive_hair_count >= 2:
+                            hair_hit_t = t - 2
+                            break
+                    else:
+                        consecutive_hair_count = 0
+
+                if hair_hit_t is not None:
+                    detected_upper_h = float(hair_hit_t)
+                elif consecutive_hair_count == 0 and (max_step > dist_9_10 * 1.5):
+                    # Da trán tiếp tục kéo dài lên cao mà chưa gặp tóc -> Người có trán cao/dô
+                    detected_upper_h = float(max_step * 0.95)
+        except Exception:
+            detected_upper_h = None
+
+    final_upper_h = detected_upper_h if detected_upper_h is not None else default_upper_h
+    # Giới hạn an toàn nhân trắc học: trán không thể nhỏ hơn mốc 10 và không thể vượt quá 2.2 lần mốc 10
+    final_upper_h = max(dist_9_10 * 1.15, min(dist_9_10 * 2.15, final_upper_h))
+
+    trichion_px = glabella.px + ux * final_upper_h
+    trichion_py = glabella.py + uy * final_upper_h
+    trichion_x = trichion_px / max(1.0, float(img_w))
+    trichion_y = trichion_py / max(1.0, float(img_h))
+
+    return FaceAnalyzerPoint(trichion_x, trichion_y, 0.0, img_w, img_h)
+
+
+def analyze_facial_proportions(
+    points: List[FaceAnalyzerPoint],
+    img_w: int,
+    img_h: int,
+    image_pil: Optional[Image.Image] = None
+) -> Dict[str, Any]:
     """
     Quy tắc 3 phần (Rule of Thirds), Tỷ lệ vàng (fWHR) và dáng mặt.
-    Đánh giá thẳng thắn về trán dô/ngắn, cằm lẹm/dài, khuôn mặt bạnh/gầy.
+    Đo lường chính xác từ đường chân tóc thực tế (Trichion) xuống chân mày, chân mũi và đáy cằm.
     """
-    forehead_top = points[10]       # Chân tóc / đỉnh trán
+    trichion = estimate_true_trichion(points, img_w, img_h, image_pil)
     glabella = points[9]            # Chân mày
     subnasale = points[2]           # Chân mũi
     chin_bot = points[152]          # Đáy cằm
 
-    upper_h = dist_2d(forehead_top, glabella)
+    upper_h = dist_2d(trichion, glabella)
     middle_h = dist_2d(glabella, subnasale)
     lower_h = dist_2d(subnasale, chin_bot)
     total_h = upper_h + middle_h + lower_h + 1e-6
@@ -201,21 +321,21 @@ def analyze_facial_proportions(points: List[FaceAnalyzerPoint], img_w: int, img_
     middle_pct = round((middle_h / total_h) * 100.0, 1)
     lower_pct = round((lower_h / total_h) * 100.0, 1)
 
-    # Đánh giá thẳng thắn từng tầng mặt
+    # Đánh giá thẳng thắn từng tầng mặt theo chuẩn nhân trắc học
     thirds_analysis = []
-    if upper_pct > 36.5:
-        thirds_analysis.append(f"Tầng trên (Trán) chiếm {upper_pct}% (hơi cao/dài so với chuẩn 33.3%, trán dô hoặc đường chân tóc cao)")
-    elif upper_pct < 29.5:
+    if upper_pct > 36.0:
+        thirds_analysis.append(f"Tầng trên (Trán) chiếm {upper_pct}% (trán cao/dài so với chuẩn 33.3%, trán dô hoặc đường chân tóc cao)")
+    elif upper_pct < 29.0:
         thirds_analysis.append(f"Tầng trên (Trán) chỉ chiếm {upper_pct}% (trán ngắn/hẹp, tạo cảm giác mặt thấp)")
 
-    if middle_pct > 37.0:
+    if middle_pct > 36.5:
         thirds_analysis.append(f"Tầng giữa (Mũi) dài ({middle_pct}%), sống mũi dài")
     elif middle_pct < 29.5:
         thirds_analysis.append(f"Tầng giữa ngắn ({middle_pct}%), trục giữa khuôn mặt bị nén")
 
-    if lower_pct > 36.5:
+    if lower_pct > 36.0:
         thirds_analysis.append(f"Tầng dưới (Cằm) dài ({lower_pct}%), cằm phát triển dài hoặc nhô")
-    elif lower_pct < 29.5:
+    elif lower_pct < 29.0:
         thirds_analysis.append(f"Tầng dưới (Cằm) ngắn ({lower_pct}%), cằm hơi lẹm hoặc khoảng cách mũi-cằm hẹp")
 
     if not thirds_analysis:
@@ -226,7 +346,7 @@ def analyze_facial_proportions(points: List[FaceAnalyzerPoint], img_w: int, img_
     thirds_harmony = round(max(40.0, min(98.0, 100.0 - dev_3rds * 3.8)), 1)
 
     # Chiều dài và chiều rộng khuôn mặt (fWHR)
-    face_length = dist_2d(forehead_top, chin_bot)
+    face_length = dist_2d(trichion, chin_bot)
     cheekbone_width = dist_2d(points[234], points[454]) + 1e-6
     ratio_hw = round(face_length / cheekbone_width, 2)
     golden_diff = round(abs(ratio_hw - 1.618), 2)
@@ -261,6 +381,12 @@ def analyze_facial_proportions(points: List[FaceAnalyzerPoint], img_w: int, img_
     return {
         "face_shape": face_shape,
         "face_shape_description": shape_desc,
+        "trichion": {
+            "x": round(trichion.x, 4),
+            "y": round(trichion.y, 4),
+            "px": round(trichion.px, 1),
+            "py": round(trichion.py, 1)
+        },
         "rule_of_thirds": {
             "upper_third_pct": upper_pct,
             "middle_third_pct": middle_pct,
@@ -538,20 +664,34 @@ def analyze_skin_condition(image_pil: Image.Image, points: List[FaceAnalyzerPoin
 # 6. KIỂU TÓC & LỜI KHUYÊN KHẮC PHỤC KHUYẾT ĐIỂM THỰC TẾ
 # =========================================================================
 
-def analyze_hair_and_hairline(image_pil: Image.Image, points: List[FaceAnalyzerPoint], face_shape: str) -> Dict[str, Any]:
+def analyze_hair_and_hairline(
+    image_pil: Image.Image,
+    points: List[FaceAnalyzerPoint],
+    face_shape: str,
+    trichion_data: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
     """
     Phân tích chân tóc và đưa ra lời khuyên tạo mẫu tóc để KHẮC PHỤC KHUYẾT ĐIỂM THỰC TẾ.
+    Sử dụng đường chân tóc thực tế (Trichion) để đánh giá chuẩn xác trán cao / trán dô.
     """
     img_rgb = image_pil.convert("RGB")
     np_img = np.array(img_rgb)
     h, w = np_img.shape[:2]
 
-    forehead_top = points[10]
+    glabella = points[9]
+    chin = points[152]
     temple_l = points[103]
     temple_r = points[332]
 
-    crop_y2 = int(forehead_top.py)
-    crop_y1 = max(0, int(crop_y2 - (points[152].py - forehead_top.py) * 0.35))
+    if trichion_data and "px" in trichion_data and "py" in trichion_data:
+        forehead_top = FaceAnalyzerPoint(trichion_data.get("x", 0), trichion_data.get("y", 0), 0.0, w, h)
+        forehead_top.px = trichion_data["px"]
+        forehead_top.py = trichion_data["py"]
+    else:
+        forehead_top = points[10]
+
+    crop_y2 = int(max(0, min(h - 1, forehead_top.py)))
+    crop_y1 = max(0, int(crop_y2 - (chin.py - forehead_top.py) * 0.35))
     crop_x1 = max(0, int(temple_l.px - 20))
     crop_x2 = min(w, int(temple_r.px + 20))
 
@@ -575,13 +715,19 @@ def analyze_hair_and_hairline(image_pil: Image.Image, points: List[FaceAnalyzerP
             else:
                 dominant_color = "Nâu Đen"
 
-    forehead_height_ratio = forehead_top.py / max(1.0, points[152].py)
-    if forehead_height_ratio > 0.33:
+    # Đánh giá chiều cao trán chuẩn nhân trắc học
+    forehead_height = dist_2d(forehead_top, glabella)
+    total_face_height = dist_2d(forehead_top, chin) + 1e-6
+    forehead_ratio = forehead_height / total_face_height
+
+    if forehead_ratio > 0.36:
         hairline_type = "Đường Chân Tóc Cao / Trán Dô"
+    elif forehead_ratio < 0.28:
+        hairline_type = "Đường Chân Tóc Thấp / Trán Ngắn"
     elif abs(temple_l.py - forehead_top.py) > 22.0:
         hairline_type = "Chân Tóc Chữ M (Widow's Peak / Có dấu hiệu lùi trán 2 bên)"
     else:
-        hairline_type = "Đường Chân Tóc Tròn Tiêu Chuẩn"
+        hairline_type = "Đường Chân Tóc Tiêu Chuẩn Cân Đối"
 
     # Lời khuyên tập trung sửa khuyết điểm chân thực
     recommendations_map = {
@@ -920,11 +1066,11 @@ def run_comprehensive_face_analysis(
 
     # Phân tích từng chuyên mục theo chuẩn nghiêm ngặt
     symmetry = analyze_facial_symmetry(points, actual_w, actual_h)
-    proportions = analyze_facial_proportions(points, actual_w, actual_h)
+    proportions = analyze_facial_proportions(points, actual_w, actual_h, pil_img)
     nose = analyze_nose_proportions(points, actual_w, actual_h)
     jawline = analyze_jawline_and_chin(points, actual_w, actual_h)
     skin = analyze_skin_condition(pil_img, points)
-    hair = analyze_hair_and_hairline(pil_img, points, proportions["face_shape"])
+    hair = analyze_hair_and_hairline(pil_img, points, proportions["face_shape"], proportions.get("trichion"))
 
     # Điểm hài hòa tổng thể thực tế (Không tâng bốc ảo):
     # Đối xứng (25%), Tỷ lệ 3 tầng (25%), Mũi (18%), Viền hàm (17%), Da (15%)
@@ -955,7 +1101,7 @@ def run_comprehensive_face_analysis(
             {"x": symmetry["midline_axis"]["bottom"]["x"], "y": symmetry["midline_axis"]["bottom"]["y"]}
         ],
         "thirds_lines": [
-            {"name": "Trán", "y": round(points[10].py, 1)},
+            {"name": "Trán", "y": round(proportions.get("trichion", {}).get("py", points[10].py), 1)},
             {"name": "Chân mày", "y": round(points[9].py, 1)},
             {"name": "Chân mũi", "y": round(points[2].py, 1)},
             {"name": "Đáy cằm", "y": round(points[152].py, 1)}

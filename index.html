@@ -199,10 +199,14 @@
       <div class="p-3.5 bg-surface-800/90 border border-surface-700 rounded-2xl shadow-lg flex flex-col gap-3">
         <!-- Hướng dẫn bước chụp hiện tại -->
         <div class="flex flex-wrap items-center justify-between gap-2 border-b border-surface-700/80 pb-2.5">
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 flex-wrap">
             <span id="badgeCaptureStep" class="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold bg-cyan-950 text-cyan-300 border border-cyan-700 flex items-center gap-1.5">
               <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
               <span>BƯỚC 1/2: MẶT CHÍNH DIỆN</span>
+            </span>
+            <span id="badgeCameraSync" class="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-medium bg-emerald-950/80 text-emerald-300 border border-emerald-700/80 flex items-center gap-1.5" title="Đảm bảo cả 2 ảnh được chụp từ cùng 1 thiết bị camera để đồng bộ tỉ lệ và tiêu cự">
+              <i class="fa-solid fa-link text-[9px] text-emerald-400"></i>
+              <span id="lblActiveCamSync">Đồng bộ 1 Cam: Đang chuẩn bị</span>
             </span>
             <span id="txtCaptureStepDesc" class="text-xs text-slate-300 font-medium">
               Nhìn thẳng vào camera (Góc quay Yaw ~ 0°)
@@ -1219,6 +1223,11 @@
     let profileCaptureData = null; // { image: b64, landmarks: [...] }
     let isAnalyzingSnapshot = false;
 
+    // Quản lý đồng bộ phần cứng Camera (Đảm bảo 2 lần chụp dùng chung 1 camera)
+    let activeCameraDeviceId = null;
+    let activeCameraLabel = '';
+    const CAMERA_STORAGE_KEY = 'visionface_preferred_cam_v1';
+
     // Biến trạng thái toàn cục
     let isCameraActive = false;
     let cameraInstance = null;
@@ -1274,11 +1283,25 @@
       }
     }
 
+    function updateCameraSyncUI() {
+      const lblActiveCamSync = document.getElementById('lblActiveCamSync');
+      if (!lblActiveCamSync) return;
+      if (!isCameraActive) {
+        lblActiveCamSync.innerText = 'Đồng bộ 1 Cam: Chờ bật camera';
+        return;
+      }
+      let cleanName = activeCameraLabel || (cameraSelect.options[cameraSelect.selectedIndex]?.text || 'Webcam');
+      cleanName = cleanName.replace(/📷\s*\[USB Cam Ngoài\]\s*|💻\s*\[Cam Tích Hợp\]\s*/g, '').trim();
+      if (cleanName.length > 22) cleanName = cleanName.substring(0, 19) + '...';
+      lblActiveCamSync.innerText = `Đồng bộ 1 Cam: ${cleanName}`;
+    }
+
     async function enumerateVideoDevices() {
       try {
         const devices = await navigator.mediaDevices.enumerateDevices();
         const videoDevices = devices.filter(d => d.kind === 'videoinput');
-        const prevSelected = cameraSelect.value;
+        const savedCamId = localStorage.getItem(CAMERA_STORAGE_KEY);
+        const prevSelected = cameraSelect.value || savedCamId;
 
         cameraSelect.innerHTML = '';
 
@@ -1287,10 +1310,13 @@
           opt.value = '';
           opt.text = 'Không tìm thấy camera nào';
           cameraSelect.appendChild(opt);
+          updateCameraSyncUI();
           return;
         }
 
         let firstUsbId = null;
+        let matchedSaved = false;
+
         videoDevices.forEach((device, idx) => {
           const opt = document.createElement('option');
           opt.value = device.deviceId;
@@ -1306,14 +1332,17 @@
 
           if (device.deviceId === prevSelected) {
             opt.selected = true;
+            matchedSaved = true;
           }
           cameraSelect.appendChild(opt);
         });
 
         // Nếu người dùng chưa chọn thiết bị và phát hiện camera rời USB, ưu tiên chọn camera rời USB
-        if (!prevSelected && firstUsbId) {
+        if (!matchedSaved && firstUsbId) {
           cameraSelect.value = firstUsbId;
         }
+
+        updateCameraSyncUI();
 
       } catch (err) {
         console.warn("Chưa có quyền liệt kê camera chi tiết:", err);
@@ -1440,6 +1469,11 @@
           const actualFps = settings.frameRate ? `${Math.round(settings.frameRate)}fps` : '30fps';
           lblActualRes.innerText = `${actualW}x${actualH} (${actualFps})`;
           lblActualRes.title = `${prefix} ${devLabel}`;
+
+          // Lưu định danh phần cứng camera đang hoạt động để đồng bộ cho cả 2 ảnh
+          activeCameraDeviceId = settings.deviceId || deviceId || cameraSelect.value || 'default';
+          activeCameraLabel = `${prefix} ${devLabel}`;
+          try { localStorage.setItem(CAMERA_STORAGE_KEY, activeCameraDeviceId); } catch(e) {}
         }
 
         // Khởi chạy camera pipeline MediaPipe
@@ -1459,6 +1493,7 @@
         await cameraInstance.start();
 
         isCameraActive = true;
+        updateCameraSyncUI();
         overlayStandby.classList.add('hidden');
         btnCamIcon.className = "fa-solid fa-stop";
         btnCamText.innerText = "Dừng Camera";
@@ -1490,6 +1525,7 @@
       videoElement.srcObject = null;
 
       isCameraActive = false;
+      updateCameraSyncUI();
       overlayStandby.classList.remove('hidden');
       standbyTitle.innerText = "Camera Đang Tắt";
       standbyDesc.innerText = "Chọn nguồn camera và bấm Khởi Động để tiếp tục.";
@@ -2218,6 +2254,22 @@
     btnQuickStart.addEventListener('click', startCameraStream);
 
     cameraSelect.addEventListener('change', async () => {
+      // Bảo vệ tính đồng bộ: Nếu đã chụp ảnh Bước 1 mà đổi camera, phải chụp lại từ đầu bằng camera mới
+      if (frontalCaptureData) {
+        const confirmChange = confirm(
+          "Bạn đang chuyển sang thiết bị camera khác!\n\n" +
+          "Để đảm bảo tính đồng bộ tuyệt đối về tỉ lệ, tiêu cự và góc quang học, quy trình chụp 2 lần yêu cầu sử dụng cùng 1 camera.\n\n" +
+          "Ảnh Bước 1 sẽ được làm mới để bạn chụp lại từ đầu bằng camera mới này.\n" +
+          "Bạn có đồng ý tiếp tục?"
+        );
+        if (!confirmChange) {
+          if (activeCameraDeviceId) cameraSelect.value = activeCameraDeviceId;
+          return;
+        }
+        resetTwoShotCapture();
+        showToast("Đã làm mới quy trình. Hãy chụp Bước 1 bằng camera mới!", "info");
+      }
+
       if (isCameraActive) {
         stopCameraStream();
         // Độ trễ giải phóng tài nguyên phần cứng cho USB DirectShow / UVC
@@ -2420,18 +2472,48 @@
         return;
       }
 
+      // Kiểm tra đồng bộ thiết bị: Bước 2 bắt buộc dùng đúng camera đã chụp ở Bước 1
+      if (captureStep === 2 && frontalCaptureData && frontalCaptureData.deviceId) {
+        if (frontalCaptureData.deviceId !== activeCameraDeviceId) {
+          const proceed = confirm(
+            "⚠️ Cảnh báo thiết bị không đồng bộ!\n\n" +
+            "Ảnh góc nghiêng đang dùng camera khác với ảnh chính diện.\n" +
+            "Để kết quả thẩm mỹ chính xác, hệ thống yêu cầu 2 lần chụp phải từ CÙNG 1 CAMERA.\n\n" +
+            "Bấm OK để chụp lại từ Bước 1 bằng camera hiện tại, hoặc Cancel để chọn lại đúng camera cũ."
+          );
+          if (proceed) {
+            retakeStepShot(1);
+          }
+          return;
+        }
+      }
+
       triggerShutterFlash();
 
-      const snapshotDataUrl = canvasElement.toDataURL('image/jpeg', 0.95);
+      // Chụp ảnh sạch từ videoElement với độ phân giải cảm biến gốc của camera
+      const snapCanvas = document.createElement('canvas');
+      const snapW = videoElement.videoWidth || canvasElement.width || 640;
+      const snapH = videoElement.videoHeight || canvasElement.height || 480;
+      snapCanvas.width = snapW;
+      snapCanvas.height = snapH;
+      const snapCtx = snapCanvas.getContext('2d');
+      if (isMirrored) {
+        snapCtx.translate(snapW, 0);
+        snapCtx.scale(-1, 1);
+      }
+      snapCtx.drawImage(videoElement, 0, 0, snapW, snapH);
+      const snapshotDataUrl = snapCanvas.toDataURL('image/jpeg', 0.95);
       const rawPoints = latestLandmarks.map(pt => ({ x: pt.x, y: pt.y, z: pt.z || 0 }));
 
       if (captureStep === 1) {
-        // Lưu ảnh mặt chính diện
+        // Lưu ảnh mặt chính diện kèm định danh camera
         frontalCaptureData = {
           image: snapshotDataUrl,
           landmarks: rawPoints,
-          width: canvasElement.width,
-          height: canvasElement.height
+          width: snapW,
+          height: snapH,
+          deviceId: activeCameraDeviceId,
+          cameraLabel: activeCameraLabel
         };
 
         // Cập nhật Thumbnail Frontal
@@ -2450,12 +2532,14 @@
         updateCaptureStepUI();
 
       } else {
-        // Lưu ảnh góc nghiêng
+        // Lưu ảnh góc nghiêng kèm định danh camera
         profileCaptureData = {
           image: snapshotDataUrl,
           landmarks: rawPoints,
-          width: canvasElement.width,
-          height: canvasElement.height
+          width: snapW,
+          height: snapH,
+          deviceId: activeCameraDeviceId,
+          cameraLabel: activeCameraLabel
         };
 
         // Cập nhật Thumbnail Profile
@@ -2465,7 +2549,7 @@
         btnRetakeProfile.classList.remove('hidden');
         checkProfileDone.classList.remove('hidden');
 
-        showToast("✓ Đã chụp ảnh Góc Nghiêng thành công! Đã đủ 2 góc chụp.", "success");
+        showToast("✓ Đã chụp ảnh Góc Nghiêng thành công (Đồng bộ cùng 1 camera)!", "success");
         updateCaptureStepUI();
 
         // Tự động mở phân tích đa chiều
@@ -2801,7 +2885,42 @@
         return Math.acos(Math.max(-1, Math.min(1, dot / mag))) * (180 / Math.PI);
       }
 
-      const forehead = points[10];
+      // Xác định chân tóc Trichion thực tế thay vì lấy thô mốc xương trán số 10
+      function estimateTrueTrichion(pts, w, h) {
+        const gPt = pts[9];
+        const p10 = pts[10];
+        const sPt = pts[2];
+        const cPt = pts[152];
+
+        const gx = gPt.x * w, gy = gPt.y * h;
+        const p10x = p10.x * w, p10y = p10.y * h;
+        const dx = p10x - gx;
+        const dy = p10y - gy;
+        let dist910 = Math.hypot(dx, dy);
+        if (dist910 < 1.0) dist910 = 1.0;
+        const ux = dx / dist910;
+        const uy = dy / dist910;
+
+        const midH = Math.hypot((sPt.x - gPt.x) * w, (sPt.y - gPt.y) * h);
+        const lowH = Math.hypot((cPt.x - sPt.x) * w, (cPt.y - sPt.y) * h);
+        const refThird = (midH + lowH) / 2.0;
+
+        // Chuẩn nhân trắc học Farkas: Tầng trán chuẩn = 1.50 - 1.55 lần dist(9, 10)
+        let upperH = Math.max(dist910 * 1.48, Math.min(dist910 * 1.85, refThird * 0.98));
+        upperH = Math.max(dist910 * 1.15, Math.min(dist910 * 2.15, upperH));
+
+        const trichionPx = gx + ux * upperH;
+        const trichionPy = gy + uy * upperH;
+        return {
+          x: trichionPx / w,
+          y: trichionPy / h,
+          px: trichionPx,
+          py: trichionPy
+        };
+      }
+
+      const trichion = estimateTrueTrichion(points, imgW, imgH);
+      const forehead = trichion; // Khắc phục triệt để lỗi trán bị đánh giá thấp do mốc 10
       const glabella = points[9];
       const subnasale = points[2];
       const chin = points[152];
@@ -2973,18 +3092,18 @@
           skin_health_evaluation: skinAlerts
         },
         hair: {
-          hairline_type: upperPct > 36.5 ? "Đường Chân Tóc Cao / Trán Dô" : "Tròn Đều Tự Nhiên",
-          hairline_comment: upperPct > 36.5 ? "Vầng trán rộng, đường chân tóc lùi nhẹ ra sau." : "Đường chân tóc tự nhiên, cân đối.",
+          hairline_type: upperPct > 36.5 ? "Đường Chân Tóc Cao / Trán Dô" : upperPct < 29.5 ? "Đường Chân Tóc Thấp" : "Tròn Đều Tự Nhiên",
+          hairline_comment: upperPct > 36.5 ? "Vầng trán rộng, đường chân tóc cao tạo nét sáng sủa, thông tuệ." : upperPct < 29.5 ? "Đường chân tóc thấp, vầng trán hẹp." : "Đường chân tóc tự nhiên, cân đối theo tỷ lệ 3 tầng mặt.",
           dominant_hair_color: "Đen Tự Nhiên",
           hair_recommendations: hairAdvice
         },
         visual_guides: {
           midline: [{ x: forehead.x * imgW, y: forehead.y * imgH }, { x: chin.x * imgW, y: chin.y * imgH }],
           thirds_lines: [
-            { name: "Trán", y: Math.round(forehead.y * imgH) },
-            { name: "Chân mày", y: Math.round(glabella.y * imgH) },
-            { name: "Chân mũi", y: Math.round(subnasale.y * imgH) },
-            { name: "Đáy cằm", y: Math.round(chin.y * imgH) }
+            { name: "Chân tóc (Trichion)", y: Math.round(forehead.y * imgH) },
+            { name: "Chân mày (Glabella)", y: Math.round(glabella.y * imgH) },
+            { name: "Chân mũi (Subnasale)", y: Math.round(subnasale.y * imgH) },
+            { name: "Đáy cằm (Menton)", y: Math.round(chin.y * imgH) }
           ],
           jawline_polygon: [
             { x: points[172].x * imgW, y: points[172].y * imgH },
