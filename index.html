@@ -135,8 +135,8 @@
 
       <!-- Khung Viewport Video & Canvas Overlay -->
       <div class="relative w-full aspect-[4/3] bg-black rounded-2xl overflow-hidden border border-surface-700 hud-glow group">
-        <!-- Luồng Video ngầm -->
-        <video id="webcamVideo" playsinline muted autoplay class="hidden"></video>
+        <!-- Luồng Video ngầm (giữ trong render tree để bảo đảm hardware decoding không bị throttle) -->
+        <video id="webcamVideo" playsinline muted autoplay style="position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; z-index: -10;"></video>
 
         <!-- Canvas hiển thị chính (Được flip lật gương bằng class CSS nếu bật) -->
         <canvas id="outputCanvas" class="w-full h-full object-cover transition-transform duration-200"></canvas>
@@ -1285,6 +1285,14 @@
 
         faceMesh.onResults(handleMeshResults);
 
+        try {
+          if (typeof faceMesh.initialize === 'function') {
+            await faceMesh.initialize();
+          }
+        } catch (initErr) {
+          console.warn("FaceMesh pre-initialize:", initErr);
+        }
+
         aiIndicator.className = "w-2.5 h-2.5 rounded-full bg-emerald-400";
         aiStatusText.innerText = "Mô hình AI Sẵn sàng";
         showToast("Mô hình FaceMesh đã tải thành công!", "success");
@@ -1316,7 +1324,7 @@
         lblCamHardwareType.innerText = '💻 Chưa có camera';
         return;
       }
-      const isUsb = /usb|cam rời|cam ngoài|webcam/i.test(curOpt.text);
+      const isUsb = /\[USB Cam Rời\]/i.test(curOpt.text);
       lblCamHardwareType.innerHTML = isUsb 
         ? '<i class="fa-solid fa-usb text-emerald-400"></i> Đang chọn: USB Cam Rời' 
         : '<i class="fa-solid fa-laptop text-cyan-400"></i> Đang chọn: Cam Laptop';
@@ -1334,8 +1342,9 @@
           const newDevices = videoDevices.filter(d => !knownCameraDeviceIds.has(d.deviceId));
           newDevices.forEach(nd => {
             const label = nd.label || 'Webcam USB';
-            const isUsb = /usb|external|uvc|webcam/i.test(label);
-            showToast(`🎉 Phát hiện thiết bị mới: ${isUsb ? '[USB Cam Rời]' : '[Camera]'} ${label}!`, "success");
+            const isInternal = /integrated|internal|built-in|true\s*vision|wide\s*vision|facetime|in-built|front camera|front\s*facing/i.test(label.toLowerCase());
+            const isUsb = !isInternal && (/\busb\b|external|uvc|webcam/i.test(label.toLowerCase()));
+            showToast(`🎉 Phát hiện thiết bị mới: ${isUsb ? '[USB Cam Rời]' : '[Camera Laptop]'} ${label}!`, "success");
             // Nếu camera đang tắt, ưu tiên chọn ngay camera mới vừa cắm
             if (!isCameraActive) {
               cameraSelect.value = nd.deviceId;
@@ -1363,8 +1372,13 @@
           const opt = document.createElement('option');
           opt.value = device.deviceId;
           const devLabel = (device.label || '').toLowerCase();
-          // Nhận diện chuẩn xác camera USB/ngoài vs camera laptop tích hợp
-          const isUsbExternal = /usb|external|uvc|webcam|c920|c922|c930|brio|droidcam|iriun|obs|cam|video/i.test(devLabel);
+          
+          // Phân loại chính xác tuyệt đối:
+          // 1. Nhận diện các dòng camera tích hợp trong máy laptop (HP True Vision, Lenovo EasyCamera, Integrated, v.v.)
+          const isInternal = /integrated|internal|built-in|true\s*vision|wide\s*vision|facetime|in-built|front camera|front\s*facing/i.test(devLabel);
+          // 2. Chỉ nhận diện là USB ngoài khi KHÔNG PHẢI camera tích hợp và có từ khóa USB/Webcam ngoại vi
+          const isUsbExternal = !isInternal && (/\busb\b|external|uvc|webcam|c920|c922|c930|brio|streamcam|kiyo|droidcam|iriun|obs/i.test(devLabel));
+
           const cleanLabel = device.label || `Thiết bị Camera ${idx + 1}`;
           opt.text = isUsbExternal ? `📷 [USB Cam Rời] ${cleanLabel}` : `💻 [Cam Laptop] ${cleanLabel}`;
 
@@ -1410,7 +1424,7 @@
       }
     }
 
-    // Vòng lặp xử lý video frame chuẩn xác và tiết kiệm phần cứng (không gọi getUserMedia lần 2)
+    // Vòng lặp xử lý video frame chuẩn xác & hiển thị video trực tiếp độc lập với AI
     function startFrameProcessingLoop() {
       cancelVideoFrameLoop();
 
@@ -1418,44 +1432,47 @@
         if (!isCameraActive) return;
 
         if (videoElement.readyState >= 2 && !videoElement.paused && !videoElement.ended) {
-          if (!isProcessingFrame && faceMesh) {
+          const w = canvasElement.width;
+          const h = canvasElement.height;
+
+          // 1. Nếu FaceMesh đã sẵn sàng, gửi video frame cho AI nhận diện
+          if (faceMesh && !isProcessingFrame) {
             isProcessingFrame = true;
             const startStamp = performance.now();
             try {
               await faceMesh.send({ image: videoElement });
+              const latency = Math.round(performance.now() - startStamp);
+              lblLatency.innerText = `${latency}ms`;
             } catch (err) {
               console.warn("FaceMesh send frame error:", err);
             } finally {
               isProcessingFrame = false;
             }
-            const latency = Math.round(performance.now() - startStamp);
-            lblLatency.innerText = `${latency}ms`;
+          } else if (!faceMesh) {
+            // 2. Khi FaceMesh đang nạp CDN hoặc chưa sẵn sàng: VẪN VẼ VIDEO TRỰC TIẾP LÊN CANVAS
+            // Đảm bảo người dùng THẤY HÌNH ẢNH CAMERA NGAY LẬP TỨC, không bao giờ bị màn hình đen
+            updateFpsCounter();
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, w, h);
+            canvasCtx.drawImage(videoElement, 0, 0, w, h);
+            if (chkShowGuideLines && chkShowGuideLines.checked) {
+              drawOvalAlignmentGuide(w, h, null);
+            }
+            canvasCtx.restore();
           }
         }
 
         if (isCameraActive) {
-          if ('requestVideoFrameCallback' in videoElement) {
-            frameCallbackId = videoElement.requestVideoFrameCallback(onCameraFrame);
-          } else {
-            frameCallbackId = requestAnimationFrame(onCameraFrame);
-          }
+          frameCallbackId = requestAnimationFrame(onCameraFrame);
         }
       }
 
-      if ('requestVideoFrameCallback' in videoElement) {
-        frameCallbackId = videoElement.requestVideoFrameCallback(onCameraFrame);
-      } else {
-        frameCallbackId = requestAnimationFrame(onCameraFrame);
-      }
+      frameCallbackId = requestAnimationFrame(onCameraFrame);
     }
 
     function cancelVideoFrameLoop() {
       if (frameCallbackId !== null) {
-        if ('cancelVideoFrameCallback' in videoElement) {
-          try { videoElement.cancelVideoFrameCallback(frameCallbackId); } catch(e) {}
-        } else {
-          try { cancelAnimationFrame(frameCallbackId); } catch(e) {}
-        }
+        cancelAnimationFrame(frameCallbackId);
         frameCallbackId = null;
       }
       isProcessingFrame = false;
@@ -1552,6 +1569,7 @@
         currentStream = stream;
         videoElement.srcObject = currentStream;
         await videoElement.play();
+        syncCanvasResolution();
 
         // Cập nhật lại danh sách camera chi tiết sau khi đã được cấp quyền truy cập
         await enumerateVideoDevices();
@@ -1568,7 +1586,8 @@
             actualH = settings.height;
           }
           const devLabel = videoTrack.label || 'Webcam';
-          const isUsb = /usb|external|uvc|webcam|c920|c922|brio/i.test(devLabel);
+          const isInternal = /integrated|internal|built-in|true\s*vision|wide\s*vision|facetime|in-built|front camera|front\s*facing/i.test(devLabel);
+          const isUsb = !isInternal && (/\busb\b|external|uvc|webcam|c920|c922|c930|brio|streamcam|kiyo/i.test(devLabel));
           const prefix = isUsb ? '[USB Cam Rời]' : '[Cam Laptop]';
           const actualFps = settings.frameRate ? `${Math.round(settings.frameRate)}fps` : '30fps';
           lblActualRes.innerText = `${actualW}x${actualH} (${actualFps})`;
@@ -1754,7 +1773,7 @@
       // Xóa và vẽ lại khung hình video gốc
       canvasCtx.save();
       canvasCtx.clearRect(0, 0, w, h);
-      canvasCtx.drawImage(results.image, 0, 0, w, h);
+      canvasCtx.drawImage(results.image || videoElement, 0, 0, w, h);
 
       if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
         const landmarks = results.multiFaceLandmarks[0];
@@ -1972,7 +1991,13 @@
 
     async function checkPythonBackendStatus() {
       try {
-        const resp = await fetch(`${PYTHON_BACKEND_URL}/api/status`, { method: 'GET' });
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 1200);
+        const resp = await fetch(`${PYTHON_BACKEND_URL}/api/status`, { 
+          method: 'GET',
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
         if (resp.ok) {
           const info = await resp.json();
           isPythonBackendAvailable = true;
@@ -1986,7 +2011,7 @@
           return true;
         }
       } catch (e) {
-        // Python server chưa bật
+        // Python server chưa bật hoặc quá hạn 1200ms
       }
       isPythonBackendAvailable = false;
       backendIndicator.className = "w-2.5 h-2.5 rounded-full bg-slate-500";
@@ -2009,14 +2034,19 @@
           rawPoints.push({ x: pt.x, y: pt.y, z: pt.z || 0 });
         }
 
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 1500);
+
         const resp = await fetch(`${PYTHON_BACKEND_URL}/api/process`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
           body: JSON.stringify({
             landmarks: rawPoints,
             check_challenge: isChallenging
           })
         });
+        clearTimeout(timeoutId);
 
         if (resp.ok) {
           const data = await resp.json();
@@ -2386,9 +2416,12 @@
       // Nhận diện loại camera để tối ưu chế độ lật gương
       const curOpt = cameraSelect.options[cameraSelect.selectedIndex];
       if (curOpt) {
-        const isUsb = /usb|cam rời/i.test(curOpt.text);
+        const isUsb = /\[USB Cam Rời\]/i.test(curOpt.text);
         if (!isUsb && !chkMirror.checked) {
           chkMirror.checked = true;
+          applyMirrorSetting();
+        } else if (isUsb && chkMirror.checked) {
+          chkMirror.checked = false;
           applyMirrorSetting();
         }
       }
@@ -3612,14 +3645,16 @@
       window.print();
     });
 
-    // Khởi chạy ứng dụng khi DOM tải xong
-    window.addEventListener('DOMContentLoaded', async () => {
+    // Khởi chạy ứng dụng khi DOM tải xong (khởi động song song không chặn tiến trình)
+    function initApp() {
       syncCanvasResolution();
       applyMirrorSetting();
-      await checkPythonBackendStatus();
       loadRegisteredFaces();
-      await enumerateVideoDevices();
-      await setupFaceMeshEngine();
+
+      // Khởi chạy song song không chờ đợi chặn lẫn nhau
+      setupFaceMeshEngine();
+      enumerateVideoDevices();
+      checkPythonBackendStatus();
 
       // Tự động kiểm tra trạng thái Python server định kỳ mỗi 6 giây
       setInterval(async () => {
@@ -3627,7 +3662,13 @@
           await checkPythonBackendStatus();
         }
       }, 6000);
-    });
+    }
+
+    if (document.readyState === 'loading') {
+      window.addEventListener('DOMContentLoaded', initApp);
+    } else {
+      initApp();
+    }
   </script>
 </body>
 </html>
