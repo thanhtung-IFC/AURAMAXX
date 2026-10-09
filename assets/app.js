@@ -2022,6 +2022,20 @@
       const pW = profileData.width || 640;
       const pH = profileData.height || 480;
 
+      const profileYaw = Math.abs(Math.atan2(
+        (pPoints[234]?.z || 0) - (pPoints[454]?.z || 0),
+        Math.max(1e-6, Math.abs(pPoints[454].x - pPoints[234].x))
+      ) * (180 / Math.PI));
+      if (profileYaw < 15 || profileYaw > 40) {
+        fResult.is_multi_view = false;
+        fResult.measurement_quality = {
+          label: "Ước lượng hình học, không phải xếp hạng dân số hay chẩn đoán y khoa",
+          warnings: ["Ảnh góc nghiêng chưa nằm trong khoảng 15–40°; điểm tổng hợp chỉ dùng ảnh chính diện."],
+          profile_used: false
+        };
+        return fResult;
+      }
+
       function d2d(p1, p2) {
         return Math.hypot((p1.x - p2.x) * pW, (p1.y - p2.y) * pH);
       }
@@ -2158,13 +2172,17 @@
 
       fResult.profile = profileAnalysis;
       fResult.is_multi_view = true;
-      fResult.overall_harmony_score = Math.round((fResult.overall_harmony_score * 0.70 + pScore * 0.30) * 10) / 10;
+      fResult.overall_harmony_score = Math.round((fResult.overall_harmony_score * 0.80 + pScore * 0.20) * 10) / 10;
 
       const sc = fResult.overall_harmony_score;
-      fResult.overall_grade = sc >= 85 ? "Hài Hòa Xuất Sắc (Chuẩn 3D Nhân Trắc Học)" :
-                              sc >= 75 ? "Khá Cân Đối (Đạt Chuẩn Thẩm Mỹ Đa Chiều)" :
-                              sc >= 63 ? "Mức Trung Bình Phổ Biến (Tồn Tại Khuyết Điểm Tự Nhiên)" :
-                              sc >= 50 ? "Mất Cân Đối Nhẹ (Có Khuyết Điểm Cần Chú Ý)" : "Bất Đối Xứng Rõ Rệt";
+      fResult.overall_grade = sc >= 85 ? "Điểm tổng hợp cao theo tiêu chí tham khảo" :
+                              sc >= 75 ? "Điểm tổng hợp khá theo tiêu chí tham khảo" :
+                              sc >= 63 ? "Điểm tổng hợp trung bình theo tiêu chí tham khảo" :
+                              sc >= 50 ? "Một số tỷ lệ lệch khỏi mốc tham khảo" : "Nhiều tỷ lệ lệch khỏi mốc tham khảo";
+      fResult.measurement_quality = {
+        label: "Ước lượng hình học, không phải xếp hạng dân số hay chẩn đoán y khoa",
+        warnings: [], profile_used: true
+      };
 
       return fResult;
     }
@@ -2268,8 +2286,8 @@
       const eyeDx = (eyeR.x - eyeL.x) * imgW;
       const eyeTilt = Math.round(Math.atan2(eyeDy, eyeDx) * (180 / Math.PI) * 10) / 10;
       const overallSym = Math.round((weightedSym / totW) * 10) / 10;
-      let symEval = overallSym >= 88 && Math.abs(eyeTilt) <= 0.8 ? "Cân đối rất cao (Thuộc nhóm 10% ít lệch nhất)" :
-                    overallSym >= 76 ? "Cân đối mức trung bình khá (Đặc trưng tự nhiên)" :
+      let symEval = overallSym >= 88 && Math.abs(eyeTilt) <= 0.8 ? "Điểm đối xứng cao theo phép đo hình học" :
+                    overallSym >= 76 ? "Độ lệch thấp theo ngưỡng đo tham khảo" :
                     overallSym >= 64 ? "Lệch tự nhiên phổ biến (Thói quen nhai một bên)" : "Bất đối xứng rõ rệt";
 
       const upperH = d2d(forehead, glabella);
@@ -2311,8 +2329,9 @@
       const noseL = d2d(points[168] || points[9], subnasale) + 1e-6;
       const noseRatio = Math.round((alarW / noseL) * 100) / 100;
       const noseScore = Math.round(Math.max(45, Math.min(97, 100 - Math.abs(noseRatio - 0.67) * 75)) * 10) / 10;
-      const bridgeDev = Math.round(Math.abs(pLineDist(points[1], forehead, chin)) * 10) / 10;
-      const bridgeComment = bridgeDev > 3.0 ? `Sống mũi lệch trục ${bridgeDev}px (nguy cơ lệch vách ngăn)` : "Sống mũi bám sát trục đối xứng chuẩn.";
+      const bridgeDevPx = Math.abs(pLineDist(points[1], forehead, chin));
+      const bridgeDev = Math.round((bridgeDevPx / cheekW) * 1000) / 10;
+      const bridgeComment = bridgeDev > 0.5 ? `Đỉnh mũi lệch ${bridgeDev}% bề rộng mặt trong ảnh; góc chụp có thể ảnh hưởng.` : "Đỉnh mũi gần trục giữa trong ảnh.";
       const alarComment = noseRatio > 0.74 ? "Cánh mũi hơi nở rộng so với chiều dài sống mũi." : "Cánh mũi thon gọn cân đối.";
 
       const gonialL = angleDeg(points[234], points[172], chin);
@@ -2325,11 +2344,12 @@
                      chinApex > 115 ? "Đáy cằm phẳng ngang, làm phần dưới khuôn mặt trông hơi thô." :
                      "Đường nét cằm và góc hàm hài hòa thanh thoát.";
 
-      const skinSmooth = 76.0;
-      const skinUnif = 74.0;
-      const darkCircles = 18.0;
-      const oiliness = 24.0;
-      const skinAlerts = ["Quầng thâm dưới mắt có độ sẫm nhẹ do vi tuần hoàn máu mệt mỏi.", "Độ ẩm bề mặt tương đối cân bằng, vùng chữ T tiết dầu nhẹ."];
+      // Landmark-only fallback cannot measure skin texture or color reliably.
+      const skinSmooth = null;
+      const skinUnif = null;
+      const darkCircles = null;
+      const oiliness = null;
+      const skinAlerts = ["Chưa đo tình trạng da: chế độ trình duyệt chỉ có điểm mốc khuôn mặt."];
 
       const hairAdvice = {
         for_men: faceShape.includes("Dài") ? "Side part vuốt nhẹ hoặc uốn layer tạo phồng 2 bên tai." : "Undercut gọn gàng hoặc Fade hai bên tạo sự nam tính.",
@@ -2338,11 +2358,11 @@
         target_focus: "Cân bằng tỷ lệ 3 tầng và làm mềm góc hàm"
       };
 
-      const harmonyScore = Math.round((overallSym * 0.25 + thirdsHarm * 0.25 + noseScore * 0.18 + jawScore * 0.17 + skinSmooth * 0.15) * 10) / 10;
-      const overallGrade = harmonyScore >= 85 ? "Hài Hòa Xuất Sắc (Thuộc Top 5% Tỷ Lệ Nhân Trắc Học)" :
-                           harmonyScore >= 75 ? "Khá Cân Đối (Đạt Chuẩn Thẩm Mỹ Tự Nhiên)" :
-                           harmonyScore >= 63 ? "Mức Trung Bình Phổ Biến (Tồn Tại Độ Lệch Tự Nhiên)" :
-                           harmonyScore >= 50 ? "Mất Cân Đối Nhẹ (Có Khuyết Điểm Cần Chú Ý)" : "Bất Đối Xứng Rõ Rệt";
+      const harmonyScore = Math.round(((overallSym * 0.25 + thirdsHarm * 0.25 + noseScore * 0.18 + jawScore * 0.17) / 0.85) * 10) / 10;
+      const overallGrade = harmonyScore >= 85 ? "Điểm tổng hợp cao theo tiêu chí tham khảo" :
+                           harmonyScore >= 75 ? "Điểm tổng hợp khá theo tiêu chí tham khảo" :
+                           harmonyScore >= 63 ? "Điểm tổng hợp trung bình theo tiêu chí tham khảo" :
+                           harmonyScore >= 50 ? "Một số tỷ lệ lệch khỏi mốc tham khảo" : "Nhiều tỷ lệ lệch khỏi mốc tham khảo";
 
       return {
         success: true,
@@ -2377,7 +2397,8 @@
           alar_comment: alarComment,
           bridge_status: bridgeComment,
           bridge_comment: bridgeComment,
-          bridge_deviation_px: bridgeDev
+          bridge_deviation_px: Math.round(bridgeDevPx * 10) / 10,
+          bridge_deviation_face_width_pct: bridgeDev
         },
         jawline: {
           jawline_sharpness_score: jawScore,
@@ -2393,9 +2414,9 @@
           uniformity_score: skinUnif,
           dark_circles_index: darkCircles,
           oiliness_score: oiliness,
-          skin_tone: "Sáng Tự Nhiên",
-          undertone: "Trung Tính (Neutral)",
-          hex_color: "#ebd4c0",
+          skin_tone: "Chưa đo",
+          undertone: "",
+          hex_color: "#808080",
           skin_health_evaluation: skinAlerts
         },
         hair: {
@@ -2422,6 +2443,11 @@
             { x: points[102].x * imgW, y: points[102].y * imgH },
             { x: points[331].x * imgW, y: points[331].y * imgH }
           ]
+        },
+        measurement_quality: {
+          label: "Ước lượng hình học, không phải xếp hạng dân số hay chẩn đoán y khoa",
+          warnings: ["Phân tích dự phòng trên trình duyệt; tình trạng da chưa được đo."],
+          profile_used: false
         }
       };
     }
@@ -2484,9 +2510,17 @@
     }
 
     function displayAnalysisReport(data, snapshotDataUrl) {
-      // 1. Điểm tổng thể & Cấp bậc phân loại khoa học (Gaussian Bell Curve)
+      // 1. Overall heuristic score and capture-quality note.
       txtOverallHarmonyScore.innerText = data.overall_harmony_score;
       badgeOverallGrade.innerText = data.overall_grade;
+      const qualityNote = document.getElementById('analysisQualityNote');
+      if (qualityNote) {
+        const measurement = data.measurement_quality;
+        const warnings = Array.isArray(measurement?.warnings) ? measurement.warnings : [];
+        qualityNote.textContent = [measurement?.label || 'Điểm tham khảo từ các tỷ lệ hình học.', ...warnings].join(' ');
+        qualityNote.classList.toggle('text-amber-300', warnings.length > 0);
+        qualityNote.classList.toggle('text-slate-400', warnings.length === 0);
+      }
 
       const score = data.overall_harmony_score;
       if (score >= 85) {
@@ -2517,7 +2551,7 @@
           card.innerHTML = `
             <span class="text-slate-300">${item.feature}:</span>
             <div class="flex items-center gap-2">
-              <span class="text-[10px] text-slate-500 font-mono">(Lệch ${item.diff_px}px)</span>
+              <span class="text-[10px] text-slate-500 font-mono">(Lệch ${item.diff_face_width_pct ?? item.diff_px}% ${item.diff_face_width_pct !== undefined ? 'bề rộng mặt' : ''})</span>
               <strong class="font-mono text-cyan-400 font-bold">${item.score}%</strong>
             </div>
           `;
@@ -2536,7 +2570,7 @@
       } else {
         const li = document.createElement('li');
         li.className = 'text-emerald-400 list-none flex items-center gap-1.5';
-        li.innerHTML = '<i class="fa-solid fa-check text-xs"></i><span>Ngũ quan và trục đối xứng giữa đạt độ cân bằng tự nhiên rất tốt.</span>';
+        li.innerHTML = '<i class="fa-solid fa-check text-xs"></i><span>Không có sai lệch nào vượt ngưỡng hiển thị trong ảnh này.</span>';
         listAsymmetryFlaws.appendChild(li);
       }
 
@@ -2557,7 +2591,9 @@
       txtNoseWidthLength.innerText = data.nose.width_to_length_ratio;
       txtAlarStatus.innerText = data.nose.alar_status;
       txtBridgeStatus.innerText = data.nose.bridge_status;
-      txtBridgeDev.innerText = `Độ lệch: ${data.nose.bridge_deviation_px}px`;
+      txtBridgeDev.innerText = data.nose.bridge_deviation_face_width_pct == null
+        ? `Độ lệch: ${data.nose.bridge_deviation_px}px`
+        : `Độ lệch: ${data.nose.bridge_deviation_face_width_pct}% bề rộng mặt`;
       txtBridgeComment.innerText = data.nose.bridge_comment || data.nose.bridge_status;
       txtAlarComment.innerText = data.nose.alar_comment || data.nose.alar_status;
 
@@ -2597,12 +2633,13 @@
       }
 
       // 6. Tình Trạng Da (Skin Health) - Chẩn đoán ROI thực tế
-      txtSkinSmoothScore.innerText = `${data.skin.smoothness_score}%`;
-      txtSkinSmoothness.innerText = `${data.skin.smoothness_score}%`;
-      txtSkinUniformity.innerText = `${data.skin.uniformity_score}%`;
-      txtDarkCircles.innerText = `${data.skin.dark_circles_index}%`;
-      txtSkinOiliness.innerText = `${data.skin.oiliness_score}%`;
-      txtSkinToneDetail.innerText = `${data.skin.skin_tone} • ${data.skin.undertone}`;
+      const skinMetric = value => value == null ? 'Chưa đo' : `${value}%`;
+      txtSkinSmoothScore.innerText = skinMetric(data.skin.smoothness_score);
+      txtSkinSmoothness.innerText = skinMetric(data.skin.smoothness_score);
+      txtSkinUniformity.innerText = skinMetric(data.skin.uniformity_score);
+      txtDarkCircles.innerText = skinMetric(data.skin.dark_circles_index);
+      txtSkinOiliness.innerText = skinMetric(data.skin.oiliness_score);
+      txtSkinToneDetail.innerText = [data.skin.skin_tone, data.skin.undertone].filter(Boolean).join(' • ');
       txtSkinToneName.innerText = data.skin.skin_tone;
       dotSkinColor.style.backgroundColor = data.skin.hex_color || '#e4c5b0';
       paletteSkinColor.style.backgroundColor = data.skin.hex_color || '#e4c5b0';
@@ -2624,7 +2661,9 @@
       } else {
         listSkinHealthAlerts.innerHTML = '<li class="text-emerald-400 flex items-center gap-1.5"><i class="fa-solid fa-check text-xs"></i><span>Tình trạng da tương đối ổn định, không phát hiện quầng thâm hay sần sùi bất thường.</span></li>';
       }
-      txtSkinAdvice.innerText = '💡 Lời khuyên chăm sóc: Bổ sung đủ nước, ngủ trước 23h để giảm quầng thâm mắt, và làm sạch bã nhờn vùng chữ T.';
+      txtSkinAdvice.innerText = data.skin.smoothness_score == null
+        ? 'Tình trạng da chưa được phân tích trong chế độ dự phòng trên trình duyệt.'
+        : 'Kết quả pixel có thể thay đổi theo ánh sáng, camera và lớp trang điểm; chỉ dùng để tham khảo.';
 
       // 7. Kiểu Tóc & Khắc Phục Khuyết Điểm (Hair & Corrective Styling)
       txtHairlineType.innerText = data.hair.hairline_type;
