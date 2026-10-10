@@ -36,6 +36,7 @@ from typing import Dict, Any
 from face_store import FEATURE_VERSION, StorageError
 from database_config import CONFIG_NAME, create_store
 from auth_store import AuthStore, AuthError, LoginLimiter, SESSION_SECONDS
+from gemini_chat import ChatError, ChatLimiter, build_request, generate_reply
 
 from face_liveness_algorithms import (
     LandmarkPoint,
@@ -59,6 +60,7 @@ face_database = create_store(BASE_DIR)
 global_challenge_lock = threading.RLock()
 challenge_engines = {}
 login_limiter = LoginLimiter()
+chat_limiter = ChatLimiter()
 COOKIE_NAME = "visionface_session"
 
 
@@ -129,6 +131,8 @@ class VisionFaceRequestHandler(SimpleHTTPRequestHandler):
     def _read_json_body(self) -> Dict[str, Any]:
         """Đọc và parse payload JSON từ client."""
         content_length = int(self.headers.get("Content-Length", 0))
+        if urlsplit(self.path).path == "/api/chat" and content_length > 128 * 1024:
+            raise ValueError("Dữ liệu chat quá lớn.")
         if not 0 <= content_length <= 12 * 1024 * 1024:
             raise ValueError("Invalid Content-Length")
         if content_length == 0:
@@ -143,6 +147,8 @@ class VisionFaceRequestHandler(SimpleHTTPRequestHandler):
         try:
             handler()
         except AuthError as error:
+            self._send_json({"success": False, "message": str(error)}, error.status)
+        except ChatError as error:
             self._send_json({"success": False, "message": str(error)}, error.status)
         except PermissionError as error:
             self._send_json({"success": False, "message": str(error)}, 403)
@@ -340,6 +346,15 @@ class VisionFaceRequestHandler(SimpleHTTPRequestHandler):
 
         session = self.require_session(allow_password_change=path in ("/api/auth/logout", "/api/auth/password"))
         self.require_csrf()
+        if path == "/api/chat":
+            body = build_request(payload)
+            chat_limiter.start(session["id"])
+            try:
+                reply = generate_reply(body)
+            finally:
+                chat_limiter.finish(session["id"])
+            self._send_json({"success": True, "reply": reply})
+            return
         if path == "/api/auth/logout":
             self.auth.logout(session)
             with global_challenge_lock:

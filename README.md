@@ -70,6 +70,9 @@ Web yêu cầu đăng nhập. Xem [AUTHENTICATION.md](AUTHENTICATION.md) để t
 
 ## Cấu trúc mã nguồn
 
+Chatbot tư vấn AI dùng Gemini: xem [GEMINI_CHAT.md](GEMINI_CHAT.md) để đặt khóa
+API trên backend và sử dụng khung chat với kết quả phân tích gần nhất.
+
 - `index.html` và `real_time_face_landmark_liveness_tracker.html`: hai địa chỉ giao diện được giữ tương thích, cùng tải `assets/app.js` và `assets/app.css`. Khi sửa logic hoặc kiểu hiển thị, sửa các file trong `assets/`.
 - `server.py`: HTTP API và phục vụ giao diện.
 - `auth_store.py`, `manage_accounts.py`: tài khoản, phiên, quyền sở hữu hồ sơ và tạo/khôi phục admin; `admin.html` là trang quản trị.

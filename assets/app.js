@@ -1848,6 +1848,7 @@
     }
 
     function retakeStepShot(step) {
+      if (typeof window !== 'undefined' && window.VisionChat) window.VisionChat.setAnalysis(null);
       cancelProfileAutoCapture();
       if (step === 1) { resetTwoShotCapture(); return; }
       captureStep = step;
@@ -1870,6 +1871,7 @@
     }
 
     function resetTwoShotCapture() {
+      if (typeof window !== 'undefined' && window.VisionChat) window.VisionChat.setAnalysis(null);
       cancelProfileAutoCapture();
       frontalCaptureData = null;
       profileCaptureData = null;
@@ -2510,6 +2512,7 @@
     }
 
     function displayAnalysisReport(data, snapshotDataUrl) {
+      if (typeof window !== 'undefined' && window.VisionChat) window.VisionChat.setAnalysis(data);
       // 1. Overall heuristic score and capture-quality note.
       txtOverallHarmonyScore.innerText = data.overall_harmony_score;
       badgeOverallGrade.innerText = data.overall_grade;
