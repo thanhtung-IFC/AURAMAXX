@@ -59,15 +59,20 @@
   <!-- ========================================================================= -->
   <!-- LEFT SIDEBAR: ĐIỀU HƯỚNG CỐ ĐỊNH BÊN TRÁI (KHỚP 100% CẢ 2 GIAO DIỆN) -->
   <!-- ========================================================================= -->
-  <aside class="w-60 flex-shrink-0 bg-[#090e1a] border-r border-surface-700/80 min-h-screen flex flex-col justify-between p-4 z-30 sticky top-0 h-screen overflow-y-auto">
+  <aside id="sidebarNav" class="w-64 flex-shrink-0 bg-[#090e1a] border-r border-surface-700/80 min-h-screen flex flex-col justify-between p-4 z-40 fixed md:sticky top-0 inset-y-0 left-0 h-screen overflow-y-auto transform -translate-x-full md:translate-x-0 transition-transform duration-200 ease-in-out">
     <div class="flex flex-col gap-6">
-      <!-- Logo VisionFace -->
-      <div class="flex items-center gap-3 px-2 py-1">
-        <img src="assets/visionface-logo.png" alt="VisionFace Logo" class="w-9 h-9 rounded-xl object-contain shadow-md shadow-cyan-500/20 flex-shrink-0 border border-cyan-500/30 bg-[#04112a]">
-        <div>
-          <div class="text-sm font-bold text-white tracking-tight">VisionFace</div>
-          <div class="text-[11px] text-slate-400">Phân tích khuôn mặt</div>
+      <!-- Logo VisionFace & Nút Đóng Sidebar trên Mobile -->
+      <div class="flex items-center justify-between px-2 py-1">
+        <div class="flex items-center gap-3">
+          <img src="assets/visionface-logo.png" alt="VisionFace Logo" class="w-9 h-9 rounded-xl object-contain shadow-md shadow-cyan-500/20 flex-shrink-0 border border-cyan-500/30 bg-[#04112a]">
+          <div>
+            <div class="text-sm font-bold text-white tracking-tight">VisionFace</div>
+            <div class="text-[11px] text-slate-400">Phân tích khuôn mặt</div>
+          </div>
         </div>
+        <button id="btnCloseSidebar" type="button" class="md:hidden flex items-center justify-center w-8 h-8 rounded-lg bg-surface-800 text-slate-400 hover:text-white transition" title="Đóng menu">
+          <i class="fa-solid fa-xmark text-sm"></i>
+        </button>
       </div>
 
       <!-- Danh mục Menu chính -->
@@ -109,18 +114,26 @@
     </div>
   </aside>
 
+  <!-- Backdrop che mờ khi mở menu trên điện thoại -->
+  <div id="sidebarBackdrop" class="fixed inset-0 bg-slate-950/70 z-30 hidden md:hidden backdrop-blur-sm transition-opacity"></div>
+
   <!-- ========================================================================= -->
   <!-- MAIN CONTAINER (BÊN PHẢI SIDEBAR) -->
   <!-- ========================================================================= -->
   <div class="flex-1 min-w-0 flex flex-col min-h-screen">
     
     <!-- TOP HEADER -->
-    <!-- TOP HEADER -->
-    <header class="border-b border-surface-700/80 bg-surface-900/90 backdrop-blur sticky top-0 z-20 px-6 py-4">
-      <div class="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <header class="border-b border-surface-700/80 bg-surface-900/90 backdrop-blur sticky top-0 z-20 px-3.5 sm:px-6 py-3 sm:py-4">
+      <div class="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
         
         <!-- Cụm Tiêu đề và Điều khiển bên trái Header -->
-        <div class="flex flex-col gap-2.5">
+        <div class="flex items-start gap-3">
+          <!-- Nút Hamburger Menu trên điện thoại -->
+          <button id="btnMobileMenu" type="button" class="md:hidden flex items-center justify-center w-9 h-9 rounded-xl border border-surface-700/80 bg-surface-800/90 text-slate-300 hover:text-white transition shadow-sm flex-shrink-0 mt-0.5" title="Mở danh mục điều hướng">
+            <i class="fa-solid fa-bars text-sm"></i>
+          </button>
+
+          <div class="flex flex-col gap-2 flex-1 min-w-0">
           <!-- Tiêu đề Header cho Tab QUÉT MẶT -->
           <div id="headerTitleScan" class="flex flex-col gap-2">
             <div>
@@ -158,9 +171,10 @@
             <p class="text-xs text-slate-400">Gợi ý dựa trên lần quét gần nhất.</p>
           </div>
         </div>
+      </div>
 
-        <!-- Cụm Tài khoản & Điều hướng bên phải Header -->
-        <div class="flex items-center gap-3 self-end md:self-center">
+      <!-- Cụm Tài khoản & Điều hướng bên phải Header -->
+      <div class="flex items-center flex-wrap gap-2 sm:gap-3 self-end md:self-center">
           <!-- Nút Quét lại khuôn mặt (chỉ hiển thị ở Tab Hằng ngày khớp ảnh mẫu 1) -->
           <button id="btnRescanFace" type="button" class="hidden px-4 py-2 rounded-xl border border-surface-700 bg-surface-800 hover:bg-surface-700 text-slate-200 text-xs font-semibold transition flex items-center gap-2 shadow-sm">
             <i class="fa-solid fa-camera text-cyan-400 text-xs"></i>
@@ -195,7 +209,7 @@
     </header>
 
     <!-- MAIN BODY CONTENT -->
-    <main class="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto flex flex-col gap-6">
+    <main class="flex-1 p-3 sm:p-4 lg:p-6 max-w-7xl w-full mx-auto flex flex-col gap-4 sm:gap-6 pb-20 md:pb-6">
 
       <!-- ===================================================================== -->
       <!-- VIEW 1: GIAO DIỆN QUÉT MẶT (IMAGE 1) -->
@@ -1202,6 +1216,24 @@
     </div>
     <div class="text-xs" id="toastMessage">Thông báo ứng dụng</div>
   </div>
+
+  <!-- ========================================================================= -->
+  <!-- MOBILE BOTTOM NAVIGATION (CHỈ HIỂN THỊ TRÊN MÀN HÌNH ĐIỆN THOẠI < 768px)   -->
+  <!-- ========================================================================= -->
+  <nav id="mobileBottomNav" class="md:hidden fixed bottom-0 inset-x-0 z-30 bg-surface-900/95 border-t border-surface-700/80 backdrop-blur px-4 py-2 flex items-center justify-around shadow-2xl">
+    <button id="mobileNavScan" type="button" class="flex flex-col items-center gap-0.5 text-cyan-400 font-semibold text-[10px] py-1 px-3 rounded-xl transition cursor-pointer">
+      <i class="fa-solid fa-camera text-base"></i>
+      <span>Quét mặt</span>
+    </button>
+    <button id="mobileNavDaily" type="button" class="flex flex-col items-center gap-0.5 text-slate-400 font-semibold text-[10px] py-1 px-3 rounded-xl transition cursor-pointer">
+      <i class="fa-solid fa-calendar-check text-base"></i>
+      <span>Hằng ngày</span>
+    </button>
+    <button id="mobileNavMenu" type="button" class="flex flex-col items-center gap-0.5 text-slate-400 font-semibold text-[10px] py-1 px-3 rounded-xl transition cursor-pointer">
+      <i class="fa-solid fa-bars text-base"></i>
+      <span>Menu</span>
+    </button>
+  </nav>
 
   <!-- JS MODULES -->
   <script src="assets/session.js"></script>

@@ -530,3 +530,42 @@ html[data-theme="dark"] .auth-page .message.success {
     height: 80px;
   }
 }
+
+/* Mobile Bottom Nav in light mode */
+html[data-theme="light"] #mobileBottomNav {
+  background-color: rgba(255, 255, 255, 0.96) !important;
+  border-color: #e2e8f0 !important;
+}
+
+html[data-theme="light"] #btnMobileMenu {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #334155 !important;
+}
+
+html[data-theme="light"] #btnCloseSidebar {
+  background-color: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+  color: #334155 !important;
+}
+
+/* Tối ưu hiệu năng trên điện thoại di động: khử giật lag khi cuộn trang */
+@media (max-width: 768px) {
+  .backdrop-blur,
+  .backdrop-blur-md,
+  .backdrop-blur-sm {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  html, body {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: none;
+  }
+
+  canvas, video {
+    transform: translateZ(0);
+    will-change: transform;
+  }
+}
+

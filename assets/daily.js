@@ -346,7 +346,7 @@
       return this.getItem('LATEST_SNAPSHOT');
     }
 
-    saveLatestReport(reportData, snapshotUrl = null) {
+    saveLatestReport(reportData, snapshotUrl = null, syncRemote = true) {
       try {
         this.setItem('LATEST_REPORT', JSON.stringify(reportData));
         if (snapshotUrl) {
@@ -354,6 +354,9 @@
         }
         // Tự động mở khóa chức năng hàng ngày cho tài khoản này khi có báo cáo đầu tiên
         this.setUnlocked(true);
+        if (syncRemote && typeof syncUserDataToDatabase === 'function') {
+          syncUserDataToDatabase();
+        }
       } catch (e) {
         console.error('Không thể lưu báo cáo vào LocalStorage:', e);
       }
@@ -513,8 +516,11 @@
       return this.generateDefaultTasks();
     }
 
-    saveTodayTasks(tasks) {
+    saveTodayTasks(tasks, syncRemote = true) {
       this.setItem('TODAY_TASKS', JSON.stringify(tasks));
+      if (syncRemote && typeof syncUserDataToDatabase === 'function') {
+        syncUserDataToDatabase();
+      }
     }
 
     // Tạo danh sách bài tập dựa trên Báo Cáo Gần Nhất + Mục Tiêu Cường Độ (Nhẹ / Vừa / Chuyên sâu) + Khảo Sát Tuần
@@ -698,6 +704,53 @@
   let currentActiveTab = 'scan'; // 'scan' | 'daily'
   let libraryActiveFilter = 'all';
 
+  // Đồng bộ dữ liệu người dùng với Cơ sở dữ liệu Backend (SQLite/Postgres/SQL Server)
+  async function syncUserDataToDatabase() {
+    if (typeof window === 'undefined' || !window.VisionAuth || typeof window.VisionAuth.fetch !== 'function') return;
+    try {
+      const report = manager.getLatestReport();
+      const tasks = manager.getTodayTasks();
+      const streakInfo = manager.getStreakInfo();
+      await window.VisionAuth.fetch('/api/user/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          latest_report: report,
+          daily_routine: tasks,
+          streak_count: streakInfo?.streak || 0
+        })
+      });
+    } catch (e) {
+      // Offline fallback
+    }
+  }
+
+  // Tải dữ liệu người dùng từ Cơ sở dữ liệu Backend khi đăng nhập trên thiết bị mới (điện thoại)
+  async function loadUserDataFromDatabase() {
+    if (typeof window === 'undefined' || !window.VisionAuth || typeof window.VisionAuth.fetch !== 'function') return;
+    try {
+      const res = await window.VisionAuth.fetch('/api/user/data');
+      if (res && res.ok) {
+        const payload = await res.json();
+        if (payload && payload.success && payload.data) {
+          let updated = false;
+          if (payload.data.latest_report && !manager.getLatestReport()) {
+            manager.saveLatestReport(payload.data.latest_report, null, false);
+            updated = true;
+          }
+          if (payload.data.daily_routine && (!manager.getTodayTasks() || manager.getTodayTasks().length === 0)) {
+            manager.saveTodayTasks(payload.data.daily_routine, false);
+            updated = true;
+          }
+          if (updated) {
+            renderSidebarStatus();
+            renderDailyView();
+          }
+        }
+      }
+    } catch (e) {}
+  }
+
   // Khởi tạo các phần tử DOM và gắn Event Listeners
   async function init() {
     if (typeof window !== 'undefined' && window.VisionAuth && window.VisionAuth.ready) {
@@ -714,6 +767,9 @@
     renderSidebarStatus();
     renderDailyView();
     bindEvents();
+
+    // Tải dữ liệu từ database backend nếu đang đăng nhập trên thiết bị mới (điện thoại)
+    await loadUserDataFromDatabase();
 
     // Hẹn giờ kiểm tra chuyển ngày mỗi phút
     setInterval(() => {
@@ -783,6 +839,23 @@
       if (scanHeaderControls) scanHeaderControls.classList.remove('hidden');
       if (btnRescanFace) btnRescanFace.classList.add('hidden');
       window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // Đồng bộ nút chọn trên thanh điều hướng dưới cùng của điện thoại
+    const mobileNavScan = document.getElementById('mobileNavScan');
+    const mobileNavDaily = document.getElementById('mobileNavDaily');
+    if (mobileNavScan && mobileNavDaily) {
+      if (target === 'daily') {
+        mobileNavDaily.classList.remove('text-slate-400');
+        mobileNavDaily.classList.add('text-cyan-400');
+        mobileNavScan.classList.remove('text-cyan-400');
+        mobileNavScan.classList.add('text-slate-400');
+      } else {
+        mobileNavScan.classList.remove('text-slate-400');
+        mobileNavScan.classList.add('text-cyan-400');
+        mobileNavDaily.classList.remove('text-cyan-400');
+        mobileNavDaily.classList.add('text-slate-400');
+      }
     }
   }
 
@@ -1219,6 +1292,41 @@
     document.getElementById('navItemScan')?.addEventListener('click', () => switchTab('scan'));
     document.getElementById('navItemDaily')?.addEventListener('click', () => switchTab('daily'));
     document.getElementById('btnRescanFace')?.addEventListener('click', () => switchTab('scan'));
+
+    // 1b. Menu Drawer & Điều hướng trên điện thoại (Mobile Responsive)
+    const btnMobileMenu = document.getElementById('btnMobileMenu');
+    const btnCloseSidebar = document.getElementById('btnCloseSidebar');
+    const sidebarNav = document.getElementById('sidebarNav');
+    const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+    const mobileNavMenu = document.getElementById('mobileNavMenu');
+    const mobileNavScan = document.getElementById('mobileNavScan');
+    const mobileNavDaily = document.getElementById('mobileNavDaily');
+
+    function openMobileSidebar() {
+      if (sidebarNav) sidebarNav.classList.remove('-translate-x-full');
+      if (sidebarBackdrop) sidebarBackdrop.classList.remove('hidden');
+      document.body.classList.add('overflow-hidden', 'md:overflow-auto');
+    }
+
+    function closeMobileSidebar() {
+      if (sidebarNav) sidebarNav.classList.add('-translate-x-full');
+      if (sidebarBackdrop) sidebarBackdrop.classList.add('hidden');
+      document.body.classList.remove('overflow-hidden', 'md:overflow-auto');
+    }
+
+    btnMobileMenu?.addEventListener('click', openMobileSidebar);
+    mobileNavMenu?.addEventListener('click', openMobileSidebar);
+    btnCloseSidebar?.addEventListener('click', closeMobileSidebar);
+    sidebarBackdrop?.addEventListener('click', closeMobileSidebar);
+
+    mobileNavScan?.addEventListener('click', () => {
+      switchTab('scan');
+      closeMobileSidebar();
+    });
+    mobileNavDaily?.addEventListener('click', () => {
+      switchTab('daily');
+      closeMobileSidebar();
+    });
 
     // 2. Chuyển đổi mức độ mục tiêu [Nhẹ] [Vừa] [Chuyên sâu]
     document.querySelectorAll('.btn-intensity').forEach(btn => {
