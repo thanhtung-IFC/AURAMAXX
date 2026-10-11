@@ -1,0 +1,59 @@
+.theme-toggle { display: inline-flex; align-items: center; justify-content: center; gap: 7px; flex-shrink: 0; min-height: 36px; padding: 7px 11px; border: 1px solid #526077; border-radius: 10px; background: #182438; color: #e5edf7; font: 500 12px/1.4 "Segoe UI", sans-serif; cursor: pointer; }
+.theme-toggle:hover { background: #26374f; }
+.theme-toggle:focus-visible { outline: 2px solid #38bdf8; outline-offset: 3px; }
+.theme-toggle > span:first-child { font-size: 19px; line-height: 1; }
+.auth-page .auth-role-links { align-items: center; flex-wrap: wrap; gap: 14px; }
+.auth-page .theme-toggle { min-height: 32px; padding: 5px 9px; font-size: 10px; }
+.visionface-logo { display: block; width: 48px; height: 48px; object-fit: contain; border-radius: 10px; background: #020f26; flex-shrink: 0; }
+.journey-brand .visionface-logo { width: 112px; height: 112px; border-radius: 18px; }
+.topbar .brand { display: inline-flex; align-items: center; gap: 12px; }
+[data-logo-slot] { width: 52px; height: 52px; background: transparent; box-shadow: none; }
+[data-logo-slot] .visionface-logo { width: 52px; height: 52px; }
+html[data-theme="light"] { color-scheme: light; background: #f2f5fa; color: #17243b; }
+html[data-theme="light"] body:not(.auth-page) { background: #f2f5fa; color: #17243b; }
+html[data-theme="light"] .theme-toggle { background: #f5f7fc; border-color: #d9dfeb; color: #334155; }
+html[data-theme="light"] .theme-toggle:hover { background: #e9eff9; }
+html[data-theme="light"] body:not(.auth-page) :is(.card, .stat, .topbar) { background: #fff; border-color: #dce3ee; }
+html[data-theme="light"] body:not(.auth-page) :is(input, select, textarea) { background: #f8faff; color: #17243b; border-color: #cbd5e1; }
+html[data-theme="light"] body:not(.auth-page) :is(label, .muted, .empty, dt, th) { color: #52627b; }
+html[data-theme="light"] body:not(.auth-page) :is(a, .brand, .eyebrow, summary) { color: #1761bd; }
+html[data-theme="light"] body:not(.auth-page) :is(td, th) { border-color: #dce3ee; }
+html[data-theme="light"] body:not(.auth-page) :is(button:not(.primary), .button) { background: #edf2f9; color: #243b59; border-color: #cbd5e1; }
+html[data-theme="light"] body:not(.auth-page) .tabs button[aria-selected="true"] { background: #d9f5fc; color: #075985; border-color: #0891b2; }
+html[data-theme="light"] body:not(.auth-page) .message { color: #b42343; }
+html[data-theme="light"] body:not(.auth-page) .message.success { color: #147744; }
+html[data-theme="light"] :is(.bg-surface-900, .bg-surface-800, .bg-surface-700) { background-color: #fff; }
+html[data-theme="light"] [class*="bg-surface-900/"] { background-color: #fffffff2; }
+html[data-theme="light"] [class*="bg-surface-800/"] { background-color: #f3f6fbe6; }
+html[data-theme="light"] [class*="bg-surface-700/"] { background-color: #e7edf5b3; }
+html[data-theme="light"] :is(.border-surface-700, .border-surface-600, [class*="border-surface-700/"]) { border-color: #d6deeb; }
+html[data-theme="light"] :is(.text-white, .text-slate-100, .text-slate-200, .text-slate-300) { color: #1e334e; }
+html[data-theme="light"] :is(.text-slate-400, .text-slate-500) { color: #596b84; }
+html[data-theme="light"] :is(.text-cyan-400, .text-cyan-300) { color: #08718a; }
+html[data-theme="light"] :is(.text-emerald-400, .text-emerald-300) { color: #087c54; }
+html[data-theme="light"] :is(.text-amber-400, .text-amber-300) { color: #966007; }
+html[data-theme="light"] :is(.text-red-400, .text-rose-400) { color: #b42343; }
+html[data-theme="light"] :is(.vision-chat, .chat-panel) { color: #243b59; }
+html[data-theme="light"] .chat-panel { background: #fff; border-color: #d6deeb; }
+html[data-theme="light"] :is(.chat-notice, .chat-clear) { color: #596b84; }
+html[data-theme="light"] :is(.chat-message, .chat-suggestions button) { background: #edf3f9; color: #243b59; border-color: #d6deeb; }
+html[data-theme="light"] .chat-message-user { background: #dff5fb; }
+html[data-theme="light"] :is(.chat-message strong, .chat-context-status) { color: #08718a; }
+html[data-theme="dark"] .auth-page { color-scheme: dark; background: #080d18; color: #edf2ff; }
+html[data-theme="dark"] .auth-shell { background: #111b2d; box-shadow: 0 24px 80px #0005; }
+html[data-theme="dark"] .auth-page .tabs { background: #0a1323; }
+html[data-theme="dark"] .auth-page .tabs button { color: #a2afc6; }
+html[data-theme="dark"] .auth-page .tabs button[aria-selected="true"] { background: #263654; color: #a8c6ff; }
+html[data-theme="dark"] .auth-page label { color: #e0e8f8; }
+html[data-theme="dark"] .auth-page input { background: #19263c; color: #f1f5ff; border-color: #293951; }
+html[data-theme="dark"] .auth-page input:focus { background: #1b2b45; outline-color: #80b3ff; }
+html[data-theme="dark"] .auth-page input::placeholder { color: #94a4bf; }
+html[data-theme="dark"] .auth-page :is(.form-description, .auth-note, .password-hint, .auth-divider, .team-credit, .auth-role-links a) { color: #a6b4cc; }
+html[data-theme="dark"] .auth-page :is(.auth-role-links a[aria-current], .team-credit strong) { color: #8cb7ff; }
+html[data-theme="dark"] .auth-divider::before, html[data-theme="dark"] .auth-divider::after { background: #2b3a52; }
+html[data-theme="dark"] .auth-page .password-toggle { color: #acbdd7; }
+html[data-theme="dark"] .auth-page button.primary { background: #3d63f0; border-color: #3d63f0; }
+html[data-theme="dark"] .auth-page button.primary:hover { background: #5074ff; }
+html[data-theme="dark"] .auth-page .message { color: #ff9fb1; }
+html[data-theme="dark"] .auth-page .message.success { color: #6ee7b7; }
+@media (max-width: 740px) { .journey-brand .visionface-logo { width: 88px; height: 88px; } }
