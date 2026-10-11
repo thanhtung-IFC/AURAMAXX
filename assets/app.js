@@ -252,8 +252,11 @@
     let currentChallengeStep = 1; // 1: chớp mắt 2 lần, 2: há miệng, 3: quay mặt sang trái
     let challengeBlinkCount = 0;
 
-    // Kho lưu trữ khuôn mặt
-    const STORAGE_KEY = 'visionface_registered_users_v1';
+    // Kho lưu trữ khuôn mặt (cách ly theo từng tài khoản)
+    function getRegisteredFaceStorageKey() {
+      const accountId = window.VisionAuth?.state?.account?.id || 'guest';
+      return `visionface_acc_${accountId}_registered_users_v1`;
+    }
     let registeredDatabase = [];
 
     function createFaceMeshEngine() {
@@ -1220,6 +1223,12 @@
     }
 
     async function loadRegisteredFaces() {
+      if (typeof window !== 'undefined' && window.VisionAuth && window.VisionAuth.ready) {
+        try {
+          await window.VisionAuth.ready;
+        } catch (e) {}
+      }
+
       if (usePythonEngine && isPythonBackendAvailable) {
         try {
           const resp = await fetch(`${PYTHON_BACKEND_URL}/api/faces`);
@@ -1240,7 +1249,7 @@
         return;
       }
       try {
-        const data = localStorage.getItem(STORAGE_KEY);
+        const data = localStorage.getItem(getRegisteredFaceStorageKey());
         registeredDatabase = data ? JSON.parse(data) : [];
       } catch (e) {
         registeredDatabase = [];
@@ -1250,7 +1259,7 @@
 
     function saveRegisteredFaces() {
       if (typeof window !== 'undefined' && window.VisionAuth) return;
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(registeredDatabase));
+      localStorage.setItem(getRegisteredFaceStorageKey(), JSON.stringify(registeredDatabase));
       renderFaceListUI();
     }
 
@@ -2512,7 +2521,9 @@
     }
 
     function displayAnalysisReport(data, snapshotDataUrl) {
+      window.displayAnalysisReport = displayAnalysisReport;
       if (typeof window !== 'undefined' && window.VisionChat) window.VisionChat.setAnalysis(data);
+      if (typeof window !== 'undefined' && window.DailyRoutine) window.DailyRoutine.onFaceAnalysisComplete(data, snapshotDataUrl);
       // 1. Overall heuristic score and capture-quality note.
       txtOverallHarmonyScore.innerText = data.overall_harmony_score;
       badgeOverallGrade.innerText = data.overall_grade;
@@ -2882,10 +2893,15 @@
     });
 
     // Khởi chạy ứng dụng khi DOM tải xong (khởi động song song không chặn tiến trình)
-    function initApp() {
+    async function initApp() {
+      if (typeof window !== 'undefined' && window.VisionAuth && window.VisionAuth.ready) {
+        try {
+          await window.VisionAuth.ready;
+        } catch (e) {}
+      }
       syncCanvasResolution();
       applyMirrorSetting();
-      loadRegisteredFaces();
+      await loadRegisteredFaces();
 
       // Khởi chạy song song không chờ đợi chặn lẫn nhau
       setupFaceMeshEngine();

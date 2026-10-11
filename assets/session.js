@@ -48,7 +48,10 @@
       });
       if (!response.ok && response.status !== 401) throw new Error('Chưa đăng xuất được. Vui lòng thử lại.');
       if (typeof window.stopCameraStream === 'function') window.stopCameraStream();
-      window.location.assign(state.account?.role === 'admin' ? '/admin-login.html' : '/login.html');
+      const isAdmin = state.account?.role === 'admin';
+      state.account = null;
+      state.csrf = null;
+      window.location.assign(isAdmin ? '/admin-login.html' : '/login.html');
     }
   };
   document.querySelectorAll('[data-logout]').forEach(button => button.addEventListener('click', async () => {
