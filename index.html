@@ -49,6 +49,8 @@
     };
   </script>
 
+  <link rel="icon" type="image/png" href="assets/visionface-logo.png">
+  <link rel="stylesheet" href="assets/theme.css">
   <link rel="stylesheet" href="assets/app.css">
   <link rel="stylesheet" href="assets/chat.css">
 </head>
@@ -61,9 +63,7 @@
     <div class="flex flex-col gap-6">
       <!-- Logo VisionFace -->
       <div class="flex items-center gap-3 px-2 py-1">
-        <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-slate-950 font-black shadow-md shadow-cyan-500/20 flex-shrink-0">
-          <i class="fa-solid fa-globe text-base"></i>
-        </div>
+        <img src="assets/visionface-logo.png" alt="VisionFace Logo" class="w-9 h-9 rounded-xl object-contain shadow-md shadow-cyan-500/20 flex-shrink-0 border border-cyan-500/30 bg-[#04112a]">
         <div>
           <div class="text-sm font-bold text-white tracking-tight">VisionFace</div>
           <div class="text-[11px] text-slate-400">Phân tích khuôn mặt</div>
@@ -183,6 +183,12 @@
           <button data-logout type="button" class="flex items-center gap-2 text-xs font-medium text-slate-300 hover:text-rose-400 px-3.5 py-1.5 rounded-xl border border-surface-700/80 bg-surface-800/90 hover:bg-rose-950/40 hover:border-rose-900/60 transition shadow-sm" title="Đăng xuất khỏi hệ thống">
             <i class="fa-solid fa-arrow-right-from-bracket text-[11px]"></i>
             <span>Đăng xuất</span>
+          </button>
+
+          <!-- Nút Chuyển chế độ Sáng / Tối dạng Pill khớp thẩm mỹ thanh header -->
+          <button id="btnThemeToggle" data-theme-toggle type="button" class="theme-toggle flex items-center gap-2 text-xs font-medium text-slate-300 hover:text-cyan-400 px-3.5 py-1.5 rounded-xl border border-surface-700/80 bg-surface-800/90 hover:bg-surface-700/80 transition shadow-sm cursor-pointer" title="Chuyển sang chế độ sáng">
+            <i class="fa-solid fa-sun text-amber-400 text-xs" aria-hidden="true"></i>
+            <span class="theme-text">Chế độ sáng</span>
           </button>
         </div>
       </div>
