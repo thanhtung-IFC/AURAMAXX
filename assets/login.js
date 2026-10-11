@@ -15,8 +15,19 @@
     button.textContent = value ? 'Tạo tài khoản' : 'Đăng nhập';
     document.getElementById('tabLogin').setAttribute('aria-selected', String(!value));
     document.getElementById('tabRegister').setAttribute('aria-selected', String(value));
+    document.getElementById('tabLogin').setAttribute('aria-pressed', String(!value));
+    document.getElementById('tabRegister').setAttribute('aria-pressed', String(value));
+    const description = document.getElementById('formDescription');
+    if (description) description.textContent = value ? 'Chỉ vài bước để bắt đầu hành trình của bạn.' : 'Đăng nhập để tiếp tục hành trình của bạn.';
     message.textContent = '';
   }
+  document.getElementById('togglePassword')?.addEventListener('click', event => {
+    const password = document.getElementById('password');
+    const visible = password.type === 'password';
+    password.type = visible ? 'text' : 'password';
+    event.currentTarget.setAttribute('aria-pressed', String(visible));
+    event.currentTarget.setAttribute('aria-label', visible ? 'Ẩn mật khẩu' : 'Hiện mật khẩu');
+  });
   document.getElementById('tabLogin')?.addEventListener('click', () => switchMode(false));
   document.getElementById('tabRegister')?.addEventListener('click', () => switchMode(true));
   form.addEventListener('submit', async event => {

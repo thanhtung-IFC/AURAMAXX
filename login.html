@@ -1,11 +1,48 @@
-<!DOCTYPE html>
-<html lang="vi"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Đăng nhập người dùng · VisionFace</title><link rel="stylesheet" href="assets/auth.css"></head>
-<body data-login-role="user">
-<header class="topbar"><a class="brand" href="/login.html">VisionFace Pro</a><a href="/admin-login.html">Khu vực admin →</a></header>
-<main class="login-layout">
-  <section><div class="eyebrow">Không gian cá nhân</div><h1>Khuôn mặt của bạn.<br>Hồ sơ của bạn.</h1><p class="muted">Đăng nhập để đăng ký khuôn mặt, bổ sung mẫu và sử dụng công cụ phân tích. Mỗi tài khoản có danh sách hồ sơ riêng.</p><div class="role-links"><a href="/login.html" aria-current="page">Người dùng</a><a href="/admin-login.html">Admin</a></div></section>
-  <section class="card"><div class="tabs"><button id="tabLogin" type="button" aria-selected="true">Đăng nhập</button><button id="tabRegister" type="button" aria-selected="false">Tạo tài khoản</button></div>
-    <h2 id="formTitle" style="margin-top:24px">Chào mừng bạn trở lại</h2>
-    <form id="loginForm"><label id="displayNameLabel" hidden>Họ tên<input id="displayName" maxlength="120" autocomplete="name"></label><label>Tên đăng nhập<input id="username" required minlength="3" maxlength="64" pattern="[A-Za-z0-9_.\-]+" autocomplete="username" spellcheck="false"></label><label>Mật khẩu<input id="password" type="password" required maxlength="128" autocomplete="current-password"></label><p id="passwordHint" class="muted" hidden>Mật khẩu từ 12 đến 128 ký tự.</p><button id="submitLogin" class="primary" type="submit">Đăng nhập</button></form><p id="loginMessage" class="message" role="status" aria-live="polite"></p>
-  </section>
-</main><script src="assets/session.js"></script><script src="assets/login.js"></script></body></html>
+﻿<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8"><script src="assets/theme.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Đăng nhập · VisionFace</title>
+  <link rel="stylesheet" href="assets/auth.css">
+  <link rel="stylesheet" href="assets/login.css">
+<link rel="stylesheet" href="assets/theme.css"></head>
+<body class="auth-page" data-login-role="user">
+  <main class="auth-shell">
+    <section class="journey" aria-labelledby="journeyTitle">
+      <a class="journey-brand" href="/login.html"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="m16 3 11 6.5v13L16 29 5 22.5v-13Z" stroke="currentColor" stroke-width="3"/><path d="m16 9 6 3.5v7L16 23l-6-3.5v-7Z" fill="currentColor"/></svg>VisionFace<span>PRO</span></a>
+      <div class="journey-content">
+        <span class="journey-badge">Một khởi đầu mới <span aria-hidden="true">✦</span></span>
+        <h1 id="journeyTitle">Bắt đầu hành trình<br>của bạn.</h1>
+        <p class="journey-description">Khám phá, thấu hiểu và lưu giữ dấu ấn riêng của bạn.</p>
+        <ol class="journey-steps">
+          <li class="is-current"><span class="step-number">1</span><span>Tạo tài khoản<br>của bạn</span></li>
+          <li><span class="step-number">2</span><span>Thiết lập<br>hồ sơ khuôn mặt</span></li>
+          <li><span class="step-number">3</span><span>Khám phá<br>công cụ phân tích</span></li>
+        </ol>
+      </div>
+    </section>
+    <section class="auth-panel" aria-labelledby="formTitle">
+      <div class="auth-panel-content">
+        <nav class="auth-role-links" aria-label="Khu vực đăng nhập"><a href="/login.html" aria-current="page">Người dùng</a><a href="/admin-login.html">Admin <span aria-hidden="true">↗</span></a></nav>
+        <h2 id="formTitle">Chào mừng bạn trở lại</h2>
+        <p id="formDescription" class="form-description">Đăng nhập để tiếp tục hành trình của bạn.</p>
+        <div class="tabs" aria-label="Chọn đăng nhập hoặc tạo tài khoản"><button id="tabLogin" type="button" aria-pressed="true" aria-selected="true">Đăng nhập</button><button id="tabRegister" type="button" aria-pressed="false" aria-selected="false">Tạo tài khoản</button></div>
+        <form id="loginForm">
+          <label id="displayNameLabel" hidden>Họ và tên<input id="displayName" maxlength="120" autocomplete="name" placeholder="Nhập họ và tên của bạn"></label>
+          <label>Tên đăng nhập<input id="username" required minlength="3" maxlength="64" pattern="[A-Za-z0-9_.\-]+" autocomplete="username" spellcheck="false" autocapitalize="none" placeholder="Nhập tên đăng nhập"></label>
+          <label>Mật khẩu<span class="password-field"><input id="password" type="password" required maxlength="128" autocomplete="current-password" placeholder="Nhập mật khẩu" aria-describedby="passwordHint"><button class="password-toggle" id="togglePassword" type="button" aria-label="Hiện mật khẩu" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.5"/><path class="eye-slash" d="m4 20 16-16" stroke="currentColor" stroke-width="1.5"/></svg></button></span></label>
+          <p id="passwordHint" class="password-hint" hidden>Mật khẩu từ 12 đến 128 ký tự.</p>
+          <button id="submitLogin" class="primary" type="submit">Đăng nhập</button>
+        </form>
+        <p id="loginMessage" class="message" role="status" aria-live="polite"></p>
+        <div class="auth-divider"><span>Không gian riêng của bạn</span></div>
+        <p class="auth-note">Một tài khoản để quản lý hồ sơ khuôn mặt<br>và khám phá các công cụ phân tích.</p>
+        <footer class="team-credit">MADE BY <strong>AURAMAXX TEAM</strong></footer>
+      </div>
+    </section>
+  </main>
+  <script src="assets/session.js"></script>
+  <script src="assets/login.js"></script>
+</body>
+</html>
