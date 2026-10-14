@@ -15,6 +15,7 @@ TABLE_KEYS = {
     "arena_matches": "id", "arena_match_participants": "match_id", "arena_elo_history": "id",
     "arena_achievements": "user_id", "arena_bot_profiles": "user_id", "arena_bot_matches": "id",
     "legacy_account_links": "user_id", "data_handoffs": "id", "admin_feature_flags": "feature_key",
+    "health_routines": "user_id",
 }
 
 

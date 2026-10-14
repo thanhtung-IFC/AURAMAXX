@@ -13,6 +13,7 @@ TABLES = (
     "sessions",
     "user_consents",
     "habit_entries",
+    "health_routines",
     "ai_conversations",
     "ai_messages",
     "ai_request_limits",
@@ -46,7 +47,7 @@ def migrate() -> dict[str, int]:
 
         try:
             for table in TABLES:
-                if table == "legacy_account_links" and table not in source_tables:
+                if table in {"legacy_account_links", "health_routines"} and table not in source_tables:
                     copied[table] = 0
                     continue
                 rows = source.execute(f"SELECT * FROM {table}").fetchall()

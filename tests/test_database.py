@@ -6,6 +6,12 @@ from backend.database import _postgres_sql
 
 
 class PostgresSqlTranslationTests(unittest.TestCase):
+    def test_case_insensitive_email_lookup_preserves_table_alias(self):
+        for reference in ("u.email", "users.email", "email"):
+            translated = _postgres_sql(f"SELECT * FROM users u WHERE {reference} = ?")
+            self.assertIn(f"LOWER({reference}) = LOWER(%s)", translated)
+            self.assertNotIn("u.LOWER", translated)
+
     def test_translates_placeholders_and_case_insensitive_email_lookup(self) -> None:
         self.assertEqual(
             _postgres_sql("SELECT id FROM users WHERE email = ?"),

@@ -23,7 +23,12 @@ function cdp(ws, exceptions) {
   const pending = new Map();
   ws.addEventListener('message', event => {
     const data = JSON.parse(event.data);
-    if (data.method === 'Runtime.exceptionThrown') exceptions.push(data.params.exceptionDetails);
+    if (data.method === 'Runtime.exceptionThrown') {
+      const details = data.params.exceptionDetails;
+      // Managed Edge extensions can inject scripts even into a fresh test profile.
+      // Keep failures from the application's scripts; extension errors are external.
+      if (!/^(?:chrome-extension|moz-extension|ms-browser-extension):\/\//.test(details.url || '')) exceptions.push(details);
+    }
     if (!data.id) return;
     const task = pending.get(data.id);
     if (!task) return;
@@ -65,6 +70,7 @@ function cdp(ws, exceptions) {
     fs.mkdirSync(profile);
     edge = spawn(process.env.EDGE_PATH || 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', [
       '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
+      '--disable-extensions', '--disable-component-extensions-with-background-pages', '--disable-sync',
       '--remote-debugging-port=0', '--user-data-dir=' + profile, 'about:blank',
     ], { windowsHide: true, stdio: 'ignore' });
     const debugPort = await until(() => fs.readFileSync(path.join(profile, 'DevToolsActivePort'), 'utf8').split('\n')[0], 'Edge startup');
@@ -161,7 +167,25 @@ function cdp(ws, exceptions) {
     await click('[data-face-action="bot"]');
     await until(() => evaluate(`document.querySelector('#face-bot-battle-outcome').textContent.includes('ELO')`),'BOT uses original report measurements');
     await click('[data-face-action="routine"]');
-    await until(() => evaluate(`location.hash === '#aura-ai' && document.querySelector('#chat-attach-report').checked && !document.querySelector('#chat-input').disabled`),'report attached to native AI composer');
+    await until(() => evaluate(`location.hash === '#health-hub' && !document.querySelector('#routine-use-report').disabled`),'routine is integrated into Health Hub');
+    assert.equal(await evaluate(`document.querySelectorAll('#routine-task-list .routine-task').length`),0,'report does not save without explicit choice');
+    await click('#routine-use-report');
+    await until(() => evaluate(`document.querySelectorAll('#routine-task-list .routine-task').length === 4 && !document.querySelector('#routine-generate').disabled`),'routine from explicit Face Lab measurements');
+    await click('#routine-task-list [data-routine-action="complete"]');
+    await until(() => evaluate(`document.querySelector('#routine-progress-label').textContent === '1 / 4' && document.querySelector('#habit-records').textContent.includes('Routine')`),'completion writes to shared Health Hub journal');
+    await click('#routine-task-list [data-routine-action="complete"]');
+    await until(() => evaluate(`document.querySelector('#routine-progress-label').textContent === '0 / 4' && !document.querySelector('#habit-records').textContent.includes('Routine')`),'uncheck removes routine journal entry');
+    await evaluate(`document.querySelector('#routine-intensity').value='gentle';document.querySelector('#routine-intensity').dispatchEvent(new Event('change'))`);
+    await until(() => evaluate(`document.querySelectorAll('#routine-task-list .routine-task').length === 3 && !document.querySelector('#routine-generate').disabled`),'gentle intensity rules');
+    await click('[data-routine-filter="skincare"]');
+    assert.equal(await evaluate(`document.querySelectorAll('#routine-library .routine-library-card').length`),3);
+    await click('[data-routine-filter="all"]');
+    await click('#routine-library [data-task-id="sleep_schedule"]');
+    await until(() => evaluate(`document.querySelectorAll('#routine-task-list .routine-task').length === 4 && !document.querySelector('#routine-generate').disabled`),'library task joins the same routine');
+    fs.writeFileSync(path.join(outputRoot,'health-hub-desktop.png'),Buffer.from((await send('Page.captureScreenshot',{format:'png'})).data,'base64'));
+    await route('face-lab');
+    await click('[data-face-action="explain"]');
+    await until(() => evaluate(`location.hash === '#aura-ai' && document.querySelector('#chat-attach-report').checked && !document.querySelector('#chat-input').disabled`),'explicit report explanation in AI composer');
     assert.equal(await evaluate(`window.__visionRequests.filter(item=>item.url.endsWith('/aura/chat')).length`),0,'AI waits for explicit send');
     await click('#chat-send');
     await until(() => evaluate(`document.querySelector('.chat-message-assistant')?.textContent.includes('Routine fixture response')`),'AI response');
@@ -190,6 +214,10 @@ function cdp(ws, exceptions) {
     assert.equal(await evaluate(`document.documentElement.scrollWidth <= innerWidth+1`),true);
     fs.writeFileSync(path.join(outputRoot,'native-face-mobile.png'),Buffer.from((await send('Page.captureScreenshot',{format:'png'})).data,'base64'));
     await route('health-hub');
+    await until(() => evaluate(`document.querySelectorAll('#routine-task-list .routine-task').length === 4`),'routine retained after route change');
+    await evaluate(`window.scrollTo({top:0,behavior:'instant'})`);
+    await pause(200);
+    fs.writeFileSync(path.join(outputRoot,'health-hub-mobile.png'),Buffer.from((await send('Page.captureScreenshot',{format:'png'})).data,'base64'));
     await until(() => evaluate(`!!document.querySelector('#habit-entry-form') && !document.querySelector('#habit-value').disabled`), 'health journal');
     await evaluate(`document.querySelector('#habit-category').value='water';document.querySelector('#habit-value').value='2';document.querySelector('#habit-entry-form').requestSubmit()`);
     await until(() => evaluate(`document.querySelector('#habit-records').textContent.includes('2')`), 'habit saved');

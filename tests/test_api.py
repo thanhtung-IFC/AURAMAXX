@@ -203,7 +203,10 @@ class ApiIntegrationTests(unittest.TestCase):
             response = self.client.open(request, timeout=30 if self.pg_test else 8)
         except urllib.error.HTTPError as error:
             response = error
-        raw = response.read()
+        try:
+            raw = response.read()
+        finally:
+            response.close()
         data = json.loads(raw.decode("utf-8")) if raw and "application/json" in response.headers.get("Content-Type", "") else None
         return response.code, data, response.headers
 
@@ -435,6 +438,91 @@ class ApiIntegrationTests(unittest.TestCase):
             self.assertEqual(connection.execute("SELECT COUNT(*) FROM users WHERE id = ?", (user_id,)).fetchone()[0], 0)
             self.assertEqual(connection.execute("SELECT COUNT(*) FROM habit_entries WHERE user_id = ?", (user_id,)).fetchone()[0], 0)
             self.assertEqual(connection.execute("SELECT COUNT(*) FROM user_consents WHERE user_id = ?", (user_id,)).fetchone()[0], 0)
+
+    def test_health_hub_routine_journal_and_persistence(self):
+        self.assertEqual(self.request("GET", "/api/health-hub/routine")[0], 401)
+        email, password = self.register()
+        user_id = self.request("GET", "/api/auth/me")[1]["id"]
+        self.assertEqual(self.request("GET", "/api/health-hub/routine")[0], 403)
+        self.grant_health_consent()
+        code, state, _ = self.request("GET", "/api/health-hub/routine")
+        self.assertEqual(code, 200)
+        self.assertEqual(state["tasks"], [])
+        code, state, _ = self.request("POST", "/api/health-hub/routine", {"revision": state["revision"]})
+        self.assertEqual(code, 200, state)
+        self.assertEqual(len(state["tasks"]), 4)
+        old_revision = state["revision"]
+        code, state, _ = self.request("PATCH", "/api/health-hub/routine", {"revision": old_revision, "action": "complete", "task_id": "drink_water", "completed": True})
+        self.assertEqual(code, 200, state)
+        self.assertEqual(state["completed"], 1)
+        self.assertEqual(self.request("PATCH", "/api/health-hub/routine", {"revision": old_revision, "action": "preferences", "intensity": "gentle"})[0], 409)
+        code, records, _ = self.request("GET", "/api/habits")
+        self.assertEqual(code, 200)
+        self.assertEqual(len(records), 1)
+        self.assertIn("Routine", records[0]["note"])
+        self.assertEqual(self.request("POST", "/api/auth/logout", {})[0], 204)
+        self.assertEqual(self.request("POST", "/api/auth/login", {"email": email, "password": password})[0], 200)
+        self.assertEqual(self.request("GET", "/api/health-hub/routine")[1]["completed"], 1)
+        self.assertEqual(self.request("DELETE", "/api/habits/" + records[0]["id"])[0], 204)
+        self.assertEqual(self.request("GET", "/api/health-hub/routine")[1]["completed"], 0)
+        self.assertEqual(self.request("DELETE", "/api/auth/me", {"password": password, "confirmation": "DELETE"})[0], 204)
+        with closing(self.app_connection()) as connection:
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM health_routines r JOIN users u ON u.id = r.user_id WHERE u.email = ?", (email,)).fetchone()[0], 0)
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM health_routines WHERE user_id = ?", (user_id,)).fetchone()[0], 0)
+            if self.pg_test:
+                self.assertTrue(connection.execute("SELECT relrowsecurity FROM pg_class WHERE oid = to_regclass('health_routines')").fetchone()[0])
+
+    def test_health_hub_report_consent_privacy_and_user_isolation(self):
+        self.register()
+        self.grant_health_consent()
+        state = self.request("GET", "/api/health-hub/routine")[1]
+        payload = {"revision": state["revision"], "report": {"skin": {"smoothness_score": 72}, "image": "private-image", "landmarks": [1, 2], "account_id": "private-id"}}
+        self.assertEqual(self.request("POST", "/api/health-hub/routine", payload)[0], 403)
+        self.assertEqual(self.request("POST", "/api/consents", {"purpose": "face_analysis", "granted": True})[0], 201)
+        code, state, _ = self.request("POST", "/api/health-hub/routine", payload)
+        self.assertEqual(code, 200, state)
+        self.assertEqual(state["report"], {"skin": {"smoothness_score": 72}})
+        self.assertNotIn("private-", json.dumps(state))
+        original_cookies, original_client = self.cookies, self.client
+        self.setUp()
+        try:
+            self.register()
+            self.grant_health_consent()
+            other = self.request("GET", "/api/health-hub/routine")[1]
+            self.assertEqual(other["tasks"], [])
+            self.assertIsNone(other["report"])
+            self.assertEqual(self.request("PATCH", "/api/health-hub/routine", {"revision": other["revision"], "action": "complete", "task_id": "drink_water", "completed": True})[0], 404)
+        finally:
+            self.cookies, self.client = original_cookies, original_client
+        self.assertEqual(self.request("POST", "/api/consents", {"purpose": "face_analysis", "granted": False})[0], 201)
+        self.assertIsNone(self.request("GET", "/api/health-hub/routine")[1]["report"])
+        self.assertEqual(self.request("POST", "/api/consents", {"purpose": "health_tracking", "granted": False})[0], 201)
+        self.assertEqual(self.request("GET", "/api/health-hub/routine")[0], 403)
+        self.assertEqual(self.request("POST", "/api/consents", {"purpose": "health_tracking", "granted": True})[0], 201)
+        self.assertEqual(self.request("GET", "/api/health-hub/routine")[1]["tasks"], [])
+
+    def test_health_hub_mutations_require_csrf_and_feature_enabled(self):
+        self.register()
+        self.grant_health_consent()
+        state = self.request("GET", "/api/health-hub/routine")[1]
+        cookies = "; ".join(f"{cookie.name}={cookie.value}" for cookie in self.cookies)
+        request = urllib.request.Request(self.base_url + "/api/health-hub/routine",
+            data=json.dumps({"revision": state["revision"]}).encode(),
+            headers={"Content-Type": "application/json", "Cookie": cookies}, method="POST")
+        with self.assertRaises(urllib.error.HTTPError) as failure:
+            urllib.request.urlopen(request, timeout=30 if self.pg_test else 8)
+        self.assertEqual(failure.exception.code, 403)
+        failure.exception.close()
+        with closing(self.app_connection()) as connection:
+            connection.execute("UPDATE admin_feature_flags SET enabled = 0 WHERE feature_key = 'health_tracking'")
+            connection.commit()
+        try:
+            self.assertEqual(self.request("GET", "/api/health-hub/routine")[0], 503)
+            self.assertEqual(self.request("POST", "/api/health-hub/routine", {"revision": state["revision"]})[0], 503)
+        finally:
+            with closing(self.app_connection()) as connection:
+                connection.execute("UPDATE admin_feature_flags SET enabled = 1 WHERE feature_key = 'health_tracking'")
+                connection.commit()
 
     def test_validation_csrf_and_unavailable_ai(self) -> None:
         code, _, _ = self.request("POST", "/api/auth/register", {"email": "bad", "password": "short"})

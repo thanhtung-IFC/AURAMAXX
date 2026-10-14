@@ -5,7 +5,16 @@ Aura AI, tiến trình và tài khoản. **Face Lab tích hợp trực tiếp Vi
 camera USB, nhận diện, liveness, hồ sơ, tải ảnh và phân tích chính diện/góc nghiêng
 đều nằm trong giao diện AURAMAXX, sử dụng thuật toán Python gốc. Không còn khung
 nhúng hoặc hai chế độ phân tích riêng. Báo cáo có đường đo và chi tiết da, tóc,
-tỷ lệ; có thể chuyển số đo sang Aura AI để giải thích hoặc xây dựng routine.
+tỷ lệ; có thể chuyển số đo sang Aura AI để giải thích hoặc dùng trong routine ở Health Hub.
+
+**Health Hub đã hợp nhất AI Routine Builder**: chọn mức độ, điều chỉnh theo phản
+hồi, thêm từ thư viện, đọc hướng dẫn, đổi giờ và bỏ qua từng mục. Hoàn thành một
+mục sẽ ghi vào cùng nhật ký Health Hub và tiến trình. Routine, chuỗi ngày và tối
+đa 2 lượt bảo vệ mỗi tháng được lưu theo tài khoản trên Supabase, đồng bộ giữa
+các thiết bị. Lựa chọn dùng số đo Face Lab chỉ lưu các chỉ số bề mặt da đã lọc;
+ảnh và landmark không được lưu trong routine. Có thể tạo routine cơ bản trước
+khi quét mặt. Bộ chọn routine dùng quy tắc mức độ/phản hồi của pull request,
+không cần khóa của nhà cung cấp AI.
 
 Chạy trên Windows: mở `start_auramaxx.bat`, hoặc:
 
@@ -46,7 +55,7 @@ sao lưu, nhập bổ sung và đối chiếu bằng checksum. Phiên cũ bị t
 
 **Giới hạn hiện tại:** đấu BOT và ELO luyện tập đã có; PvP xếp hạng vẫn bị khóa
 cho đến khi có quy trình xác thực trận trên máy chủ. Aura AI cần cấu hình nhà
-cung cấp AI phía máy chủ. Routine được soạn trong cùng Aura AI; báo cáo chỉ được
+cung cấp AI phía máy chủ. Routine được tạo và theo dõi trong Health Hub; báo cáo chỉ được
 đính kèm khi người dùng chọn gửi, không kèm ảnh/landmark. Xem [MERGE_NOTES.md](MERGE_NOTES.md) để biết kiến
 trúc, cấu hình triển khai và các kiểm thử của bản hợp nhất.
 

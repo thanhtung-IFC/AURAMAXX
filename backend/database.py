@@ -78,8 +78,8 @@ def _postgres_sql(query: str) -> str:
         flags=re.IGNORECASE,
     )
     sql = re.sub(
-        r"\bemail\s*=\s*%s",
-        "LOWER(email) = LOWER(%s)",
+        r"\b((?:[A-Za-z_]\w*\.)?email)\s*=\s*%s",
+        r"LOWER(\1) = LOWER(%s)",
         sql,
         flags=re.IGNORECASE,
     )
@@ -305,6 +305,13 @@ def initialize_database(connection_factory=None) -> None:
             );
             CREATE INDEX IF NOT EXISTS idx_habits_user_recorded
                 ON habit_entries(user_id, recorded_at DESC);
+
+            CREATE TABLE IF NOT EXISTS health_routines (
+                user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+                state_json TEXT NOT NULL,
+                revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
+                updated_at TEXT NOT NULL
+            );
 
             INSERT OR IGNORE INTO schema_version (version) VALUES (2);
 

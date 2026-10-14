@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends
 from backend.database import get_database
 from backend.schemas import ConsentRecord, ConsentRequest
 from backend.security import get_current_user, require_csrf
+from backend.routines import clear_face_report, lock_routine
 
 
 router = APIRouter(prefix="/api/consents", tags=["Quyền riêng tư"])
@@ -47,6 +48,8 @@ def record_consent(
     connection: sqlite3.Connection = Depends(get_database),
 ) -> ConsentRecord:
     record_id = str(uuid.uuid4())
+    if payload.purpose in {"health_tracking", "face_analysis"}:
+        lock_routine(connection, user["id"])
     created_at = datetime.now(timezone.utc).isoformat()
     connection.execute(
         """
@@ -62,6 +65,9 @@ def record_consent(
         # Kết quả BOT gắn với điểm khuôn mặt tổng hợp nên được xóa khi quyền bị thu hồi.
         connection.execute("DELETE FROM arena_bot_matches WHERE user_id = ?", (user["id"],))
         connection.execute("DELETE FROM arena_bot_profiles WHERE user_id = ?", (user["id"],))
+        clear_face_report(connection, user["id"])
+    if payload.purpose == "health_tracking" and not payload.granted:
+        connection.execute("DELETE FROM health_routines WHERE user_id = ?", (user["id"],))
     connection.commit()
     return ConsentRecord(
         id=record_id, purpose=payload.purpose, granted=payload.granted,

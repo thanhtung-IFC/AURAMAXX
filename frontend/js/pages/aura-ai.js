@@ -29,7 +29,7 @@ function setAvailability() {
   $("#chat-delete-current").disabled = !currentConversationId || isBusy;
   document.querySelectorAll("[data-chat-suggestion]").forEach((button) => { button.disabled = !enabled; });
   $("#chat-attach-report").disabled = !getFaceReport() || !userReady || isBusy;
-  $("#chat-routine").disabled = !enabled;
+  $("#chat-routine").disabled = false;
 }
 
 function showNotice(message, actionLabel = "", action = "") {
@@ -386,7 +386,7 @@ function onComposerKeydown(event) {
 export function initAuraAI() {
   const attachment = document.createElement("div");
   attachment.className = "chat-report-attachment";
-  attachment.innerHTML = '<label><input id="chat-attach-report" type="checkbox" disabled> Đính kèm số đo VisionFace</label><button class="text-link" id="chat-routine" type="button">Gợi ý routine 7 ngày</button><small id="chat-report-state">Phân tích trong Face Lab để đính kèm kết quả. Ảnh không được gửi cho AI.</small>';
+  attachment.innerHTML = '<label><input id="chat-attach-report" type="checkbox" disabled> Đính kèm số đo VisionFace</label><button class="text-link" id="chat-routine" type="button">Mở routine trong Health Hub</button><small id="chat-report-state">Phân tích trong Face Lab để đính kèm kết quả. Ảnh không được gửi cho AI.</small>';
   $("#chat-form").prepend(attachment);
   const updateReport = () => {
     const available = Boolean(getFaceReport());
@@ -400,7 +400,7 @@ export function initAuraAI() {
     $("#chat-input").dispatchEvent(new Event("input", { bubbles: true }));
     $("#chat-input").focus();
   };
-  $("#chat-routine").addEventListener("click", () => preparePrompt("Hãy giúp tôi xây dựng routine chăm sóc cơ bản trong 7 ngày. Hỏi về loại da, mục tiêu, thời gian và thói quen hiện tại trước khi cá nhân hóa.", Boolean(getFaceReport())));
+  $("#chat-routine").addEventListener("click", () => { window.location.hash = "health-hub"; });
   window.addEventListener("auramaxx:ai-request", event => preparePrompt(event.detail.message, event.detail.attach));
   window.addEventListener("auramaxx:face-report-changed", updateReport);
   $("#chat-form").addEventListener("submit", (event) => void sendMessage(event));

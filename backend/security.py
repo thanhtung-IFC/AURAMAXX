@@ -57,6 +57,13 @@ def create_session(
     response: Response,
 ) -> None:
     """Lưu mã phiên đã băm; gửi mã gốc cho trình duyệt bằng cookie an toàn."""
+    session_token, csrf_token = prepare_session(connection, user_id)
+    connection.commit()
+    set_session_cookies(response, session_token, csrf_token)
+
+
+def prepare_session(connection, user_id):
+    """Insert a session into the caller's transaction without issuing cookies."""
     session_token = secrets.token_urlsafe(32)
     csrf_token = secrets.token_urlsafe(32)
     now = datetime.now(timezone.utc)
@@ -75,8 +82,10 @@ def create_session(
             expires_at.isoformat(),
         ),
     )
-    connection.commit()
+    return session_token, csrf_token
 
+
+def set_session_cookies(response: Response, session_token: str, csrf_token: str) -> None:
     common = {
         "max_age": SESSION_MAX_AGE_SECONDS,
         "secure": COOKIE_SECURE,

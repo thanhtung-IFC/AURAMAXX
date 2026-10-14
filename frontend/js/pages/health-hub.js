@@ -1,5 +1,6 @@
 import { api } from "../api.js";
 import { showToast } from "../ui.js";
+import { initRoutine } from "../health/routine.js";
 
 const CATEGORY_LABELS = {
   water: "Uống nước",
@@ -9,6 +10,7 @@ const CATEGORY_LABELS = {
 };
 const CATEGORY_ICONS = { water: "i-water", sleep: "i-moon", movement: "i-heart", self_care: "i-leaf" };
 let initialized = false;
+let habitRequest = 0;
 
 function ensureJournal() {
   const panel = document.querySelector(".habit-empty");
@@ -96,6 +98,7 @@ function renderRecords(records) {
 }
 
 async function loadHabits() {
+  const request = ++habitRequest;
   ensureJournal();
   const form = document.querySelector("#habit-entry-form");
   const empty = document.querySelector(".habit-empty .empty-state");
@@ -107,9 +110,11 @@ async function loadHabits() {
 
   try {
     const records = await api.get("/api/habits");
+    if (request !== habitRequest) return;
     form.hidden = false;
     renderRecords(records);
   } catch (error) {
+    if (request !== habitRequest) return;
     if (error.status === 401) {
       showEmpty({ title: "Đăng nhập để xem nhật ký", description: "Dữ liệu sức khỏe chỉ hiển thị trong tài khoản của bạn." }, "login");
     } else if (error.status === 403) {
@@ -164,6 +169,7 @@ export function initHealthHub() {
   if (initialized) return;
   initialized = true;
   ensureJournal();
+  initRoutine();
   window.addEventListener("auramaxx:auth-changed", () => void loadHabits());
   window.addEventListener("hashchange", () => {
     if (window.location.hash === "#health-hub") loadHabits();
@@ -172,6 +178,7 @@ export function initHealthHub() {
     if (event.detail?.purpose === "health_tracking" && window.location.hash === "#health-hub") loadHabits();
   });
   window.addEventListener("auramaxx:habits-changed", () => {
+    if (window.location.hash === "#health-hub") void loadHabits();
     if (window.location.hash === "#progress") window.dispatchEvent(new CustomEvent("auramaxx:progress-refresh"));
   });
   if (window.location.hash === "#health-hub") loadHabits();

@@ -1,12 +1,14 @@
 """Accounts, server-side sessions and face ownership for both database adapters."""
 
 import hashlib
+import json
 import re
 import secrets
 import threading
 import time
 import uuid
 from collections import deque
+from contextlib import nullcontext
 from pathlib import Path
 
 from argon2 import PasswordHasher
@@ -104,8 +106,8 @@ class AuthStore:
 
     @staticmethod
     def password(value):
-        if not isinstance(value, str) or not 12 <= len(value) <= 128:
-            raise AuthError("Mật khẩu cần từ 12 đến 128 ký tự.")
+        if not isinstance(value, str) or not 6 <= len(value) <= 128:
+            raise AuthError("Mật khẩu cần từ 6 đến 128 ký tự.")
         return value
 
     @staticmethod
@@ -113,7 +115,7 @@ class AuthStore:
         connection.execute("INSERT INTO audit_logs (id, actor_id, action, target_id, created_at) VALUES (?, ?, ?, ?, ?)",
                            ("evt_" + uuid.uuid4().hex, actor, action, target, FaceStore._timestamps()[0]))
 
-    def create_account(self, username, display_name, password, *, role="user", force_change=False, actor_id=None):
+    def create_account(self, username, display_name, password, *, role="user", force_change=False, actor_id=None, transaction=None):
         username = self.username(username)
         display_name = FaceStore._name(display_name)
         self.password(password)
@@ -121,8 +123,9 @@ class AuthStore:
             raise AuthError("Quyền tài khoản không hợp lệ.")
         hashed = PASSWORDS.hash(password)
         identifier = "acc_" + uuid.uuid4().hex
-        with self.faces._connect() as connection:
-            self.write_lock(connection)
+        with (nullcontext(transaction) if transaction is not None else self.faces._connect()) as connection:
+            if transaction is None:
+                self.write_lock(connection)
             if role == "admin":
                 admin_count = connection.execute("SELECT COUNT(*) FROM accounts WHERE role = 'admin'").fetchone()[0]
                 if admin_count >= MAX_ADMIN_ACCOUNTS:
@@ -135,7 +138,8 @@ class AuthStore:
                 (identifier, username, display_name, hashed, role, int(force_change), FaceStore._timestamps()[0]))
             action = "account.admin_created" if role == "admin" else "account.created"
             self.audit(connection, actor_id or identifier, action, identifier)
-        return self.account(identifier)
+            account = self.rows(connection.execute(f"SELECT {PUBLIC_COLUMNS} FROM accounts WHERE id = ?", (identifier,)))[0]
+        return account
 
     def account(self, identifier):
         with self.faces._connect() as connection:
@@ -352,3 +356,48 @@ class AuthStore:
             return self.rows(connection.execute(f"""SELECT {limit}l.id, a.username AS actor,
                 l.action, l.target_id, l.created_at FROM audit_logs l LEFT JOIN accounts a ON a.id = l.actor_id
                 ORDER BY l.created_at DESC, l.id DESC{tail}"""))
+
+    def get_user_data(self, account_id):
+        with self.faces._connect() as connection:
+            row = connection.execute(
+                "SELECT latest_report_json, daily_routine_json, streak_count, updated_at FROM user_data WHERE account_id = ?",
+                (account_id,)
+            ).fetchone()
+            if not row:
+                return None
+            return {
+                "latest_report": json.loads(row[0]) if row[0] else None,
+                "daily_routine": json.loads(row[1]) if row[1] else None,
+                "streak_count": row[2] or 0,
+                "updated_at": row[3]
+            }
+
+    def save_user_data(self, account_id, latest_report=None, daily_routine=None, streak_count=None):
+        now = FaceStore._timestamps()[0]
+        report_str = json.dumps(latest_report, ensure_ascii=False) if latest_report is not None else None
+        routine_str = json.dumps(daily_routine, ensure_ascii=False) if daily_routine is not None else None
+        with self.faces._connect() as connection:
+            self.write_lock(connection)
+            existing = connection.execute(
+                "SELECT latest_report_json, daily_routine_json, streak_count FROM user_data WHERE account_id = ?",
+                (account_id,)
+            ).fetchone()
+            if existing:
+                rep = report_str if latest_report is not None else existing[0]
+                rout = routine_str if daily_routine is not None else existing[1]
+                stk = streak_count if streak_count is not None else (existing[2] or 0)
+                connection.execute(
+                    "UPDATE user_data SET latest_report_json = ?, daily_routine_json = ?, streak_count = ?, updated_at = ? WHERE account_id = ?",
+                    (rep, rout, stk, now, account_id)
+                )
+            else:
+                connection.execute(
+                    "INSERT INTO user_data (account_id, latest_report_json, daily_routine_json, streak_count, updated_at) VALUES (?, ?, ?, ?, ?)",
+                    (account_id, report_str, routine_str, streak_count or 0, now)
+                )
+
+    def list_all_accounts(self):
+        with self.faces._connect() as connection:
+            return self.rows(connection.execute(
+                f"SELECT {PUBLIC_COLUMNS} FROM accounts ORDER BY created_at DESC"
+            ))

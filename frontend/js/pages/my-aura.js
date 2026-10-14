@@ -10,7 +10,7 @@ const PURPOSES = [
   {
     id: "health_tracking",
     title: "Lưu dữ liệu sức khỏe",
-    description: "Cho phép lưu nhật ký sức khỏe bạn tự ghi nhận vào tài khoản.",
+    description: "Lưu routine, chuỗi ngày và nhật ký Health Hub vào tài khoản để đồng bộ giữa các thiết bị. Thu hồi đồng ý sẽ xóa routine và chuỗi ngày; nhật ký đã ghi được khóa cho đến khi bạn đồng ý lại.",
   },
   {
     id: "ai_chat",

@@ -279,6 +279,12 @@ class VisionFaceRequestHandler(SimpleHTTPRequestHandler):
                              "csrf_token": self.session["csrf_token"] if self.session else None})
             return
 
+        elif path == "/api/user/data":
+            session = self.require_session()
+            data = self.auth.get_user_data(session["id"])
+            self._send_json({"success": True, "data": data or {}})
+            return
+
         elif path.startswith("/api/admin/"):
             self.require_session("admin")
             if path == "/api/admin/accounts":
@@ -364,6 +370,15 @@ class VisionFaceRequestHandler(SimpleHTTPRequestHandler):
         if path == "/api/auth/password":
             self.auth.change_password(session, payload.get("current_password"), payload.get("new_password"))
             self._send_json({"success": True}, cookie=self.session_cookie(clear=True))
+            return
+        if path == "/api/user/data":
+            self.auth.save_user_data(
+                session["id"],
+                latest_report=payload.get("latest_report"),
+                daily_routine=payload.get("daily_routine"),
+                streak_count=payload.get("streak_count")
+            )
+            self._send_json({"success": True, "message": "Đã lưu dữ liệu người dùng vào cơ sở dữ liệu."})
             return
         if path.startswith("/api/admin/"):
             self.require_session("admin")

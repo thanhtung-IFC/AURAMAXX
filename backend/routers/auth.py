@@ -19,7 +19,7 @@ from backend.security import (
     verify_password,
 )
 from backend.settings import SESSION_COOKIE_NAME
-from backend.identity import delete_legacy_account, ensure_legacy_account, linked_account, login_legacy, login_limiter
+from backend.identity import delete_user_account, ensure_legacy_account, linked_account, login_legacy, login_limiter, register_user_account
 
 
 router = APIRouter(prefix="/api/auth", tags=["Tài khoản"])
@@ -46,19 +46,17 @@ def register(
     user_id = str(uuid.uuid4())
     created_at = datetime.now(timezone.utc).isoformat()
     try:
-        connection.execute(
-            "INSERT INTO users (id, email, password_hash, created_at) VALUES (?, ?, ?, ?)",
-            (user_id, payload.email, hash_password(payload.password), created_at),
+        account = register_user_account(
+            connection, user_id, payload.email, hash_password(payload.password), created_at,
+            payload.display_name, response,
         )
-        connection.commit()
     except sqlite3.IntegrityError as error:
-        connection.rollback()
-        raise HTTPException(status_code=409, detail="Email này đã được sử dụng.") from error
+        if connection.execute("SELECT id FROM users WHERE email = ?", (payload.email,)).fetchone():
+            raise HTTPException(status_code=409, detail="Email này đã được sử dụng.") from error
+        raise
 
-    row = connection.execute("SELECT id, email, created_at FROM users WHERE id = ?", (user_id,)).fetchone()
-    account = ensure_legacy_account(connection, row, payload.display_name)
-    create_session(connection, user_id, response)
-    return _public_user({**dict(row), "display_name": account["display_name"], "role": account["role"]})
+    return _public_user({"id": user_id, "email": payload.email, "created_at": created_at,
+                         "display_name": account["display_name"], "role": account["role"]})
 
 
 @router.post("/login", response_model=PublicUser)
@@ -140,9 +138,7 @@ def delete_account(
     if not valid:
         raise HTTPException(status_code=401, detail="Mật khẩu xác nhận chưa chính xác.")
 
-    delete_legacy_account(connection, user["id"])
-    connection.execute("DELETE FROM users WHERE id = ?", (user["id"],))
-    connection.commit()
+    delete_user_account(connection, user["id"])
     clear_session_cookies(response)
     response.status_code = status.HTTP_204_NO_CONTENT
     return response

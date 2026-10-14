@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from backend.database import check_database_connection, initialize_database, close_database_pool
 from backend.database import get_database
 from backend.features import FEATURES, is_enabled
-from backend.routers import arena, assistant, aura, auth, consents, face_analysis, habits, progress, vision, manage
+from backend.routers import arena, assistant, aura, auth, consents, face_analysis, habits, health_hub, progress, vision, manage
 from backend.identity import initialize_legacy
 from auth_store import AuthError
 from backend.settings import ALLOWED_ORIGINS, APP_NAME, APP_VERSION, PROJECT_ROOT
@@ -49,6 +49,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(consents.router)
 app.include_router(habits.router)
+app.include_router(health_hub.router)
 app.include_router(progress.router)
 app.include_router(assistant.router)
 app.include_router(aura.router)

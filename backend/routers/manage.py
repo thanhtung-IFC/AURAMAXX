@@ -10,9 +10,10 @@ from pydantic import BaseModel, Field
 
 from backend.database import get_database
 from backend.features import FEATURES, is_enabled
-from backend.identity import delete_legacy_account, ensure_legacy_account, legacy_auth, project_account, revoke_linked_sessions
+from backend.identity import delete_user_account, ensure_legacy_account, legacy_auth, project_account, revoke_linked_sessions
 from backend.security import get_current_user, require_csrf
 from backend.settings import AURAMAXX_DB_BACKEND, PROJECT_ROOT, SUPABASE_DATABASE_URL
+from backend.transactions import identity_transaction
 from database_config import load_settings
 
 
@@ -166,13 +167,7 @@ def delete_account(account_id: str, user=Depends(require_admin), connection=Depe
         raise HTTPException(404, "Không tìm thấy tài khoản.")
     if account["role"] == "admin" or actor["id"] == account_id:
         raise HTTPException(403, "Không xóa tài khoản quản trị qua thao tác này; có thể khóa tài khoản nếu còn admin khác.")
-    link = connection.execute("SELECT user_id FROM legacy_account_links WHERE account_id = ?", (account_id,)).fetchone()
-    if link is None:
-        project_account(connection, account)
-        link = connection.execute("SELECT user_id FROM legacy_account_links WHERE account_id = ?", (account_id,)).fetchone()
-    delete_legacy_account(connection, link["user_id"])
-    connection.execute("DELETE FROM users WHERE id = ?", (link["user_id"],))
-    connection.commit()
+    delete_user_account(connection, None, actor_id=actor["id"], account_id=account_id)
     return {"success": True}
 
 
@@ -209,18 +204,17 @@ def features(connection=Depends(get_database)):
 def update_feature(feature_key: str, payload: FeatureUpdate, _user=Depends(require_central), connection=Depends(get_database)):
     if feature_key not in FEATURES:
         raise HTTPException(404, "Tính năng không tồn tại.")
-    updated = connection.execute(
-        "UPDATE admin_feature_flags SET enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE feature_key = ?",
-        (int(payload.enabled), feature_key),
-    )
-    if updated.rowcount == 0:
-        connection.execute(
-            "INSERT INTO admin_feature_flags (feature_key, enabled, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
-            (feature_key, int(payload.enabled)),
-        )
-    connection.commit()
     auth = legacy_auth()
-    with auth.faces._connect() as legacy:
+    with identity_transaction(connection, auth) as legacy:
+        updated = connection.execute(
+            "UPDATE admin_feature_flags SET enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE feature_key = ?",
+            (int(payload.enabled), feature_key),
+        )
+        if updated.rowcount == 0:
+            connection.execute(
+                "INSERT INTO admin_feature_flags (feature_key, enabled, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
+                (feature_key, int(payload.enabled)),
+            )
         auth.audit(legacy, _user["account_id"], "feature.enabled" if payload.enabled else "feature.disabled", feature_key)
     return {"key": feature_key, "enabled": payload.enabled}
 
@@ -258,7 +252,7 @@ def audit():
 @router.get("/data/{table}")
 def application_data(table: str, connection=Depends(get_database)):
     order_by = {
-        "habit_entries": "created_at", "user_consents": "created_at", "ai_conversations": "updated_at",
+        "habit_entries": "created_at", "health_routines": "updated_at", "user_consents": "created_at", "ai_conversations": "updated_at",
         "ai_messages": "created_at", "ai_request_limits": "created_at", "arena_profiles": "updated_at",
         "arena_matches": "created_at", "arena_match_participants": "match_id", "arena_elo_history": "created_at",
         "arena_achievements": "awarded_at", "arena_bot_profiles": "updated_at", "arena_bot_matches": "created_at",
@@ -272,7 +266,7 @@ def application_data(table: str, connection=Depends(get_database)):
 @router.delete("/data/{table}/{record_id}", dependencies=[Depends(require_csrf)])
 def delete_application_record(table: str, record_id: str, _user=Depends(require_admin), connection=Depends(get_database)):
     allowed = {
-        "habit_entries": ("id", "Nhật ký sức khỏe"), "user_consents": ("id", "lịch sử đồng ý"),
+        "habit_entries": ("id", "Nhật ký sức khỏe"), "health_routines": ("user_id", "routine Health Hub"), "user_consents": ("id", "lịch sử đồng ý"),
         "ai_conversations": ("id", "hội thoại AI"), "ai_messages": ("id", "tin nhắn AI"),
         "ai_request_limits": ("id", "giới hạn yêu cầu AI"), "arena_profiles": ("user_id", "hồ sơ Arena"),
         "arena_matches": ("id", "trận Arena"), "arena_elo_history": ("id", "lịch sử ELO"),
@@ -287,14 +281,24 @@ def delete_application_record(table: str, record_id: str, _user=Depends(require_
         if not separator:
             raise HTTPException(422, "Mã bản ghi không hợp lệ.")
         keys = ("match_id", "user_id") if table == "arena_match_participants" else ("user_id", "achievement_key")
-        result = connection.execute(f"DELETE FROM {table} WHERE {keys[0]} = ? AND {keys[1]} = ?", (left, right))
+        query = f"DELETE FROM {table} WHERE {keys[0]} = ? AND {keys[1]} = ?"
+        parameters = (left, right)
     else:
-        result = connection.execute(f"DELETE FROM {table} WHERE {key} = ?", (record_id,))
-    if result.rowcount == 0:
-        raise HTTPException(404, "Không tìm thấy bản ghi.")
-    connection.commit()
+        query = f"DELETE FROM {table} WHERE {key} = ?"
+        parameters = (record_id,)
     auth = legacy_auth()
-    with auth.faces._connect() as legacy:
+    with identity_transaction(connection, auth) as legacy:
+        if table == "health_routines":
+            from backend.routines import lock_routine
+            lock_routine(connection, record_id)
+        if table == "habit_entries":
+            from backend.routines import uncomplete_entry
+            entry = connection.execute("SELECT user_id, recorded_at FROM habit_entries WHERE id = ?", (record_id,)).fetchone()
+            if entry:
+                uncomplete_entry(connection, entry["user_id"], record_id, entry["recorded_at"])
+        result = connection.execute(query, parameters)
+        if result.rowcount == 0:
+            raise HTTPException(404, "Không tìm thấy bản ghi.")
         auth.audit(legacy, _user["account_id"], "application_data.deleted", f"{table}:{record_id}")
     return {"success": True, "deleted": label}
 

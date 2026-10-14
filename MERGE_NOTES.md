@@ -22,8 +22,28 @@ iframe hoặc bộ chấm điểm nhanh độc lập trong luồng người dùn
 palette AURAMAXX. Email và tên đăng nhập cũ dùng chung `/api/auth/login`, một
 phiên và CSRF token; quay về đường dẫn nội bộ sau đăng nhập.
 
-Aura AI nhận số đo báo cáo qua lựa chọn đính kèm. Nút routine mở cùng composer
-để người dùng xem và gửi câu hỏi; không tự gọi AI. Bộ lọc báo cáo gốc loại bỏ
+Health Hub dùng giao diện AURAMAXX cùng thuật toán và thư viện của PR
+`AI_Routine_Builder`. Lõi đã chuyển vào `backend/routines.py` và
+`backend/routine_library.json`; lịch, mức độ/phản hồi, hoàn thành, bỏ qua, đổi
+giờ, thêm từ thư viện và chuỗi ngày dùng một bản ghi `health_routines` theo
+user. Dữ liệu được lưu trên Supabase; revision và khóa giao dịch ngăn hai thiết
+bị ghi đè nhau. Việc hoàn thành và bản ghi nhật ký được commit cùng nhau; xóa
+bản ghi routine trong nhật ký cũng bỏ trạng thái hoàn thành tương ứng. Đổi
+ngày dùng giờ Việt Nam trên server; bảo vệ tối đa 2 ngày mỗi tháng và xử lý cả
+khoảng nghỉ nhiều ngày. Các mục đã hoàn thành/thêm riêng được giữ khi đổi mức độ.
+
+Nút routine ở Face Lab và Aura AI đều mở Health Hub. Dùng số đo là lựa chọn
+chủ động, cần cả consent phân tích và lưu sức khỏe. Chỉ bốn chỉ số bề mặt da
+được nhận, không nhận ảnh, landmark hoặc định danh. Thu hồi consent phân tích
+xóa số đo khỏi routine; thu hồi lưu sức khỏe xóa routine/chuỗi. Bảng mới có RLS,
+được xuất trong backup, quản lý trong `/manage`, và cascade khi xóa tài khoản.
+Những nội dung hướng dẫn có cam kết thay đổi xương mặt hoặc suy luận sức khỏe
+từ ảnh đã được đổi thành hướng dẫn tham khảo; mục mewing được đánh dấu tùy chọn.
+Module `assets/daily.js` là nguồn lịch sử của PR, không được tải trong ứng dụng
+hợp nhất. Không có trang hoặc tab Routine Builder riêng.
+
+Aura AI nhận số đo báo cáo qua lựa chọn đính kèm để giải thích kết quả.
+Bộ lọc báo cáo gốc loại bỏ
 ảnh, điểm mốc và định danh; context được giới hạn trước khi gửi nhà cung cấp.
 Chỉ câu hỏi và câu trả lời được lưu trong lịch sử, không lưu JSON báo cáo thô.
 
@@ -97,6 +117,7 @@ node tests/check_database_ui.cjs
 node tests/check_chat_browser.cjs
 node tests/check_pages_hosting.cjs
 node tests/browser_unified_smoke.cjs
+.\.venv\Scripts\python.exe -B -m unittest tests.test_health_hub tests.test_api
 ```
 
 Các bài tích hợp dùng database tạm, không đụng dữ liệu người dùng. Browser smoke

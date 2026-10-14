@@ -10,6 +10,7 @@ from backend.database import get_database
 from backend.features import require_feature
 from backend.schemas import HabitCreate, HabitRecord
 from backend.security import get_current_user, require_consent, require_csrf
+from backend.routines import routine_transaction, habit_id, ITEMS, update_completion
 
 
 router = APIRouter(prefix="/api/habits", tags=["Health Hub"], dependencies=[Depends(require_feature("health_tracking"))])
@@ -70,11 +71,18 @@ def delete_habit(
     user: sqlite3.Row = Depends(get_current_user),
     connection: sqlite3.Connection = Depends(get_database),
 ) -> None:
-    require_consent(connection, user["id"], "health_tracking")
-    result = connection.execute(
-        "DELETE FROM habit_entries WHERE id = ? AND user_id = ?",
-        (record_id, user["id"]),
-    )
-    if result.rowcount == 0:
-        raise HTTPException(status_code=404, detail="Không tìm thấy bản ghi.")
-    connection.commit()
+    with routine_transaction(connection, user["id"]) as (state, _version):
+        row = connection.execute("SELECT recorded_at FROM habit_entries WHERE id = ? AND user_id = ?", (record_id, user["id"])).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Không tìm thấy bản ghi.")
+        day = row["recorded_at"][:10]
+        task_id = next((key for key in ITEMS if habit_id(user["id"], day, key) == record_id), None)
+        connection.execute("DELETE FROM habit_entries WHERE id = ? AND user_id = ?", (record_id, user["id"]))
+        if task_id:
+            if day == state["date"]:
+                for task in state["tasks"]:
+                    if task["id"] == task_id:
+                        task["completed"] = False
+                update_completion(state)
+            else:
+                state["completed_dates"] = [key for key in state["completed_dates"] if key != day]

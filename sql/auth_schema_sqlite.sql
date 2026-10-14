@@ -30,3 +30,11 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS audit_logs_recent ON audit_logs(created_at DESC, id DESC);
+CREATE TABLE IF NOT EXISTS user_data (
+    account_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+    latest_report_json TEXT,
+    daily_routine_json TEXT,
+    streak_count INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS user_data_account ON user_data(account_id);

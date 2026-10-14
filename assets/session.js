@@ -55,8 +55,11 @@
       });
       if (!response.ok && response.status !== 401) throw new Error('Chưa đăng xuất được. Vui lòng thử lại.');
       if (typeof window.stopCameraStream === 'function') window.stopCameraStream();
+      const isAdmin = state.account?.role === 'admin';
+      state.account = null;
+      state.csrf = null;
       if (window.parent !== window && apiPrefix !== '/api') window.parent.postMessage({ type: 'auramaxx:logged-out' }, window.location.origin);
-      else window.location.assign(apiPrefix === '/api' ? state.account?.role === 'admin' ? '/admin-login.html' : '/login.html' : '/#my-aura');
+      else window.location.assign(apiPrefix === '/api' ? (isAdmin ? '/admin-login.html' : '/login.html') : '/#my-aura');
     }
   };
   document.querySelectorAll('[data-logout]').forEach(button => button.addEventListener('click', async () => {

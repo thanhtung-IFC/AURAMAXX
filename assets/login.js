@@ -9,7 +9,7 @@
     document.getElementById('displayNameLabel').hidden = !value;
     document.getElementById('displayName').required = value;
     document.getElementById('passwordHint').hidden = !value;
-    document.getElementById('password').minLength = value ? 12 : 1;
+    document.getElementById('password').minLength = value ? 6 : 1;
     document.getElementById('password').autocomplete = value ? 'new-password' : 'current-password';
     document.getElementById('formTitle').textContent = value ? 'Tạo tài khoản của bạn' : 'Chào mừng bạn trở lại';
     button.textContent = value ? 'Tạo tài khoản' : 'Đăng nhập';

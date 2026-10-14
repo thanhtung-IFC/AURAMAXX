@@ -252,8 +252,11 @@
     let currentChallengeStep = 1; // 1: chớp mắt 2 lần, 2: há miệng, 3: quay mặt sang trái
     let challengeBlinkCount = 0;
 
-    // Kho lưu trữ khuôn mặt
-    const STORAGE_KEY = 'visionface_registered_users_v1';
+    // Kho lưu trữ khuôn mặt (cách ly theo từng tài khoản)
+    function getRegisteredFaceStorageKey() {
+      const accountId = window.VisionAuth?.state?.account?.id || 'guest';
+      return `visionface_acc_${accountId}_registered_users_v1`;
+    }
     let registeredDatabase = [];
 
     function createFaceMeshEngine() {
@@ -430,11 +433,17 @@
     // Vẽ camera độc lập với kết quả AI, kể cả khi mô hình gặp lỗi.
     function startFrameProcessingLoop() {
       cancelVideoFrameLoop();
+      let lastInferenceTimestamp = 0;
 
       async function onCameraFrame() {
         if (!isCameraActive) return;
         try {
           if (videoElement.readyState >= 2 && !videoElement.paused && !videoElement.ended && videoElement.videoWidth > 0 && videoElement.videoHeight > 0) {
+            // Tạm dừng phân tích khi người dùng đang chuyển tab hoặc tab nền để tránh lag và nóng máy trên điện thoại
+            const isTabHidden = typeof document !== 'undefined' && document.hidden;
+            const isDailyTab = typeof currentModalActiveTab !== 'undefined' && currentModalActiveTab === 'daily';
+            if (isTabHidden || isDailyTab) return;
+
             if (faceMesh && videoElement.currentTime === lastInferenceVideoTime) return;
             const w = canvasElement.width;
             const h = canvasElement.height;
@@ -449,14 +458,21 @@
               canvasCtx.restore();
             }
 
-            if (faceMesh && !isProcessingFrame) {
+            const isMobileDevice = (typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) || (typeof window !== 'undefined' && window.innerWidth < 768);
+            const minInferenceInterval = isMobileDevice ? 35 : 0;
+            const now = performance.now();
+
+            if (faceMesh && !isProcessingFrame && (now - lastInferenceTimestamp >= minInferenceInterval)) {
               isProcessingFrame = true;
+              lastInferenceTimestamp = now;
               const engine = faceMesh;
-              const startStamp = performance.now();
+              const startStamp = now;
               try {
                 // Đóng băng đúng khung hình đưa vào AI để ảnh và landmarks khớp nhau.
+                // Trên điện thoại, giới hạn độ phân giải AI ở 480-640px để tránh giật lag GPU/CPU và tiết kiệm pin
                 if (!inferenceFrameCanvas) inferenceFrameCanvas = document.createElement('canvas');
-                const scale = Math.min(1, 1280 / Math.max(videoElement.videoWidth, videoElement.videoHeight));
+                const maxDim = isMobileDevice ? 480 : 640;
+                const scale = Math.min(1, maxDim / Math.max(videoElement.videoWidth, videoElement.videoHeight));
                 const inputWidth = Math.round(videoElement.videoWidth * scale);
                 const inputHeight = Math.round(videoElement.videoHeight * scale);
                 if (inferenceFrameCanvas.width !== inputWidth) inferenceFrameCanvas.width = inputWidth;
@@ -835,30 +851,31 @@
         if (chkShowMesh.checked && tessellation) {
           canvasCtx.strokeStyle = 'rgba(6, 182, 212, 0.28)';
           canvasCtx.lineWidth = 0.75;
+          canvasCtx.beginPath();
           for (const [start, end] of tessellation) {
             const p1 = landmarks[start];
             const p2 = landmarks[end];
             if (p1 && p2) {
-              canvasCtx.beginPath();
               canvasCtx.moveTo(p1.x * w, p1.y * h);
               canvasCtx.lineTo(p2.x * w, p2.y * h);
-              canvasCtx.stroke();
             }
           }
+          canvasCtx.stroke();
         }
 
-        // Vẽ Điểm mốc ngũ quan
+        // Vẽ Điểm mốc ngũ quan (Gom 1 lần vẽ path)
         if (chkShowPoints.checked) {
           canvasCtx.fillStyle = '#10b981';
           const points = [1, 33, 133, 362, 263, 61, 291, 13, 14, 468, 473];
+          canvasCtx.beginPath();
           for (const idx of points) {
             const pt = landmarks[idx];
             if (pt) {
-              canvasCtx.beginPath();
+              canvasCtx.moveTo(pt.x * w + 2.5, pt.y * h);
               canvasCtx.arc(pt.x * w, pt.y * h, 2.5, 0, 2 * Math.PI);
-              canvasCtx.fill();
             }
           }
+          canvasCtx.fill();
         }
 
         // Vẽ Bounding Box & HUD
@@ -1220,6 +1237,12 @@
     }
 
     async function loadRegisteredFaces() {
+      if (typeof window !== 'undefined' && window.VisionAuth && window.VisionAuth.ready) {
+        try {
+          await window.VisionAuth.ready;
+        } catch (e) {}
+      }
+
       if (usePythonEngine && isPythonBackendAvailable) {
         try {
           const resp = await fetch(`${PYTHON_BACKEND_URL}/api/faces`);
@@ -1240,7 +1263,7 @@
         return;
       }
       try {
-        const data = localStorage.getItem(STORAGE_KEY);
+        const data = localStorage.getItem(getRegisteredFaceStorageKey());
         registeredDatabase = data ? JSON.parse(data) : [];
       } catch (e) {
         registeredDatabase = [];
@@ -1250,7 +1273,7 @@
 
     function saveRegisteredFaces() {
       if (typeof window !== 'undefined' && window.VisionAuth) return;
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(registeredDatabase));
+      localStorage.setItem(getRegisteredFaceStorageKey(), JSON.stringify(registeredDatabase));
       renderFaceListUI();
     }
 
@@ -2512,7 +2535,9 @@
     }
 
     function displayAnalysisReport(data, snapshotDataUrl) {
+      window.displayAnalysisReport = displayAnalysisReport;
       if (typeof window !== 'undefined' && window.VisionChat) window.VisionChat.setAnalysis(data);
+      if (typeof window !== 'undefined' && window.DailyRoutine) window.DailyRoutine.onFaceAnalysisComplete(data, snapshotDataUrl);
       // 1. Overall heuristic score and capture-quality note.
       txtOverallHarmonyScore.innerText = data.overall_harmony_score;
       badgeOverallGrade.innerText = data.overall_grade;
@@ -2882,10 +2907,15 @@
     });
 
     // Khởi chạy ứng dụng khi DOM tải xong (khởi động song song không chặn tiến trình)
-    function initApp() {
+    async function initApp() {
+      if (typeof window !== 'undefined' && window.VisionAuth && window.VisionAuth.ready) {
+        try {
+          await window.VisionAuth.ready;
+        } catch (e) {}
+      }
       syncCanvasResolution();
       applyMirrorSetting();
-      loadRegisteredFaces();
+      await loadRegisteredFaces();
 
       // Khởi chạy song song không chờ đợi chặn lẫn nhau
       setupFaceMeshEngine();

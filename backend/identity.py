@@ -77,6 +77,31 @@ def ensure_legacy_account(connection, user, display_name=None):
     return linked_account(connection, user["id"])
 
 
+def register_user_account(connection, user_id, email, password_hash, created_at, display_name, response):
+    """Create the application user, identity, audit and session in one commit."""
+    from backend.security import prepare_session, set_session_cookies
+    from backend.transactions import identity_transaction
+
+    auth = legacy_auth()
+    with identity_transaction(connection, auth) as legacy:
+        connection.execute(
+            "INSERT INTO users (id, email, password_hash, created_at) VALUES (?, ?, ?, ?)",
+            (user_id, email, password_hash, created_at),
+        )
+        account = auth.create_account(
+            "aura_" + uuid.UUID(user_id).hex, display_name or email[:120],
+            secrets.token_urlsafe(48), transaction=legacy,
+        )
+        hashed = legacy.execute("SELECT password_hash FROM accounts WHERE id = ?", (account["id"],)).fetchone()[0]
+        connection.execute(
+            "INSERT INTO legacy_account_links (user_id, account_id, credential_hash) VALUES (?, ?, ?)",
+            (user_id, account["id"], hashlib.sha256(hashed.encode()).hexdigest()),
+        )
+        session_token, csrf_token = prepare_session(connection, user_id)
+    set_session_cookies(response, session_token, csrf_token)
+    return account
+
+
 def login_legacy(connection, username, password, role=None):
     auth = legacy_auth()
     if role is None:
@@ -115,14 +140,41 @@ def revoke_linked_sessions(connection, account_id):
     connection.commit()
 
 
-def delete_legacy_account(connection, user_id):
-    account = linked_account(connection, user_id)
-    if account is None:
-        return
+def delete_user_account(connection, user_id, actor_id=None, *, account_id=None):
+    """Delete both sides of an account and its owned data atomically.
+
+    An administrator may delete a disabled or not-yet-projected legacy user.
+    Read the target inside the write lock without requiring an active session.
+    """
+    from backend.transactions import identity_transaction
+
     auth = legacy_auth()
-    if account["role"] == "admin":
-        raise HTTPException(403, "Tài khoản quản trị được quản lý qua công cụ quản trị.")
-    for person_id in auth.owned_ids(account["id"]):
-        auth.faces.delete_person(person_id, actor_id=account["id"], access_account_id=account["id"])
-    with auth.faces._connect() as legacy:
-        legacy.execute("DELETE FROM accounts WHERE id = ?", (account["id"],))
+    with identity_transaction(connection, auth) as legacy:
+        if user_id is not None:
+            link = connection.execute(
+                "SELECT account_id FROM legacy_account_links WHERE user_id = ?", (user_id,),
+            ).fetchone()
+            if account_id is not None and (link is None or link["account_id"] != account_id):
+                raise HTTPException(409, "Liên kết tài khoản đã thay đổi. Vui lòng tải lại.")
+            account_id = link["account_id"] if link else None
+        elif account_id is not None:
+            link = connection.execute(
+                "SELECT user_id FROM legacy_account_links WHERE account_id = ?", (account_id,),
+            ).fetchone()
+            user_id = link["user_id"] if link else None
+
+        account = legacy.execute("SELECT role FROM accounts WHERE id = ?", (account_id,)).fetchone()
+        if account and account[0] == "admin":
+            raise HTTPException(403, "Tài khoản quản trị được quản lý qua công cụ quản trị.")
+        if account:
+            actor = actor_id or account_id
+            people = legacy.execute("SELECT person_id FROM account_people WHERE account_id = ?", (account_id,)).fetchall()
+            for person in people:
+                legacy.execute("DELETE FROM people WHERE id = ?", (person[0],))
+                auth.audit(legacy, actor, "person.deleted", person[0])
+            if people and auth.faces.backend != "sqlserver":
+                auth.faces._bump_revision(legacy)
+            legacy.execute("DELETE FROM accounts WHERE id = ?", (account_id,))
+            auth.audit(legacy, actor, "account.deleted", account_id)
+        if user_id is not None:
+            connection.execute("DELETE FROM users WHERE id = ?", (user_id,))
