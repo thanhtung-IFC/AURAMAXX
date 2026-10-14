@@ -368,6 +368,65 @@ class ApiIntegrationTests(unittest.TestCase):
         self.assertEqual(code, 200)
         self.assertIn("application/zip", headers["Content-Type"])
 
+    def test_admin_login_has_a_separate_page_and_rejects_user_accounts(self):
+        with self.client.open(self.base_url + "/manage") as page:
+            self.assertIn("/admin-login.html", page.url)
+            self.assertIn('id="admin-login-form"', page.read().decode("utf-8"))
+            self.assertEqual(page.headers.get("Cache-Control"), "no-store")
+        email, password = self.register()
+        old_token = next(cookie.value for cookie in self.cookies if cookie.name == "auramaxx_session")
+        code, _data, headers = self.request("POST", "/api/auth/admin/login", {"email": email, "password": password})
+        self.assertEqual(code, 401)
+        self.assertEqual(headers.get_all("Set-Cookie"), None)
+        self.assertEqual(next(cookie.value for cookie in self.cookies if cookie.name == "auramaxx_session"), old_token)
+        self.assertEqual(self.request("GET", "/api/auth/me")[1]["role"], "user")
+        for identity in ("missing_admin", "integration_admin"):
+            code, _data, headers = self.request("POST", "/api/auth/admin/login", {"email": identity, "password": "Incorrect password 123"})
+            self.assertEqual(code, 401)
+            self.assertIsNone(headers.get_all("Set-Cookie"))
+        code, admin, headers = self.request("POST", "/api/auth/admin/login", {"email": "integration_admin", "password": "Integration admin password 123"})
+        self.assertEqual(code, 200, admin)
+        self.assertEqual(admin["role"], "admin")
+        self.assertTrue(any("HttpOnly" in value for value in headers.get_all("Set-Cookie")))
+        self.assertTrue(self.request("GET", "/api/manage/status")[1]["is_central"])
+        self.assertEqual(self.request("POST", "/api/auth/logout", {})[0], 204)
+        self.assertEqual(self.request("GET", "/api/manage/status")[0], 401)
+
+    def test_admin_delegation_temporary_password_and_three_admin_limit(self):
+        self.assertEqual(self.request("POST", "/api/auth/admin/login", {"email": "integration_admin", "password": "Integration admin password 123"})[0], 200)
+        central_cookies, central_client = self.cookies, self.client
+        created = []
+        try:
+            for _ in range(2):
+                username = "delegate_" + uuid4().hex[:12]
+                code, account, _headers = self.request("POST", "/api/manage/accounts", {"username": username, "display_name": "Delegate admin", "role": "admin"})
+                self.assertEqual(code, 201, account)
+                created.append((username, account))
+            self.assertEqual(self.request("POST", "/api/manage/accounts", {"username": "fourth_" + uuid4().hex[:12], "display_name": "Fourth admin", "role": "admin"})[0], 409)
+            self.setUp()
+            username, account = created[0]
+            temporary = account["temporary_password"]
+            code, logged_in, _ = self.request("POST", "/api/auth/admin/login", {"email": username, "password": temporary})
+            self.assertEqual(code, 200, logged_in)
+            self.assertTrue(logged_in["must_change_password"])
+            self.assertEqual(self.request("GET", "/api/manage/status")[0], 403)
+            with self.client.open(self.base_url + "/manage") as page:
+                self.assertIn("/account.html?next=", page.url)
+            permanent = "Delegate permanent password 123"
+            self.assertEqual(self.request("POST", "/api/vision/auth/password", {"current_password": temporary, "new_password": permanent})[0], 200)
+            self.assertEqual(self.request("GET", "/api/auth/me")[0], 401)
+            code, logged_in, _ = self.request("POST", "/api/auth/admin/login", {"email": username, "password": permanent})
+            self.assertEqual(code, 200, logged_in)
+            self.assertFalse(logged_in["must_change_password"])
+            self.assertFalse(self.request("GET", "/api/manage/status")[1]["is_central"])
+            self.assertEqual(self.request("GET", "/api/manage/accounts")[0], 200)
+            self.assertEqual(self.request("PATCH", "/api/manage/features/aura_ai", {"enabled": False})[0], 403)
+            self.assertEqual(self.request("POST", "/api/manage/accounts", {"username": "forbidden_admin", "display_name": "Forbidden", "role": "admin"})[0], 403)
+        finally:
+            self.cookies, self.client = central_cookies, central_client
+            for _username, account in created:
+                self.request("PATCH", "/api/manage/accounts/" + account["account"]["id"] + "/role", {"role": "user"})
+
     def test_health_and_ai_status_and_cors(self) -> None:
         code, data, _ = self.request("GET", "/api/health")
         self.assertEqual(code, 200)

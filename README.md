@@ -29,12 +29,15 @@ SQL Server hoặc cấp quyền quản trị Windows. Nếu web đã chạy, t�
 Trong **My Aura**, chọn đăng nhập để mở lại **bố cục trang đăng nhập cũ** đã đổi
 nhận diện AURAMAXX. Dùng email hoặc tên đăng nhập VisionFace hiện có; sau đăng
 nhập sẽ quay về trang đang dùng. Bật các lựa chọn đồng ý cần dùng trong My Aura.
-Quản trị và đổi mật khẩu được liên kết
-ngay trong tài khoản. `python server.py` cũng mở ứng dụng hợp nhất.
+Đăng nhập quản trị riêng tại **http://127.0.0.1:8000/admin-login.html** bằng tên
+đăng nhập hoặc email admin. Đăng nhập thành công mở thẳng `/manage`; tài khoản
+người dùng bị chặn. Admin dùng mật khẩu tạm phải đổi mật khẩu rồi đăng nhập
+lại. Trang quản trị có nút đăng xuất admin. `python server.py` cũng mở ứng dụng hợp nhất.
 
 Cả dữ liệu AURAMAXX và VisionFace được lưu trong **một PostgreSQL trên
-Supabase**. `DATABASE_URL` trong `.env` là kết nối chung. Đăng nhập admin trong
-My Aura và chọn **Quản lý dữ liệu**, hoặc mở **http://127.0.0.1:8000/manage**.
+Supabase**. `DATABASE_URL` trong `.env` là kết nối chung. Mở
+**http://127.0.0.1:8000/admin-login.html**, hoặc vào `/manage` để được chuyển đến
+trang đăng nhập quản trị khi chưa có quyền.
 Trang này quản lý tài khoản, hồ sơ, dữ liệu ứng dụng, nhật ký quản trị và bản sao lưu.
 Phần quản trị web cũ đã được gỡ. Xem [OWNER_DATA.md](OWNER_DATA.md) để mở dữ liệu
 trong Supabase và xem biên bản chuyển dữ liệu.

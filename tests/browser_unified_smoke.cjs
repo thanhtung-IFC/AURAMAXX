@@ -234,16 +234,17 @@ function cdp(ws, exceptions) {
     await click('#logout-button');
     await until(() => evaluate(`document.querySelector('.profile-card h2').textContent === 'Chưa đăng nhập'`), 'logout');
     await send('Page.navigate', { url: base + '/manage' });
-    await until(() => evaluate(`!document.querySelector('#manage-access')?.hidden`), 'owner login guard');
-    await send('Page.navigate', { url: base + '/#my-aura' });
-    await until(() => evaluate(`!!document.querySelector('[data-auth-open="login"]')`), 'main auth ready');
-    await click('[data-auth-open="login"]');
-    await until(() => evaluate(`location.pathname === '/login.html' && !!document.querySelector('#loginForm')`),'owner login page');
-    assert.equal(await evaluate(`document.documentElement.scrollWidth <= innerWidth+1`),true,'original login mobile layout');
-    fs.writeFileSync(path.join(outputRoot,'native-login-mobile.png'),Buffer.from((await send('Page.captureScreenshot',{format:'png'})).data,'base64'));
-    await evaluate(`document.querySelector('#username').value='browser_owner';document.querySelector('#password').value='Browser owner password 123';document.querySelector('#loginForm').requestSubmit()`);
-    await until(() => evaluate(`!document.querySelector('[data-unified-admin]').hidden`), 'owner role');
-    await click('[data-unified-admin]');
+    await until(() => evaluate(`location.pathname === '/admin-login.html' && !!document.querySelector('#admin-login-form')`), 'dedicated admin login guard');
+    assert.equal(await evaluate(`document.querySelector('#tabRegister') === null`),true,'admin flow has no self-registration');
+    assert.equal(await evaluate(`document.documentElement.scrollWidth <= innerWidth+1`),true,'admin login mobile layout');
+    fs.writeFileSync(path.join(outputRoot,'admin-login-mobile.png'),Buffer.from((await send('Page.captureScreenshot',{format:'png'})).data,'base64'));
+    await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});
+    fs.writeFileSync(path.join(outputRoot,'admin-login-desktop.png'),Buffer.from((await send('Page.captureScreenshot',{format:'png'})).data,'base64'));
+    await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+    await evaluate(`document.querySelector('#admin-identity').value=${JSON.stringify(email)};document.querySelector('#admin-password').value='Browser unified password 123';document.querySelector('#admin-login-form').requestSubmit()`);
+    await until(() => evaluate(`document.querySelector('#admin-login-message').textContent.length > 0 && !document.querySelector('#admin-submit').disabled`),'regular user cannot sign into admin flow');
+    assert.equal(await evaluate(`location.pathname === '/admin-login.html' && document.querySelector('#admin-password').value === ''`),true);
+    await evaluate(`document.querySelector('#admin-identity').value='browser_owner';document.querySelector('#admin-password').value='Browser owner password 123';document.querySelector('#admin-login-form').requestSubmit()`);
     await until(() => evaluate(`location.pathname === '/manage' && !document.querySelector('#manage-content')?.hidden && !!document.querySelector('#managed-accounts tr')`), 'single admin area');
     assert.equal(await evaluate(`(async()=> (await fetch('/api/vision/admin/accounts')).status)()`), 410);
     await evaluate(`window.confirm=()=>true`);
@@ -278,6 +279,9 @@ function cdp(ws, exceptions) {
       assert.deepEqual(actual.result.value,{faces:0});
       console.log('PASS: actual pinned MediaPipe module, WASM/model download, IMAGE inference and detector disposal.');
     }
+    await click('#manage-logout');
+    await until(() => evaluate(`location.pathname === '/admin-login.html' && !!document.querySelector('#admin-login-form')`),'admin logout returns to dedicated login');
+    assert.equal(await evaluate(`(async()=> (await fetch('/api/manage/status')).status)()`),401,'admin logout revokes the session');
     assert.deepEqual(exceptions, [], 'uncaught browser errors');
     console.log('PASS: original login and return path; native VisionFace camera, liveness, profiles, multi-view Python report; explicit routine/AI attachment; seven mobile pages; owner management and verified backup. Devices/landmarks and AI provider use test fixtures.');
   } catch (error) {

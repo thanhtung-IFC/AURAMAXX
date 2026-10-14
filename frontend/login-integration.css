@@ -17,3 +17,11 @@
 [hidden]{display:none!important}
 @media(max-width:400px){.auth-page{padding:12px 8px}.journey-brand{font-size:16px}.journey-brand>span{font-size:7px}.auth-panel{padding:28px 18px}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+[data-login-role="admin"] #admin-login-form>label{display:block;margin:16px 0 7px}
+[data-login-role="admin"] #admin-submit{margin-top:22px}
+@media(max-width:760px){
+  [data-login-role="admin"] .journey{padding:24px;min-height:0}
+  [data-login-role="admin"] .journey-content{margin-top:18px}
+  [data-login-role="admin"] .journey h1{margin:14px 0 0;font-size:28px;line-height:1.2}
+  [data-login-role="admin"] .journey-description,[data-login-role="admin"] .journey-steps{display:none}
+}

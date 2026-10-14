@@ -5,6 +5,7 @@ import { showToast } from "./js/ui.js";
 initTheme();
 const $ = selector => document.querySelector(selector);
 let accounts = [], people = [], currentUser = null, statusData = null, featureData = [];
+let loadVersion = 0;
 const node = (tag, text, className) => { const item = document.createElement(tag); item.textContent = text ?? "—"; if (className) item.className = className; return item; };
 const action = (label, callback, danger = false) => { const button = node("button", label, "button button-outline" + (danger ? " manage-danger" : "")); button.type = "button"; button.addEventListener("click", async () => { button.disabled = true; try { await callback(); } catch (error) { showToast(error.message, "error"); } finally { button.disabled = false; } }); return button; };
 function showPassword(password) { $("#managed-temporary-password").value = password; $("#managed-temporary-password").type = "password"; $("#managed-password-dialog").showModal(); }
@@ -54,13 +55,13 @@ function renderRecords(host, records, {table = null, deletable = false} = {}) {
   records.forEach(record => {
     const row = document.createElement("tr");
     columns.forEach(column => { const value = String(record[column] ?? "—"), cell = node("td", value.length > 180 ? value.slice(0, 180) + "…" : value); cell.title = value; row.append(cell); });
-    if (deletable) { const tools = node("td", ""), btn = action("Xóa", async () => { if (!confirm("Xóa bản ghi này? Thao tác này không thể hoàn tác.")) return; const key = table === "arena_profiles" || table === "arena_bot_profiles" ? record.user_id : table === "arena_match_participants" ? `${record.match_id}|${record.user_id}` : table === "arena_achievements" ? `${record.user_id}|${record.achievement_key}` : record.id; await api.delete(`/api/manage/data/${table}/${encodeURIComponent(key)}`); await loadData(); }, true); tools.append(btn); row.append(tools); }
+    if (deletable) { const tools = node("td", ""), btn = action("Xóa", async () => { if (!confirm("Xóa bản ghi này? Thao tác này không thể hoàn tác.")) return; const key = ["arena_profiles", "arena_bot_profiles", "health_routines"].includes(table) ? record.user_id : table === "arena_match_participants" ? `${record.match_id}|${record.user_id}` : table === "arena_achievements" ? `${record.user_id}|${record.achievement_key}` : record.id; await api.delete(`/api/manage/data/${table}/${encodeURIComponent(key)}`); await loadData(); }, true); tools.append(btn); row.append(tools); }
     body.append(row);
   });
   tableNode.append(body); host.append(tableNode);
 }
 
-async function loadData() { const table = $("#managed-data-kind").value, result = await api.get(`/api/manage/data/${table}`); renderRecords($("#managed-data"), result.records, {table, deletable: true}); }
+async function loadData() { const version = loadVersion, table = $("#managed-data-kind").value, result = await api.get(`/api/manage/data/${table}`); if (version !== loadVersion || !currentUser || table !== $("#managed-data-kind").value) return; renderRecords($("#managed-data"), result.records, {table, deletable: true}); }
 function renderFeatures() {
   const host = $("#managed-features"); host.replaceChildren();
   for (const feature of featureData) {
@@ -72,10 +73,15 @@ function renderFeatures() {
 }
 
 async function load() {
+  const version = ++loadVersion;
   try {
-    currentUser = await api.get("/api/auth/me");
-    const status = await api.get("/api/manage/status"); statusData = status;
+    const user = await api.get("/api/auth/me");
+    if (version !== loadVersion) return;
+    const status = await api.get("/api/manage/status");
+    if (version !== loadVersion) return;
+    currentUser = user; statusData = status;
     $("#manage-content").hidden = false; $("#manage-access").hidden = true;
+    $("#manage-logout").hidden = false;
     $("#manage-status").textContent = "Đang đăng nhập an toàn.";
     const identity = $("#admin-identity"); identity.hidden = false; identity.replaceChildren(node("strong", currentUser.display_name), node("span", central() ? "ADMIN TRUNG TÂM · TOÀN QUYỀN" : "ADMIN PHỤ · QUẢN TRỊ VẬN HÀNH", central() ? "central-label" : "delegated-label"));
     $("#storage-title").textContent = `${status.server} · ${status.database}`;
@@ -83,13 +89,45 @@ async function load() {
     const metrics = $("#manage-metrics"); metrics.replaceChildren();
     for (const [label, value] of [["Người dùng", status.counts.users], ["Admin", `${status.admin_count}/${status.admin_limit}`], ["Hồ sơ khuôn mặt", status.faces.people], ["Nhật ký sức khỏe", status.counts.habit_entries], ["Hội thoại AI", status.counts.ai_conversations]]) { const item = node("article", "", "manage-metric"); item.append(node("strong", value), node("span", label)); metrics.append(item); }
     $("#admin-capacity").textContent = `Admin ${status.admin_count}/${status.admin_limit} · chỉ admin trung tâm được cấp hoặc gỡ quyền admin.`;
-    $("#open-create-account").disabled = status.admin_count >= status.admin_limit && central();
-    $("#managed-role").disabled = !central() || status.admin_count >= status.admin_limit;
+    $("#open-create-account").disabled = false;
+    $("#managed-role").disabled = !central();
+    const adminOption = $("#managed-role").querySelector('[value="admin"]');
+    adminOption.disabled = !central() || status.admin_count >= status.admin_limit;
+    if (adminOption.disabled) $("#managed-role").value = "user";
     const [accountData, personData, audit, features] = await Promise.all([api.get("/api/manage/accounts"), api.get("/api/manage/people"), api.get("/api/manage/audit"), api.get("/api/manage/features")]);
+    if (version !== loadVersion) return;
     accounts = accountData.accounts; people = personData.people; featureData = features.features;
     renderAccounts(); renderPeople(); renderRecords($("#managed-audit"), audit.events); renderFeatures(); await loadData();
-  } catch (error) { $("#manage-content").hidden = true; $("#manage-access").hidden = false; $("#manage-status").textContent = error.message; }
+  } catch (error) {
+    if (version !== loadVersion) return;
+    clearManagement();
+    $("#manage-access").hidden = false; $("#manage-status").textContent = error.message;
+    if (error.status === 401) location.replace("/admin-login.html?next=%2Fmanage");
+  }
 }
+
+function clearManagement() {
+  accounts = []; people = []; featureData = []; currentUser = null; statusData = null;
+  $("#manage-content").hidden = true; $("#admin-identity").hidden = true; $("#manage-logout").hidden = true;
+  for (const id of ["managed-accounts", "managed-people", "managed-data", "managed-audit", "managed-features", "manage-metrics", "admin-identity"]) $("#" + id).replaceChildren();
+  $("#managed-account-form").reset(); $("#managed-person-form").reset(); $("#managed-person-owner").replaceChildren();
+  for (const id of ["managed-account-dialog", "managed-person-dialog", "managed-password-dialog"]) if ($("#" + id).open) $("#" + id).close();
+  $("#managed-temporary-password").value = "";
+  $("#backup-download").removeAttribute("href"); $("#backup-download").hidden = true;
+}
+
+$("#manage-retry").addEventListener("click", () => void load());
+$("#manage-logout").addEventListener("click", async event => {
+  event.currentTarget.disabled = true;
+  try {
+    await api.post("/api/auth/logout");
+    loadVersion++; clearManagement();
+    location.replace("/admin-login.html");
+  } catch (error) {
+    if (error.status === 401) { loadVersion++; clearManagement(); location.replace("/admin-login.html"); }
+    else showToast(error.message, "error");
+  } finally { $("#manage-logout").disabled = false; }
+});
 
 function openAccount(account = null) {
   $("#managed-account-form").reset(); $("#managed-account-error").textContent = "";

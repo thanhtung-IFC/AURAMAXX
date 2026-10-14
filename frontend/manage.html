@@ -15,11 +15,11 @@
 </head>
 <body>
   <div class="manage-shell">
-    <header class="manage-header"><a class="brand" href="/">AURAMAXX <span>ADMIN</span></a><div><a href="/#my-aura">Tài khoản của tôi</a><button id="theme-toggle" class="button button-outline" type="button">Sáng / tối</button></div></header>
+    <header class="manage-header"><a class="brand" href="/">AURAMAXX <span>ADMIN</span></a><div><a href="/account.html?next=%2Fmanage">Đổi mật khẩu</a><button id="theme-toggle" class="button button-outline" type="button">Sáng / tối</button><button id="manage-logout" class="button button-outline" type="button" hidden>Đăng xuất admin</button></div></header>
     <main>
       <section class="manage-intro"><div><div class="eyebrow">TRUNG TÂM ĐIỀU HÀNH</div><h1>Quản trị <span>toàn hệ thống.</span></h1><p>Quản lý tính năng, quyền truy cập, hồ sơ và dữ liệu người dùng tại một nơi.</p></div><div id="admin-identity" class="admin-identity" hidden></div></section>
       <p id="manage-status" role="status">Đang kiểm tra quyền quản trị…</p>
-      <section id="manage-access" class="panel" hidden><p>Đăng nhập bằng tài khoản admin để mở trung tâm quản trị.</p><a class="button button-primary" href="/#my-aura">Mở tài khoản</a></section>
+      <section id="manage-access" class="panel" hidden><p>Đăng nhập bằng tài khoản admin để mở trung tâm quản trị.</p><a class="button button-primary" href="/admin-login.html?next=%2Fmanage">Đăng nhập quản trị</a><button id="manage-retry" class="button button-outline" type="button">Thử kết nối lại</button></section>
       <div id="manage-content" hidden>
         <section class="manage-topline"><div class="manage-storage"><span class="panel-overline">MÁY CHỦ & DATABASE</span><strong id="storage-title">Đang tải…</strong><small id="storage-description"></small></div><button id="create-backup" class="button button-outline" type="button">Sao lưu dữ liệu</button><a id="backup-download" class="button button-outline" hidden>Tải bản sao lưu</a></section>
         <section class="manage-metrics" id="manage-metrics" aria-label="Thống kê hệ thống"></section>

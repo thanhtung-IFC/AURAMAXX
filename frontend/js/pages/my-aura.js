@@ -57,6 +57,12 @@ function ensureAccountActions() {
     links.innerHTML = '<a class="button button-outline" href="/account.html">Đổi mật khẩu</a><a class="button button-outline" href="/manage" data-unified-admin hidden>Quản lý dữ liệu</a>';
     actions.after(links);
   }
+  if (!card.querySelector('[data-admin-signin]')) {
+    const link = document.createElement("a");
+    link.href = "/admin-login.html"; link.textContent = "Đăng nhập quản trị";
+    link.className = "text-link"; link.dataset.adminSignin = "";
+    actions.after(link);
+  }
 
   const deleteButton = document.querySelector(".data-control-panel > .button-disabled");
   deleteButton.hidden = true;

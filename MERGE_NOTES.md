@@ -22,6 +22,14 @@ iframe hoặc bộ chấm điểm nhanh độc lập trong luồng người dùn
 palette AURAMAXX. Email và tên đăng nhập cũ dùng chung `/api/auth/login`, một
 phiên và CSRF token; quay về đường dẫn nội bộ sau đăng nhập.
 
+Admin có trang `/admin-login.html` và API `/api/auth/admin/login` riêng. Chỉ
+tài khoản admin đang hoạt động được cấp phiên; quyền và phiên bản mật khẩu
+được kiểm tra lại trong giao dịch ghi phiên/nhật ký. `/manage` chuyển khách
+hoặc người dùng thường về trang admin; mật khẩu tạm chuyển đến
+`/account.html?next=/manage`. Đổi mật khẩu xong quay về đăng nhập admin. Trang
+quản trị có nút đăng xuất và xóa dữ liệu đang hiển thị khi phiên kết thúc.
+Admin trung tâm/admin phụ và giới hạn 3 admin dùng nguyên quyền trên database.
+
 Health Hub dùng giao diện AURAMAXX cùng thuật toán và thư viện của PR
 `AI_Routine_Builder`. Lõi đã chuyển vào `backend/routines.py` và
 `backend/routine_library.json`; lịch, mức độ/phản hồi, hoàn thành, bỏ qua, đổi

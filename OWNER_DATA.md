@@ -7,14 +7,20 @@ Thông tin kết nối không được đưa vào frontend, Git hoặc bản ZIP
 
 ## Mở khu vực quản trị
 
-Chạy `start_auramaxx.bat`, đăng nhập bằng tài khoản hiện có trong My Aura, rồi
-chọn **Quản lý dữ liệu**, hoặc mở **http://127.0.0.1:8000/manage**. Quản trị viên
+Chạy `start_auramaxx.bat`, mở **http://127.0.0.1:8000/admin-login.html** và đăng
+nhập bằng tên đăng nhập hoặc email của tài khoản admin hiện có. Đăng nhập thành
+công mở thẳng **http://127.0.0.1:8000/manage**. Quản trị viên
 có thể quản lý tài khoản, mật khẩu tạm, trạng thái khóa, phiên đăng nhập, hồ sơ
 khuôn mặt, nhật ký, dữ liệu ứng dụng và bản sao lưu đầy đủ.
 
 Trang quản trị cũ đã được gỡ. `/api/vision/admin/*` trả trạng thái 410;
 `/api/manage/*` yêu cầu quyền admin và CSRF token cho thao tác thay đổi.
 Đăng nhập, đổi mật khẩu, Arena, routine và VisionFace dùng chung một phiên.
+Luồng `/api/auth/admin/login` chỉ cấp phiên sau khi kiểm tra quyền admin và
+trạng thái tài khoản trong giao dịch ghi phiên/nhật ký. Tài khoản đang dùng
+trên cùng trình duyệt được thay bằng phiên admin mới. Admin trung tâm giữ
+quyền cao nhất; tối đa 3 admin. Admin phụ có mật khẩu tạm phải đổi mật khẩu
+trước khi quản lý, rồi đăng nhập lại ở trang admin.
 
 ## Mở dữ liệu trong Supabase
 
