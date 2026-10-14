@@ -40,7 +40,7 @@ class DatabaseConfigTests(unittest.TestCase):
             with patch("postgres_store.PostgresFaceStore") as constructor:
                 with patch.dict(os.environ, {"DATABASE_URL": "secret-value"}):
                     create_store(self.root)
-                constructor.assert_called_once_with("secret-value")
+                constructor.assert_called_once_with("secret-value", schema="visionface")
 
     def test_certificate_trust_is_explicit_and_typed(self):
         (self.root / CONFIG_NAME).write_text(json.dumps({"backend": "sqlserver"}))

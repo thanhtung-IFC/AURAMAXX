@@ -1,6 +1,7 @@
 (() => {
   const root = document.documentElement;
-  const key = 'visionface-theme';
+  const key = window.VISIONFACE_API_PREFIX ? 'auramaxx-theme' : 'visionface-theme';
+  const logoUrl = new URL('visionface-logo.png', document.currentScript.src).href;
   const login = /(?:^|\/)(?:admin-)?login\.html$/.test(location.pathname);
   let saved;
   try { saved = localStorage.getItem(key); } catch {}
@@ -41,7 +42,7 @@
           brand.prepend(image);
         }
       }, { once: true });
-      image.src = new URL('assets/visionface-logo.png', location.href).href;
+      image.src = logoUrl;
     });
   });
   window.addEventListener('storage', event => {

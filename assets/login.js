@@ -42,7 +42,7 @@
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.message || 'Không thể đăng nhập.');
+      if (!response.ok) throw new Error(data.message || data.detail || 'Không thể đăng nhập.');
       document.getElementById('password').value = '';
       if (register) {
         switchMode(false);

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 520" fill="none">
+  <defs>
+    <radialGradient id="aura" cx="0" cy="0" r="1" gradientTransform="matrix(0 280 -300 0 300 240)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#16485b" stop-opacity=".68"/><stop offset="1" stop-color="#111720" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="face" x1="198" x2="410" y1="126" y2="442" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#c5d7e3" stop-opacity=".14"/><stop offset=".48" stop-color="#68c6ce" stop-opacity=".12"/><stop offset="1" stop-color="#3478f6" stop-opacity=".04"/>
+    </linearGradient>
+    <linearGradient id="line" x1="180" x2="430" y1="122" y2="446" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f0cd82" stop-opacity=".86"/><stop offset=".5" stop-color="#6ce1d8" stop-opacity=".92"/><stop offset="1" stop-color="#5b8ffc" stop-opacity=".68"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <ellipse cx="300" cy="260" fill="url(#aura)" rx="290" ry="250"/>
+  <ellipse cx="300" cy="260" stroke="#6edbd2" stroke-opacity=".12" rx="222" ry="232"/>
+  <ellipse cx="300" cy="260" stroke="#7eaaff" stroke-dasharray="2 9" stroke-opacity=".28" rx="246" ry="252"/>
+  <path d="M300 67c-94 0-159 74-159 171 0 78 35 133 75 178 23 26 51 49 84 57 33-8 61-31 84-57 40-45 75-100 75-178 0-97-65-171-159-171Z" fill="url(#face)" stroke="url(#line)" stroke-opacity=".75" stroke-width="1.5"/>
+  <path d="M150 243 191 168 237 115 300 67 363 115 409 168 450 243M150 243 178 329 216 402 300 473 384 402 422 329 450 243M191 168 216 226 178 329M237 115 254 177 216 226 150 243M363 115 346 177 384 226 450 243M409 168 384 226 422 329M216 226 254 177 300 183 346 177 384 226M178 329 245 309 300 330 355 309 422 329M216 402 264 374 300 390 336 374 384 402M254 177 263 247 300 183 337 247 346 177M263 247 244 289 300 330 356 289 337 247M244 289 245 309 263 345 300 390 337 345 355 309 356 289M300 183V330" stroke="url(#line)" stroke-opacity=".56" stroke-width="1"/>
+  <path d="M205 256c15-16 32-23 51-21M344 235c19-2 36 5 51 21M216 263c12 10 25 10 38 0M346 263c13 10 26 10 38 0M300 235v65l-17 9 17 8 17-8M261 352c23 14 55 14 78 0" stroke="#b6d8de" stroke-opacity=".72" stroke-linecap="round" stroke-width="1.5"/>
+  <path d="M300 42v436M119 270h362" stroke="#7bb8dc" stroke-dasharray="4 8" stroke-opacity=".32"/>
+  <g fill="#d4bd7b" filter="url(#glow)"><circle cx="300" cy="67" r="3.5"/><circle cx="191" cy="168" r="3"/><circle cx="409" cy="168" r="3"/><circle cx="216" cy="226" r="3"/><circle cx="384" cy="226" r="3"/><circle cx="300" cy="183" r="3"/><circle cx="300" cy="330" r="3"/><circle cx="245" cy="309" r="2.8"/><circle cx="355" cy="309" r="2.8"/><circle cx="300" cy="390" r="3"/><circle cx="300" cy="473" r="3.5"/></g>
+  <g fill="#6de2d8" filter="url(#glow)"><circle cx="254" cy="177" r="2.4"/><circle cx="346" cy="177" r="2.4"/><circle cx="263" cy="247" r="2.4"/><circle cx="337" cy="247" r="2.4"/><circle cx="178" cy="329" r="2.4"/><circle cx="422" cy="329" r="2.4"/><circle cx="216" cy="402" r="2.4"/><circle cx="384" cy="402" r="2.4"/></g>
+</svg>

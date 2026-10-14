@@ -43,9 +43,11 @@ class ProfileBackendTests(unittest.TestCase):
             raise ReachedProfileAnalysis
 
         with patch("face_aesthetic_analyzer.run_comprehensive_face_analysis", return_value={"success": True}):
-            with patch("face_aesthetic_analyzer.analyze_profile_view", side_effect=inspect_profile):
-                with self.assertRaises(ReachedProfileAnalysis):
-                    run_multi_view_face_analysis("unused", points, profile, points, 640, 480)
+            # Isolate dimension handling from the deliberate pose-quality gate.
+            with patch("face_aesthetic_analyzer._pose_quality", return_value={"yaw_deg": 25, "roll_deg": 0, "clipped": False}):
+                with patch("face_aesthetic_analyzer.analyze_profile_view", side_effect=inspect_profile):
+                    with self.assertRaises(ReachedProfileAnalysis):
+                        run_multi_view_face_analysis("unused", points, profile, points, 640, 480)
 
 
 if __name__ == "__main__":

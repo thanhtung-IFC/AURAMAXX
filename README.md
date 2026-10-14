@@ -1,4 +1,62 @@
-# 🌟 VisionFace Pro - AI Facial Biometrics & Aesthetic Diagnostic System
+# AURAMAXX + VisionFace — website hợp nhất
+
+Giao diện AURAMAXX là trang chính, kết hợp Face Lab, Face Arena/ELO, Health Hub,
+Aura AI, tiến trình và tài khoản. **Face Lab tích hợp trực tiếp VisionFace**:
+camera USB, nhận diện, liveness, hồ sơ, tải ảnh và phân tích chính diện/góc nghiêng
+đều nằm trong giao diện AURAMAXX, sử dụng thuật toán Python gốc. Không còn khung
+nhúng hoặc hai chế độ phân tích riêng. Báo cáo có đường đo và chi tiết da, tóc,
+tỷ lệ; có thể chuyển số đo sang Aura AI để giải thích hoặc xây dựng routine.
+
+Chạy trên Windows: mở `start_auramaxx.bat`, hoặc:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-postgres.txt
+.\.venv\Scripts\python.exe run_web.py
+```
+
+Mở **http://127.0.0.1:8000**. Giao diện và tất cả API chạy chung một cổng.
+Website dùng PostgreSQL trên Supabase nên cần kết nối Internet. Không cần bật
+SQL Server hoặc cấp quyền quản trị Windows. Nếu web đã chạy, tệp BAT mở lại trang.
+Trong **My Aura**, chọn đăng nhập để mở lại **bố cục trang đăng nhập cũ** đã đổi
+nhận diện AURAMAXX. Dùng email hoặc tên đăng nhập VisionFace hiện có; sau đăng
+nhập sẽ quay về trang đang dùng. Bật các lựa chọn đồng ý cần dùng trong My Aura.
+Quản trị và đổi mật khẩu được liên kết
+ngay trong tài khoản. `python server.py` cũng mở ứng dụng hợp nhất.
+
+Cả dữ liệu AURAMAXX và VisionFace được lưu trong **một PostgreSQL trên
+Supabase**. `DATABASE_URL` trong `.env` là kết nối chung. Đăng nhập admin trong
+My Aura và chọn **Quản lý dữ liệu**, hoặc mở **http://127.0.0.1:8000/manage**.
+Trang này quản lý tài khoản, hồ sơ, dữ liệu ứng dụng, nhật ký quản trị và bản sao lưu.
+Phần quản trị web cũ đã được gỡ. Xem [OWNER_DATA.md](OWNER_DATA.md) để mở dữ liệu
+trong Supabase và xem biên bản chuyển dữ liệu.
+
+Muốn chạy bản SQLite riêng để phát triển:
+
+```powershell
+$env:FACE_DB_BACKEND="sqlite"
+$env:AURAMAXX_DB_BACKEND="sqlite"
+.\.venv\Scripts\python.exe run_web.py
+```
+
+Tài khoản/hồ sơ nằm trong schema `visionface`; Arena, nhật ký và hội thoại nằm
+trong schema `public` của cùng database Supabase. Dữ liệu SQL Server đã được
+sao lưu, nhập bổ sung và đối chiếu bằng checksum. Phiên cũ bị thu hồi nên cần
+đăng nhập lại. Database SQL Server nguồn chỉ được giữ để khôi phục, không còn
+được ứng dụng sử dụng. Tệp BAT không khởi động dịch vụ SQL Server.
+
+**Giới hạn hiện tại:** đấu BOT và ELO luyện tập đã có; PvP xếp hạng vẫn bị khóa
+cho đến khi có quy trình xác thực trận trên máy chủ. Aura AI cần cấu hình nhà
+cung cấp AI phía máy chủ. Routine được soạn trong cùng Aura AI; báo cáo chỉ được
+đính kèm khi người dùng chọn gửi, không kèm ảnh/landmark. Xem [MERGE_NOTES.md](MERGE_NOTES.md) để biết kiến
+trúc, cấu hình triển khai và các kiểm thử của bản hợp nhất.
+
+---
+
+# VisionFace Pro — tài liệu nguồn và các backend lịch sử
+
+Phần bên dưới ghi lại công cụ nguồn. Cấu hình chạy hiện tại của website hợp
+nhất là Supabase/PostgreSQL như phần trên; không áp dụng hướng dẫn SQL Server
+cho bản đang dùng.
 
 Hệ thống nhận diện khuôn mặt thời gian thực, kiểm tra thực thể sống (**Liveness Verification Anti-Spoofing**), và chẩn đoán định lượng thẩm mỹ nhân trắc học (**Anthropometric Aesthetic Engine**) đạt chuẩn khoa học khách quan (không nịnh nọt).
 

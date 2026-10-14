@@ -629,7 +629,7 @@ def analyze_skin_condition(image_pil: Image.Image, points: List[FaceAnalyzerPoin
     dark_circles_index = 15.0
     if roi_under_eye_l is not None and roi_left_cheek is not None:
         eye_lum = np.mean(0.299 * roi_under_eye_l[...,0] + 0.587 * roi_under_eye_l[...,1] + 0.114 * roi_under_eye_l[...,2])
-        cheek_lum = np.mean(gray_cheek)
+        cheek_lum = np.mean(np.dot(roi_left_cheek[..., :3], [0.299, 0.587, 0.114]))
         if cheek_lum > eye_lum:
             ratio_dark = (cheek_lum - eye_lum) / cheek_lum
             dark_circles_index = round(min(90.0, ratio_dark * 220.0), 1)

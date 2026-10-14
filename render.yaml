@@ -5,7 +5,7 @@ services:
     plan: free
     buildCommand: pip install -r requirements-postgres.txt
     startCommand: python -u render_start.py
-    healthCheckPath: /api/status
+    healthCheckPath: /api/health
     envVars:
       - key: FACE_DB_BACKEND
         value: postgres

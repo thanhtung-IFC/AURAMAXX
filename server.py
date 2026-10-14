@@ -556,23 +556,11 @@ class VisionFaceRequestHandler(SimpleHTTPRequestHandler):
 
 
 def run_server():
-    load_database()
-    server_address = (HOST, PORT)
-    handler = partial(VisionFaceRequestHandler, directory=str(BASE_DIR))
-    httpd = VisionFaceHTTPServer(server_address, handler)
-    print("=" * 65)
-    print(f"🚀 VisionFace AI Server đang chạy tại: http://localhost:{PORT}")
-    print(f"📡 API Endpoint phân tích: http://localhost:{PORT}/api/process")
-    print(f"💻 Giao diện trực quan: http://localhost:{PORT}/real_time_face_landmark_liveness_tracker.html")
-    print("=" * 65)
-    try:
-        httpd.serve_forever()
-    except KeyboardInterrupt:
-        print("\n[Server] Đang tắt máy chủ...")
-    finally:
-        httpd.server_close()
-        print("[Server] Đã dừng hoàn toàn.")
+    """All launch paths use the unified backend and its owner management."""
+    from run_web import main
+    main()
 
 
 if __name__ == "__main__":
-    run_server()
+    from run_web import main
+    main()

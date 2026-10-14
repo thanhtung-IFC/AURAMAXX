@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="vi">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AURAMAXX Face Profile tests</title>
+<body style="font:16px system-ui;background:#10131b;color:#eaf0fa;padding:2rem">
+  <h1>Kiểm thử Face Profile</h1><pre id="result">Đang chạy…</pre>
+  <script type="module">
+    import { runFaceProfileTests } from "./face-profile.test.js";
+    const output = document.querySelector("#result");
+    try { output.textContent = runFaceProfileTests(); }
+    catch (error) { output.textContent = error.stack || error.message; output.style.color = "#ff9aa8"; throw error; }
+  </script>
+</body>
+</html>

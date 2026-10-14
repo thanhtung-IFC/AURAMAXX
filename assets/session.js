@@ -2,6 +2,8 @@
 (() => {
   const nativeFetch = window.fetch.bind(window);
   const state = { account: null, csrf: null };
+  const apiPrefix = window.VISIONFACE_API_PREFIX || '/api';
+  const apiUrl = path => apiPrefix + path.slice(4);
   const staticPages = window.location.hostname.endsWith('.github.io');
   const hostingMessage = 'GitHub Pages chỉ chạy giao diện tĩnh. Đăng nhập cần máy chủ Python và database. Hãy mở địa chỉ của máy chủ web; trên máy đang chạy dự án là http://localhost:8000.';
   if (staticPages) {
@@ -15,7 +17,7 @@
     const message = document.getElementById('loginMessage');
     if (message) message.textContent = hostingMessage;
   }
-  const ready = staticPages ? Promise.resolve(state) : nativeFetch('/api/auth/me', { credentials: 'same-origin', cache: 'no-store' })
+  const ready = staticPages ? Promise.resolve(state) : nativeFetch(apiUrl('/api/auth/me'), { credentials: 'same-origin', cache: 'no-store' })
     .then(response => response.ok ? response.json() : Promise.reject(new Error('Không thể kiểm tra phiên đăng nhập.')))
     .then(data => {
       state.account = data.account;
@@ -35,8 +37,13 @@
     const headers = new Headers(options.headers || {});
     const method = (options.method || 'GET').toUpperCase();
     if (!['GET', 'HEAD', 'OPTIONS'].includes(method) && state.csrf) headers.set('X-CSRF-Token', state.csrf);
-    const response = await nativeFetch(input, { ...options, headers, credentials: 'same-origin', cache: 'no-store' });
-    if (response.status === 401 && !url.pathname.startsWith('/api/auth/')) window.location.assign('/login.html');
+    const target = apiPrefix !== '/api' && !url.pathname.startsWith(apiPrefix + '/')
+      ? apiUrl(url.pathname) + url.search : input;
+    const response = await nativeFetch(target, { ...options, headers, credentials: 'same-origin', cache: 'no-store' });
+    if (response.status === 401 && !url.pathname.startsWith('/api/auth/')) {
+      if (window.parent !== window && apiPrefix !== '/api') window.parent.postMessage({ type: 'auramaxx:auth-required' }, window.location.origin);
+      else window.location.assign(apiPrefix === '/api' ? '/login.html' : '/#my-aura');
+    }
     return response;
   }
   window.fetch = authenticatedFetch;
@@ -48,7 +55,8 @@
       });
       if (!response.ok && response.status !== 401) throw new Error('Chưa đăng xuất được. Vui lòng thử lại.');
       if (typeof window.stopCameraStream === 'function') window.stopCameraStream();
-      window.location.assign(state.account?.role === 'admin' ? '/admin-login.html' : '/login.html');
+      if (window.parent !== window && apiPrefix !== '/api') window.parent.postMessage({ type: 'auramaxx:logged-out' }, window.location.origin);
+      else window.location.assign(apiPrefix === '/api' ? state.account?.role === 'admin' ? '/admin-login.html' : '/login.html' : '/#my-aura');
     }
   };
   document.querySelectorAll('[data-logout]').forEach(button => button.addEventListener('click', async () => {

@@ -1,0 +1,5 @@
+.auramaxx-return{display:block;padding:12px 20px;background:#1b1530;color:#d8c6ff;font:600 13px system-ui;text-decoration:none;border-bottom:1px solid #7559a033}
+.auramaxx-embedded .auramaxx-return,.auramaxx-embedded header nav,.auramaxx-embedded [data-theme-toggle]{display:none!important}
+.auramaxx-embedded header{position:static}
+.auramaxx-embedded{min-width:0}
+.auramaxx-embedded main{padding:16px}

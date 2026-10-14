@@ -7,8 +7,10 @@ def main():
         raise SystemExit("Configure FACE_DB_BACKEND=postgres and DATABASE_URL before deploying")
     if os.environ.get("FACE_COOKIE_SECURE", "").lower() != "true":
         raise SystemExit("Configure FACE_COOKIE_SECURE=true for HTTPS deployment")
-    from server import run_server
-    run_server()
+    os.environ.setdefault("SUPABASE_DATABASE_URL", os.environ["DATABASE_URL"])
+    os.environ.setdefault("AUTH_COOKIE_SECURE", "true")
+    import uvicorn
+    uvicorn.run("backend.main:app", host=os.environ.get("HOST", "0.0.0.0"), port=int(os.environ.get("PORT", "8000")))
 
 
 if __name__ == "__main__":

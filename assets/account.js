@@ -17,9 +17,9 @@
         body: JSON.stringify({ current_password: document.getElementById('currentPassword').value, new_password: password })
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.message || 'Không thể đổi mật khẩu.');
+      if (!response.ok) throw new Error(data.message || data.detail || 'Không thể đổi mật khẩu.');
       document.getElementById('passwordForm').reset();
-      window.location.assign(VisionAuth.state.account.role === 'admin' ? '/admin-login.html' : '/login.html');
+      window.location.assign(window.VISIONFACE_API_PREFIX ? '/#my-aura' : VisionAuth.state.account.role === 'admin' ? '/admin-login.html' : '/login.html');
     } catch (error) { message.textContent = error.message; }
     finally { button.disabled = false; }
   });

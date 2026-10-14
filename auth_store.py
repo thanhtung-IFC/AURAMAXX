@@ -88,6 +88,13 @@ class AuthStore:
                 connection.execute("INSERT INTO metadata ([key], [value]) VALUES ('auth_schema_version', ?)", (AUTH_SCHEMA_VERSION,))
             elif version[0] != AUTH_SCHEMA_VERSION:
                 connection.execute("UPDATE metadata SET [value] = ? WHERE [key] = 'auth_schema_version'", (AUTH_SCHEMA_VERSION,))
+            central = connection.execute("SELECT [value] FROM metadata WHERE [key] = 'central_admin_id'").fetchone()
+            if not central:
+                first_admin = connection.execute(
+                    "SELECT id FROM accounts WHERE role = 'admin' ORDER BY created_at, id LIMIT 1"
+                ).fetchone()
+                if first_admin:
+                    connection.execute("INSERT INTO metadata ([key], [value]) VALUES ('central_admin_id', ?)", (first_admin[0],))
 
     @staticmethod
     def username(value):
@@ -222,6 +229,11 @@ class AuthStore:
             return self.rows(connection.execute(f"""SELECT {PUBLIC_COLUMNS},
                 (SELECT COUNT(*) FROM account_people WHERE account_id = accounts.id) AS people_count
                 FROM accounts ORDER BY created_at, id"""))
+
+    def central_admin_id(self):
+        with self.faces._connect() as connection:
+            row = connection.execute("SELECT [value] FROM metadata WHERE [key] = 'central_admin_id'").fetchone()
+            return row[0] if row else None
 
     def account_detail(self, identifier):
         account = self.account(identifier)

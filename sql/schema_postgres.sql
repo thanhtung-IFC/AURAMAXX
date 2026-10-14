@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS face_samples (
 );
 CREATE INDEX IF NOT EXISTS samples_person ON face_samples(person_id);
 CREATE INDEX IF NOT EXISTS samples_version ON face_samples(feature_version, dimension);
-CREATE OR REPLACE FUNCTION invalidate_face_cache() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE OR REPLACE FUNCTION invalidate_face_cache() RETURNS trigger LANGUAGE plpgsql SET search_path FROM CURRENT AS $$
 BEGIN
     UPDATE metadata SET value = (value::bigint + 1)::text WHERE key = 'revision';
     RETURN NULL;

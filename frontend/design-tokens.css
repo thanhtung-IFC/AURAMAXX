@@ -1,0 +1,95 @@
+/* AURAMAXX design tokens. Chỉnh các giá trị ở đây để đổi diện mạo toàn website. */
+:root {
+  color-scheme: dark;
+
+  /* Palette */
+  --color-background: #100d1d;
+  --color-surface: #171327;
+  --color-surface-raised: #1e1932;
+  --color-surface-high: #29213f;
+  --color-border: #393052;
+  --color-border-subtle: #2a243d;
+  --color-primary: #8650e8;
+  --color-primary-hover: #a269f4;
+  --color-primary-soft: #2b1f49;
+  --color-secondary: #54d6cf;
+  --color-success: #65d5a7;
+  --color-warning: #e9c982;
+  --color-danger: #f08d9a;
+  --color-text: #f7f4ff;
+  --color-text-muted: #c5bddb;
+  --color-text-subtle: #9289a9;
+
+  /* Typography */
+  --font-family: 'DM Sans', Inter, 'Segoe UI', sans-serif;
+  --font-family-display: 'Manrope', var(--font-family);
+  --font-size-base: 15px;
+  --line-height-base: 1.62;
+  --font-weight-normal: 400;
+  --font-weight-medium: 600;
+  --font-weight-bold: 700;
+
+  /* Layout and component shape */
+  --sidebar-width: 246px;
+  --content-max-width: 1510px;
+  --content-gutter: clamp(12px, 3vw, 54px);
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --radius-small: 8px;
+  --radius-medium: 14px;
+  --radius-large: 18px;
+  --border-radius: 16px;
+  --shadow-card: 0 18px 54px #08051070;
+  --shadow: var(--shadow-card);
+  --motion-fast: 160ms;
+  --motion-normal: 220ms;
+
+  /* Compatibility aliases used by the existing page styles. */
+  --bg: var(--color-background);
+  --surface: var(--color-surface);
+  --surface-2: var(--color-surface-raised);
+  --surface-3: var(--color-surface-high);
+  --line: var(--color-border);
+  --line-soft: var(--color-border-subtle);
+  --blue: var(--color-primary);
+  --blue-hi: #ad83ff;
+  --blue-soft: var(--color-primary-soft);
+  --text: var(--color-text);
+  --muted: var(--color-text-muted);
+  --subtle: var(--color-text-subtle);
+  --teal: var(--color-secondary);
+  --green: var(--color-success);
+  --violet: #bc8bff;
+  --sans: var(--font-family);
+  --display: var(--font-family-display);
+  --sidebar: var(--sidebar-width);
+  --radius: var(--border-radius);
+}
+
+/* Theme mới có thể bổ sung bằng một selector [data-theme="ten-theme"]. */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --color-background: #f4f5f9;
+  --color-surface: #ffffff;
+  --color-surface-raised: #f7f7fb;
+  --color-surface-high: #ececf4;
+  --color-border: #d9d9e5;
+  --color-border-subtle: #e7e7ee;
+  --color-text: #201c2b;
+  --color-text-muted: #494458;
+  --color-text-subtle: #716d7c;
+  --color-primary: #7040c4;
+  --color-primary-hover: #5d30ad;
+  --color-primary-soft: #eee7fa;
+  --color-secondary: #087f82;
+  --color-success: #16724d;
+  --color-warning: #9b6410;
+  --color-danger: #b13f56;
+  --blue-hi: #7040c4;
+  --violet: #7040c4;
+  --shadow-card: 0 14px 38px #29213f12;
+}

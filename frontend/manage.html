@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#10131b">
+  <meta name="description" content="Quản trị tài khoản, dữ liệu và tính năng AURAMAXX.">
+  <title>Trung tâm quản trị · AURAMAXX</title>
+  <link rel="stylesheet" href="/design-tokens.css">
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/theme.css">
+  <link rel="stylesheet" href="/themes.css">
+  <link rel="stylesheet" href="/manage.css">
+  <script type="module" src="/manage.js"></script>
+</head>
+<body>
+  <div class="manage-shell">
+    <header class="manage-header"><a class="brand" href="/">AURAMAXX <span>ADMIN</span></a><div><a href="/#my-aura">Tài khoản của tôi</a><button id="theme-toggle" class="button button-outline" type="button">Sáng / tối</button></div></header>
+    <main>
+      <section class="manage-intro"><div><div class="eyebrow">TRUNG TÂM ĐIỀU HÀNH</div><h1>Quản trị <span>toàn hệ thống.</span></h1><p>Quản lý tính năng, quyền truy cập, hồ sơ và dữ liệu người dùng tại một nơi.</p></div><div id="admin-identity" class="admin-identity" hidden></div></section>
+      <p id="manage-status" role="status">Đang kiểm tra quyền quản trị…</p>
+      <section id="manage-access" class="panel" hidden><p>Đăng nhập bằng tài khoản admin để mở trung tâm quản trị.</p><a class="button button-primary" href="/#my-aura">Mở tài khoản</a></section>
+      <div id="manage-content" hidden>
+        <section class="manage-topline"><div class="manage-storage"><span class="panel-overline">MÁY CHỦ & DATABASE</span><strong id="storage-title">Đang tải…</strong><small id="storage-description"></small></div><button id="create-backup" class="button button-outline" type="button">Sao lưu dữ liệu</button><a id="backup-download" class="button button-outline" hidden>Tải bản sao lưu</a></section>
+        <section class="manage-metrics" id="manage-metrics" aria-label="Thống kê hệ thống"></section>
+        <nav class="manage-tabs" aria-label="Phần quản trị"><button data-manage-tab="overview" aria-pressed="true" type="button">Tổng quan</button><button data-manage-tab="accounts" aria-pressed="false" type="button">Tài khoản & admin</button><button data-manage-tab="people" aria-pressed="false" type="button">Hồ sơ khuôn mặt</button><button data-manage-tab="data" aria-pressed="false" type="button">Dữ liệu người dùng</button><button data-manage-tab="audit" aria-pressed="false" type="button">Nhật ký</button></nav>
+        <section class="manage-panel" data-manage-panel="overview"><div class="manage-section-heading"><div><span class="panel-overline">KIỂM SOÁT SẢN PHẨM</span><h2>Tính năng hệ thống</h2></div><p>Admin trung tâm có thể tạm dừng hoặc mở lại tính năng. Thay đổi được áp dụng ở API.</p></div><div id="managed-features" class="feature-grid"></div></section>
+        <section class="manage-panel" data-manage-panel="accounts" hidden><div class="manage-section-heading"><div><span class="panel-overline">TRUY CẬP & VAI TRÒ</span><h2>Tài khoản</h2><p id="admin-capacity"></p></div><button id="open-create-account" type="button" class="button button-primary">Tạo tài khoản</button></div><input id="account-search" class="form-input search-input" placeholder="Tìm tên hoặc tên đăng nhập" aria-label="Tìm tài khoản"><div class="manage-table-wrap"><table><thead><tr><th>Tài khoản</th><th>Vai trò</th><th>Trạng thái</th><th>Hồ sơ</th><th>Thao tác</th></tr></thead><tbody id="managed-accounts"></tbody></table></div></section>
+        <section class="manage-panel" data-manage-panel="people" hidden><div class="manage-section-heading"><div><span class="panel-overline">DỮ LIỆU VISIONFACE</span><h2>Hồ sơ khuôn mặt</h2></div></div><div class="manage-table-wrap"><table><thead><tr><th>Hồ sơ</th><th>Chủ sở hữu</th><th>Số mẫu</th><th>Thao tác</th></tr></thead><tbody id="managed-people"></tbody></table></div></section>
+        <section class="manage-panel" data-manage-panel="data" hidden><div class="manage-section-heading"><div><span class="panel-overline">BẢN GHI NGƯỜI DÙNG</span><h2>Dữ liệu ứng dụng</h2></div><select id="managed-data-kind" class="form-input" aria-label="Loại dữ liệu"><option value="habit_entries">Nhật ký sức khỏe</option><option value="user_consents">Lịch sử đồng ý</option><option value="ai_conversations">Hội thoại AI</option><option value="ai_messages">Tin nhắn AI</option><option value="ai_request_limits">Lượt yêu cầu AI</option><option value="arena_profiles">Hồ sơ Arena</option><option value="arena_matches">Trận Arena</option><option value="arena_match_participants">Người tham gia trận Arena</option><option value="arena_elo_history">Lịch sử ELO</option><option value="arena_achievements">Thành tích Arena</option><option value="arena_bot_profiles">Hồ sơ BOT</option><option value="arena_bot_matches">Trận đấu BOT</option></select></div><p class="manage-muted">Tối đa 100 bản ghi gần nhất. Có thể xóa từng bản ghi; thao tác này không thể hoàn tác.</p><div id="managed-data" class="manage-table-wrap"></div></section>
+        <section class="manage-panel" data-manage-panel="audit" hidden><div class="manage-section-heading"><div><span class="panel-overline">THEO DÕI THAY ĐỔI</span><h2>Nhật ký quản trị</h2></div></div><div id="managed-audit" class="manage-table-wrap"></div></section>
+      </div>
+    </main>
+  </div>
+  <dialog id="managed-account-dialog" class="modal"><form id="managed-account-form" class="modal-body"><h2 id="managed-account-title">Tạo tài khoản</h2><input id="managed-account-id" type="hidden"><label class="form-label" for="managed-username">Tên đăng nhập</label><input id="managed-username" class="form-input" pattern="[A-Za-z0-9_.-]{3,64}" minlength="3" maxlength="64" required autocomplete="off"><label class="form-label" for="managed-display-name">Tên hiển thị</label><input id="managed-display-name" class="form-input" maxlength="120" required><label class="form-label" id="managed-role-label" for="managed-role">Vai trò tài khoản mới</label><select id="managed-role" class="form-input"><option value="user">Người dùng</option><option value="admin">Admin phụ</option></select><p id="managed-account-error" role="alert"></p><div class="manage-actions"><button class="button button-primary" type="submit">Lưu</button><button class="button button-outline" id="close-managed-account" type="button">Đóng</button></div></form></dialog>
+  <dialog id="managed-person-dialog" class="modal"><form id="managed-person-form" class="modal-body"><h2>Chỉnh sửa hồ sơ</h2><input id="managed-person-id" type="hidden"><label class="form-label" for="managed-person-name">Tên hồ sơ</label><input id="managed-person-name" class="form-input" maxlength="120" required><label class="form-label" for="managed-person-owner">Tài khoản sở hữu</label><select id="managed-person-owner" class="form-input"></select><p id="managed-person-error" role="alert"></p><div class="manage-actions"><button class="button button-primary" type="submit">Lưu</button><button class="button button-outline" id="close-managed-person" type="button">Đóng</button></div></form></dialog>
+  <dialog id="managed-password-dialog" class="modal"><div class="modal-body"><h2>Mật khẩu tạm</h2><p>Gửi mật khẩu này cho chủ tài khoản. Họ phải đổi mật khẩu khi đăng nhập lần đầu.</p><input id="managed-temporary-password" class="form-input" type="password" readonly autocomplete="off" aria-label="Mật khẩu tạm"><div class="manage-actions"><button id="reveal-managed-password" class="button button-outline" type="button">Hiện / ẩn</button><button id="close-managed-password" class="button button-primary" type="button">Đóng</button></div></div></dialog>
+  <div id="toast-region" class="toast-region" role="status" aria-live="polite"></div>
+</body>
+</html>

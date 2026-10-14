@@ -19,4 +19,6 @@ database.local.tmp
 backups/
 .tools/
 *.bak
+.test-output/
+.auramaxx-test-*/
 

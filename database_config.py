@@ -48,5 +48,5 @@ def create_store(base_dir):
         ))
     if backend == "postgres":
         from postgres_store import PostgresFaceStore
-        return PostgresFaceStore(os.environ.get("DATABASE_URL"))
+        return PostgresFaceStore(os.environ.get("DATABASE_URL"), schema=os.environ.get("FACE_POSTGRES_SCHEMA", "visionface"))
     raise ValueError("FACE_DB_BACKEND must be sqlite, sqlserver or postgres")

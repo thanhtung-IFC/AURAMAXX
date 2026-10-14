@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 460" fill="none">
+  <defs>
+    <linearGradient id="cloth" x1="250" y1="230" x2="400" y2="400" gradientUnits="userSpaceOnUse"><stop stop-color="#B58AFF"/><stop offset="1" stop-color="#6840B6"/></linearGradient>
+    <linearGradient id="skin" x1="282" y1="108" x2="362" y2="207" gradientUnits="userSpaceOnUse"><stop stop-color="#F1C6A6"/><stop offset="1" stop-color="#C98672"/></linearGradient>
+    <linearGradient id="dog" x1="425" y1="250" x2="548" y2="389" gradientUnits="userSpaceOnUse"><stop stop-color="#EFC58D"/><stop offset="1" stop-color="#B87959"/></linearGradient>
+    <linearGradient id="leaf" x1="104" y1="180" x2="200" y2="280" gradientUnits="userSpaceOnUse"><stop stop-color="#70E0D2"/><stop offset="1" stop-color="#418E9C"/></linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientTransform="matrix(0 210 -280 0 340 245)" gradientUnits="userSpaceOnUse"><stop stop-color="#8E58E8" stop-opacity=".28"/><stop offset="1" stop-color="#8E58E8" stop-opacity="0"/></radialGradient>
+    <filter id="shadow" x="127" y="72" width="440" height="353" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feGaussianBlur stdDeviation="12"/></filter>
+  </defs>
+  <ellipse cx="340" cy="253" rx="280" ry="207" fill="url(#glow)"/>
+  <ellipse cx="352" cy="397" rx="210" ry="17" fill="#080612" fill-opacity=".43" filter="url(#shadow)"/>
+  <circle cx="313" cy="228" r="158" stroke="#B891FF" stroke-opacity=".13"/>
+  <circle cx="313" cy="228" r="190" stroke="#67DCD4" stroke-opacity=".1" stroke-dasharray="3 10"/>
+  <!-- Person in a calm seated pose -->
+  <path d="M268 319c-38 17-69 38-94 58-13 11-4 25 13 26l119 1c26 0 48-14 52-36l8-42-98-7Z" fill="#54368C" stroke="#A780ED" stroke-opacity=".55" stroke-width="2"/>
+  <path d="M333 318c31 13 70 27 103 43 18 9 18 25-2 31l-118 12c-27 3-47-9-50-27l-5-39 72-20Z" fill="#7650BB" stroke="#B891FF" stroke-opacity=".55" stroke-width="2"/>
+  <path d="M249 205c-9 30-12 66-5 101 5 23 23 40 45 42l65 4c27 2 46-19 45-46l-4-91-146-10Z" fill="url(#cloth)" stroke="#D5B9FF" stroke-opacity=".55" stroke-width="2"/>
+  <path d="M270 235c-23 20-39 48-53 77-8 15 2 27 17 20l48-42m111-50c21 17 32 40 41 65 6 17-3 27-19 19l-41-26" stroke="url(#skin)" stroke-width="17" stroke-linecap="round"/>
+  <path d="M264 128c1-38 26-62 60-61 38 1 60 29 55 69-4 31-22 58-51 61-35 3-62-28-64-69Z" fill="url(#skin)"/>
+  <path d="M260 132c-7-41 8-80 49-91 34-9 67 6 79 34 8 19 5 42-1 58-8-18-18-28-31-35-21 12-52 14-75 4-3 17-9 31-18 43l-3-13Z" fill="#23162E" stroke="#4A2D64" stroke-width="3"/>
+  <path d="M275 143c7-3 13-3 19 0m42 0c6-3 12-3 18 0" stroke="#69453F" stroke-width="3" stroke-linecap="round"/>
+  <path d="M300 178c8 5 17 5 24 0" stroke="#8D514E" stroke-width="3" stroke-linecap="round"/>
+  <path d="M290 213c11 11 28 14 44 5" stroke="#F1C6A6" stroke-width="10" stroke-linecap="round"/>
+  <!-- Companion dog -->
+  <path d="M436 317c1-35 21-57 53-57 31 0 51 23 50 57l-4 58c-2 19-17 30-38 30h-39c-23 0-38-14-37-34l2-54Z" fill="url(#dog)" stroke="#F0C58B" stroke-opacity=".7" stroke-width="2"/>
+  <path d="M445 278c-22-31-42-19-38 11l17 26m59-38c12-31 34-26 35 1l-5 28" fill="#A96552" stroke="#D89B72" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M457 304c8-7 17-10 29-10 19 0 34 11 36 29 2 17-11 30-32 31-21 1-40-11-40-28 0-8 2-15 7-22Z" fill="#F1D3B2"/>
+  <ellipse cx="467" cy="305" rx="3" ry="4" fill="#332334"/><ellipse cx="495" cy="305" rx="3" ry="4" fill="#332334"/>
+  <path d="M478 319c4-4 10-4 14 0-1 6-13 7-14 0Z" fill="#57343D"/>
+  <path d="M481 324c3 5 8 5 11 0" stroke="#8F5353" stroke-width="2" stroke-linecap="round"/>
+  <path d="M448 366c14 13 42 16 68 3" stroke="#7E4B62" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="482" cy="369" r="7" fill="#59D8CB" stroke="#B0FFF2" stroke-width="2"/>
+  <!-- Small plant and wellness accents -->
+  <path d="M117 329h54l-7 53h-40l-7-53Z" fill="#41305B" stroke="#9C77C3" stroke-width="2"/>
+  <path d="M143 329c-2-55-13-80-35-105m35 105c8-65 30-91 53-104m-52 104c-23-42-27-68-22-91" stroke="#70DCCF" stroke-width="5" stroke-linecap="round"/>
+  <path d="M108 224c-21-4-29-20-22-38 19 0 31 11 31 30m78 2c1-23 15-36 35-34 1 20-11 34-35 39m-57-49c-15-16-12-34 3-46 16 11 19 28 7 49m-44 50c-21 4-34-7-35-26 18-8 34-1 43 20" fill="url(#leaf)" stroke="#9AF4E6" stroke-opacity=".45" stroke-width="2"/>
+  <path d="m547 154 5 13 13 5-13 5-5 13-5-13-13-5 13-5 5-13Z" fill="#C59AFF" fill-opacity=".8"/>
+  <path d="m206 102 3 8 8 3-8 3-3 8-3-8-8-3 8-3 3-8Z" fill="#5DDED2"/>
+  <circle cx="557" cy="221" r="4" fill="#70E1D5"/><circle cx="218" cy="304" r="3" fill="#C59AFF"/>
+</svg>

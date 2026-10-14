@@ -1,0 +1,50 @@
+// Synthetic devices and landmarks are installed by CDP only in the browser test.
+exports.injection = `(() => {
+  window.__visionRequests = [];
+  window.__fixtureYaw = 0;
+  window.__fixtureFaceCount = 1;
+  window.__cameraStops = 0;
+  const originalFetch = window.fetch.bind(window);
+  window.fetch = async (url, options = {}) => {
+    if (options.body && String(url).includes('/api/')) window.__visionRequests.push({url: String(url), body: JSON.parse(options.body)});
+    return originalFetch(url, options);
+  };
+  window.__fixtureFace = () => {
+    const points = Array.from({length:478}, () => ({x:.5,y:.5,z:0}));
+    const set = (i,x,y) => points[i] = {x:x/1280,y:y/720,z:0};
+    [[10,640,165],[9,640,280],[152,640,555],[234,430,350],[454,850,350],
+     [103,520,220],[332,760,220],[172,490,450],[397,790,450],
+     [105,545,290],[334,735,290],[2,640,385],[1,640,350],[168,640,295],
+     [6,640,300],[197,640,305],[195,640,310],[5,640,315],
+     [33,555,315],[133,605,315],[362,675,315],[263,725,315],
+     [98,610,385],[327,670,385],[102,610,385],[331,670,385],[61,580,430],[291,700,430],
+     [0,640,424],[13,640,435],[17,640,450],[14,640,440],
+     [50,575,400],[101,560,410],[118,570,420],[205,580,425],[206,700,420],
+     [216,710,410],[280,705,400],[330,700,410],[347,690,425]].forEach(([i,x,y]) => set(i,x,y));
+    const angle = window.__fixtureYaw * Math.PI / 180;
+    for (const point of points) { const x = point.x - .5; point.x = .5 + x * Math.cos(angle); point.z = -x * Math.sin(angle); }
+    return points;
+  };
+  const devices = [{kind:'videoinput',deviceId:'fixture-front',label:'Fixture webcam'}, {kind:'videoinput',deviceId:'fixture-usb',label:'USB Fixture camera'}];
+  const mediaDevices = new EventTarget();
+  mediaDevices.enumerateDevices = async () => devices;
+  mediaDevices.getUserMedia = async constraints => {
+    if (window.__cameraFailure) throw new DOMException('Camera fixture unavailable', window.__cameraFailure);
+    const canvas = document.createElement('canvas'); canvas.width=640; canvas.height=480;
+    const context=canvas.getContext('2d'), gradient=context.createLinearGradient(0,0,640,480);
+    gradient.addColorStop(0,'#444'); gradient.addColorStop(1,'#ddd');
+    const paint = () => { context.fillStyle=gradient;context.fillRect(0,0,640,480);context.fillStyle='#999';context.fillRect(260,200,80,80); };
+    paint(); const interval = setInterval(paint,50);
+    const stream=canvas.captureStream(20), track=stream.getVideoTracks()[0];
+    const settings=track.getSettings.bind(track), stop=track.stop.bind(track);
+    track.getSettings=()=>({...settings(),deviceId:constraints.video.deviceId?.exact || 'fixture-front'});
+    track.stop=()=>{window.__cameraStops++;clearInterval(interval);stop();};
+    return stream;
+  };
+  Object.defineProperty(navigator,'mediaDevices',{value:mediaDevices, configurable:true});
+})();`;
+
+exports.model = `export async function createLandmarker(mode='VIDEO') {
+  const detect = () => ({faceLandmarks:Array.from({length:window.__fixtureFaceCount},()=>window.__fixtureFace())});
+  return {detect,detectForVideo:detect,close(){}};
+}`;

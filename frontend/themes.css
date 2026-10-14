@@ -1,0 +1,187 @@
+/* Theme layer: palette overrides only; layout stays in styles.css/theme.css. */
+[hidden] { display: none !important; }
+body {
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-base);
+}
+.page-content {
+  max-width: var(--content-max-width);
+  padding-inline: var(--content-gutter);
+}
+.panel, .feature-card, .habit-card, .profile-card, .settings-panel,
+.data-control-panel, .upload-panel, .face-camera-panel, .face-result-panel,
+.chat-conversations, .chat-panel, .progress-empty-panel, .health-entry-panel,
+.privacy-panel { border-radius: var(--border-radius); }
+.button { border-radius: var(--radius-small); }
+.button-primary {
+  background: var(--color-primary);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--color-primary) 28%, transparent), inset 0 1px #ffffff2b;
+}
+.button-primary:hover:not(:disabled) { background: var(--color-primary-hover); }
+.nav-link.active { box-shadow: inset 3px 0 0 var(--color-primary), 0 5px 20px #0a071328; }
+.nav-link.active svg, .feature-link, .text-link { color: var(--color-primary-hover); }
+.eyebrow-dot, .notification-button>i { background: var(--color-primary); }
+.button:focus-visible, .nav-link:focus-visible, .icon-button:focus-visible,
+a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible {
+  outline-color: var(--color-primary-hover);
+}
+
+:root[data-theme="light"],
+:root[data-theme="light"] body { background: var(--color-background); color: var(--color-text); }
+:root[data-theme="light"] body {
+  background: radial-gradient(ellipse at 76% 3%, #7040c40b 0, transparent 34rem), var(--color-background);
+}
+:root[data-theme="light"] .sidebar {
+  background: #fff;
+  border-color: var(--color-border);
+  box-shadow: 8px 0 30px #29213f0b;
+}
+:root[data-theme="light"] .topbar,
+:root[data-theme="light"] .mobile-nav {
+  color: var(--color-text);
+  background: #ffffffed;
+  border-color: var(--color-border);
+  box-shadow: 0 5px 22px #29213f0b;
+}
+:root[data-theme="light"] .breadcrumbs,
+:root[data-theme="light"] .workspace-label,
+:root[data-theme="light"] .sidebar-version,
+:root[data-theme="light"] .sidebar-private span,
+:root[data-theme="light"] .nav-link,
+:root[data-theme="light"] .mobile-nav a { color: var(--color-text-subtle); }
+:root[data-theme="light"] .breadcrumbs strong,
+:root[data-theme="light"] .welcome-row h1,
+:root[data-theme="light"] .page-heading-row h1,
+:root[data-theme="light"] .hero-content h2,
+:root[data-theme="light"] .section-title,
+:root[data-theme="light"] .panel,
+:root[data-theme="light"] .feature-card,
+:root[data-theme="light"] .sidebar-private b { color: var(--color-text); }
+:root[data-theme="light"] .welcome-row h1 span,
+:root[data-theme="light"] .page-heading-row h1 span,
+:root[data-theme="light"] .page-lead,
+:root[data-theme="light"] .section-note,
+:root[data-theme="light"] .feature-copy,
+:root[data-theme="light"] .empty-state p,
+:root[data-theme="light"] .panel-overline,
+:root[data-theme="light"] .hero-content p,
+:root[data-theme="light"] .panel p,
+:root[data-theme="light"] .panel-overline,
+:root[data-theme="light"] .feature-card strong,
+:root[data-theme="light"] .habit-card p,
+:root[data-theme="light"] .chat-list-empty,
+:root[data-theme="light"] .chat-side .principle p,
+:root[data-theme="light"] .form-label,
+:root[data-theme="light"] .modal-description,
+:root[data-theme="light"] .modal-switch,
+:root[data-theme="light"] .modal-footnote,
+:root[data-theme="light"] .setting-row b,
+:root[data-theme="light"] .setting-row p,
+:root[data-theme="light"] .face-result-footnote,
+:root[data-theme="light"] .face-limit-note,
+:root[data-theme="light"] .face-privacy-note { color: var(--color-text-muted); }
+:root[data-theme="light"] .nav-link:hover,
+:root[data-theme="light"] .nav-link.active { color: var(--color-primary); background: var(--color-primary-soft); border-color: var(--color-border); }
+:root[data-theme="light"] .sidebar-private,
+:root[data-theme="light"] .date-chip,
+:root[data-theme="light"] .range-chip,
+:root[data-theme="light"] .icon-button,
+:root[data-theme="light"] .button-outline,
+:root[data-theme="light"] .chat-composer,
+:root[data-theme="light"] .chat-conversation-item,
+:root[data-theme="light"] .chat-suggestions button,
+:root[data-theme="light"] .consent-preview,
+:root[data-theme="light"] .photo-status,
+:root[data-theme="light"] .face-live-state,
+:root[data-theme="light"] .face-camera-chip,
+:root[data-theme="light"] .face-readiness,
+:root[data-theme="light"] .face-profile-overview article,
+:root[data-theme="light"] .face-advice,
+:root[data-theme="light"] .face-quality-summary,
+:root[data-theme="light"] .setting-row,
+:root[data-theme="light"] .chat-access-notice {
+  color: var(--color-text-muted);
+  background: var(--color-surface-raised);
+  border-color: var(--color-border);
+}
+:root[data-theme="light"] .hero-panel {
+  background: linear-gradient(115deg, #fff 0%, #f3effb 100%);
+  border-color: var(--color-border);
+  box-shadow: var(--shadow-card);
+}
+:root[data-theme="light"] .hero-panel::after { background: linear-gradient(100deg, transparent 45%, #7040c407 80%); }
+:root[data-theme="light"] .panel,
+:root[data-theme="light"] .feature-card,
+:root[data-theme="light"] .habit-card,
+:root[data-theme="light"] .profile-card,
+:root[data-theme="light"] .settings-panel,
+:root[data-theme="light"] .data-control-panel,
+:root[data-theme="light"] .upload-panel,
+:root[data-theme="light"] .face-camera-panel,
+:root[data-theme="light"] .face-result-panel,
+:root[data-theme="light"] .chat-conversations,
+:root[data-theme="light"] .chat-panel,
+:root[data-theme="light"] .progress-empty-panel,
+:root[data-theme="light"] .health-entry-panel,
+:root[data-theme="light"] .privacy-panel {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  box-shadow: var(--shadow-card);
+}
+:root[data-theme="light"] .feature-card:hover { background: var(--color-surface-raised); }
+:root[data-theme="light"] .chat-header,
+:root[data-theme="light"] .chat-history-heading,
+:root[data-theme="light"] .face-score-row,
+:root[data-theme="light"] .face-profile-detail,
+:root[data-theme="light"] .profile-divider,
+:root[data-theme="light"] .chat-composer-actions { border-color: var(--color-border-subtle); }
+:root[data-theme="light"] .chat-message-content,
+:root[data-theme="light"] .chat-message-content pre,
+:root[data-theme="light"] .chat-message-content code,
+:root[data-theme="light"] .chat-composer textarea,
+:root[data-theme="light"] input,
+:root[data-theme="light"] textarea,
+:root[data-theme="light"] select { color: var(--color-text); }
+:root[data-theme="light"] .chat-message-content { background: var(--color-surface-raised); border-color: var(--color-border); }
+:root[data-theme="light"] .chat-message-user .chat-message-content { color: #fff; background: var(--color-primary); border-color: var(--color-primary); }
+:root[data-theme="light"] .chat-composer textarea::placeholder { color: var(--color-text-subtle); }
+:root[data-theme="light"] .chat-composer { background: #fff; }
+:root[data-theme="light"] .modal {
+  color: var(--color-text);
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  box-shadow: 0 28px 100px #29213f2b;
+}
+:root[data-theme="light"] .modal-description b { color: var(--color-danger); }
+:root[data-theme="light"] .form-input,
+:root[data-theme="light"] .habit-entry-form input,
+:root[data-theme="light"] .habit-entry-form textarea,
+:root[data-theme="light"] .habit-entry-form select {
+  color: var(--color-text);
+  background: #fff;
+  border-color: var(--color-border);
+}
+:root[data-theme="light"] .form-input::placeholder { color: var(--color-text-subtle); }
+:root[data-theme="light"] .modal-footnote { border-color: var(--color-border-subtle); }
+:root[data-theme="light"] .chat-message-content code,
+:root[data-theme="light"] .chat-message-content pre { background: #f0eff5; }
+:root[data-theme="light"] .toast { color: var(--color-text); background: #fff; border-color: var(--color-border); }
+:root[data-theme="light"] .chat-welcome>p,
+:root[data-theme="light"] .chat-message-label,
+:root[data-theme="light"] .chat-footnote,
+:root[data-theme="light"] .profile-card>p,
+:root[data-theme="light"] .setting-row p,
+:root[data-theme="light"] .data-control-panel>p,
+:root[data-theme="light"] .progress-note,
+:root[data-theme="light"] .privacy-footnote { color: var(--color-text-muted); }
+:root[data-theme="light"] .coming-badge,
+:root[data-theme="light"] .face-demo-tag,
+:root[data-theme="light"] .setting-state { background: var(--color-primary-soft); color: var(--color-primary); border-color: var(--color-border); }
+:root[data-theme="light"] .face-camera-stage,
+:root[data-theme="light"] .photo-preview-wrap,
+:root[data-theme="light"] .face-captured-image { background: #111; }
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --motion-fast: 1ms; --motion-normal: 1ms; }
+}
