@@ -12,6 +12,7 @@ from backend.database import get_database
 from backend.features import FEATURES, is_enabled
 from backend.routers import arena, assistant, aura, auth, consents, face_analysis, habits, health_hub, progress, vision, manage
 from backend.identity import initialize_legacy
+from backend.security import get_current_user
 from auth_store import AuthError
 from backend.settings import ALLOWED_ORIGINS, APP_NAME, APP_VERSION, PROJECT_ROOT
 
@@ -74,7 +75,7 @@ async def security_headers(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "SAMEORIGIN"
     response.headers["Referrer-Policy"] = "same-origin"
-    if request.url.path.startswith("/api/") or request.url.path.endswith(".html") or request.url.path == "/":
+    if request.url.path.startswith("/api/") or request.url.path.endswith(".html") or request.url.path in {"/", "/manage", "/admin/login"}:
         response.headers["Cache-Control"] = "no-store"
     return response
 
@@ -144,7 +145,17 @@ def legacy_page(request: Request):
 
 
 @app.get("/manage", include_in_schema=False)
-def owner_management():
+def owner_management(request: Request, connection=Depends(get_database)):
+    try:
+        user = get_current_user(request, connection)
+    except HTTPException as error:
+        if error.status_code == 401:
+            return RedirectResponse("/admin-login.html?next=%2Fmanage", status_code=303)
+        if error.status_code == 403:
+            return RedirectResponse("/account.html?next=%2Fmanage", status_code=303)
+        raise
+    if user["role"] != "admin":
+        return RedirectResponse("/admin-login.html?next=%2Fmanage", status_code=303)
     return FileResponse(PROJECT_ROOT / "frontend" / "manage.html")
 
 
@@ -154,8 +165,13 @@ def retired_admin_page():
 
 
 @app.get("/admin-login.html", include_in_schema=False)
-def retired_admin_login():
-    return RedirectResponse("/#my-aura", status_code=303)
+def admin_login_page():
+    return FileResponse(PROJECT_ROOT / "frontend" / "admin-login.html")
+
+
+@app.get("/admin/login", include_in_schema=False)
+def admin_login_alias():
+    return RedirectResponse("/admin-login.html", status_code=303)
 
 
 @app.api_route("/api/{path:path}", methods=["GET", "POST", "PATCH", "DELETE", "HEAD"], include_in_schema=False)

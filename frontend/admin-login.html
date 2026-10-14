@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#100d1d">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Đăng nhập quản trị · AURAMAXX</title>
+  <link rel="stylesheet" href="/legacy-assets/auth.css">
+  <link rel="stylesheet" href="/legacy-assets/login.css">
+  <link rel="stylesheet" href="/design-tokens.css">
+  <link rel="stylesheet" href="/login-integration.css">
+</head>
+<body class="auth-page" data-login-role="admin">
+  <main class="auth-shell">
+    <section class="journey" aria-labelledby="journeyTitle">
+      <a class="journey-brand" href="/#home"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="m16 3 11 6.5v13L16 29 5 22.5v-13Z" stroke="currentColor" stroke-width="3"/><path d="m16 9 6 3.5v7L16 23l-6-3.5v-7Z" fill="currentColor"/></svg>AURAMAXX<span>ADMIN</span></a>
+      <div class="journey-content">
+        <span class="journey-badge">Trung tâm quản trị <span aria-hidden="true">✦</span></span>
+        <h1 id="journeyTitle">Một nơi điều hành.<br>Toàn bộ hệ thống.</h1>
+        <p class="journey-description">Quản lý tài khoản, tính năng và dữ liệu người dùng trong không gian quản trị riêng.</p>
+        <ol class="journey-steps">
+          <li class="is-current"><span class="step-number">1</span><span>Đăng nhập<br>bằng tài khoản admin</span></li>
+          <li><span class="step-number">2</span><span>Quản lý người dùng<br>& dữ liệu</span></li>
+          <li><span class="step-number">3</span><span>Kiểm soát tính năng<br>& theo dõi nhật ký</span></li>
+        </ol>
+      </div>
+    </section>
+    <section class="auth-panel" aria-labelledby="formTitle">
+      <div class="auth-panel-content">
+        <nav class="auth-role-links" aria-label="Điều hướng"><a href="/#home">← Về AURAMAXX</a><button id="theme-toggle" type="button" aria-label="Chuyển giao diện sáng tối">Sáng / tối</button></nav>
+        <h2 id="formTitle">Đăng nhập quản trị</h2>
+        <p id="formDescription" class="form-description">Dùng tài khoản admin đã được cấp để vào trung tâm điều hành.</p>
+        <form id="admin-login-form">
+          <label for="admin-identity">Tên đăng nhập hoặc email admin</label>
+          <input id="admin-identity" name="username" required minlength="3" maxlength="254" autocomplete="username" spellcheck="false" autocapitalize="none" placeholder="Nhập tài khoản admin">
+          <label for="admin-password">Mật khẩu</label>
+          <span class="password-field"><input id="admin-password" name="password" type="password" required maxlength="128" autocomplete="current-password" placeholder="Nhập mật khẩu"><button class="password-toggle" id="admin-toggle-password" type="button" aria-label="Hiện mật khẩu" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.5"/></svg></button></span>
+          <button class="primary" id="admin-submit" type="submit">Vào trang quản trị</button>
+        </form>
+        <p id="admin-login-message" class="message" role="status" aria-live="polite"></p>
+        <div class="auth-divider"><span>Quyền truy cập được kiểm tra</span></div>
+        <p class="auth-note">Tối đa 3 admin. Admin trung tâm có quyền cao nhất.<br>Tài khoản người dùng không truy cập được khu vực này.</p>
+        <p class="auth-note"><a href="/login.html">Đăng nhập người dùng</a></p>
+        <footer class="team-credit">AURAMAXX · TRUNG TÂM ĐIỀU HÀNH</footer>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="/admin-login.js"></script>
+</body>
+</html>

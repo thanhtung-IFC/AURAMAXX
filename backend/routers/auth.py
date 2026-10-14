@@ -17,9 +17,12 @@ from backend.security import (
     hash_password,
     require_csrf,
     verify_password,
+    prepare_session,
+    set_session_cookies,
 )
 from backend.settings import SESSION_COOKIE_NAME
-from backend.identity import delete_user_account, ensure_legacy_account, linked_account, login_legacy, login_limiter, register_user_account
+from backend.identity import delete_user_account, ensure_legacy_account, legacy_auth, linked_account, login_legacy, login_limiter, register_user_account
+from backend.transactions import identity_transaction
 
 
 router = APIRouter(prefix="/api/auth", tags=["Tài khoản"])
@@ -66,6 +69,20 @@ def login(
     request: Request,
     connection: sqlite3.Connection = Depends(get_database),
 ) -> PublicUser:
+    return _login(payload, response, request, connection)
+
+
+@router.post("/admin/login", response_model=PublicUser)
+def admin_login(
+    payload: LoginRequest,
+    response: Response,
+    request: Request,
+    connection: sqlite3.Connection = Depends(get_database),
+) -> PublicUser:
+    return _login(payload, response, request, connection, required_role="admin")
+
+
+def _login(payload, response, request, connection, required_role=None):
     login_limiter.check(request.client.host if request.client else "local")
     row = connection.execute(
         "SELECT id, email, password_hash, created_at FROM users WHERE email = ?",
@@ -74,7 +91,6 @@ def login(
     if row is None or not verify_password(payload.password, row["password_hash"]):
         username = payload.email
         if row is not None:
-            from backend.identity import legacy_auth
             link = connection.execute("SELECT account_id FROM legacy_account_links WHERE user_id = ?", (row["id"],)).fetchone()
             if link:
                 account = legacy_auth().account(link["account_id"])
@@ -82,17 +98,34 @@ def login(
                     username = account["username"]
         if "@" in username:
             raise HTTPException(status_code=401, detail="Email hoặc mật khẩu chưa chính xác.")
-        row = login_legacy(connection, username, payload.password)
+        row = login_legacy(connection, username, payload.password, required_role)
         if "@" in payload.email:
             connection.execute("UPDATE users SET password_hash = ? WHERE id = ?", (hash_password(payload.password), row["id"]))
             connection.commit()
 
-    account = ensure_legacy_account(connection, row)
+    account = linked_account(connection, row["id"]) if required_role else ensure_legacy_account(connection, row)
+    if required_role and (not account or account["role"] != required_role):
+        raise HTTPException(401, "Tài khoản hoặc mật khẩu quản trị chưa chính xác.")
     public = dict(row)
     if account:
         public.update(display_name=account["display_name"], role=account["role"], must_change_password=account["must_change_password"])
 
-    create_session(connection, row["id"], response)
+    if required_role:
+        auth_store = legacy_auth()
+        with identity_transaction(connection, auth_store) as legacy:
+            current = legacy.execute("SELECT role, is_active, password_hash, must_change_password FROM accounts WHERE id = ?", (account["id"],)).fetchone()
+            if not current or current[0] != required_role or not current[1] or current[2] != account["password_hash"]:
+                raise HTTPException(401, "Tài khoản quản trị đã thay đổi. Vui lòng đăng nhập lại.")
+            public["must_change_password"] = bool(current[3])
+            legacy.execute("UPDATE accounts SET last_login = ? WHERE id = ?", (datetime.now(timezone.utc).isoformat(), account["id"]))
+            auth_store.audit(legacy, account["id"], "account.admin_login", account["id"])
+            old_token = request.cookies.get(SESSION_COOKIE_NAME)
+            if old_token:
+                connection.execute("DELETE FROM sessions WHERE token_hash = ?", (hashlib.sha256(old_token.encode()).hexdigest(),))
+            session_token, csrf_token = prepare_session(connection, row["id"])
+        set_session_cookies(response, session_token, csrf_token)
+    else:
+        create_session(connection, row["id"], response)
     return _public_user(public)
 
 
