@@ -29,7 +29,7 @@ function renderRoute() {
 
   document.querySelector("#page-breadcrumb").textContent = PAGES[selected];
   document.title = `${PAGES[selected]} · AURAMAXX`;
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  window.scrollTo({ top: 0, behavior: document.documentElement.dataset.reducedMotion === "true" ? "auto" : "smooth" });
   document.dispatchEvent(new CustomEvent("auramaxx:routechange", { detail: { route: selected } }));
 }
 

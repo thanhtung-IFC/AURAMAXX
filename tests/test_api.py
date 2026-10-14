@@ -300,6 +300,87 @@ class ApiIntegrationTests(unittest.TestCase):
         from face_store import FaceStore
         self.assertNotIn(own_id, [p["id"] for p in self.face_store().list_people()])
 
+    def test_personal_settings_profile_export_and_owner_isolation(self):
+        self.assertEqual(self.request("GET", "/api/account/settings")[0], 401)
+        self.assertEqual(self.request("GET", "/api/account/export")[0], 401)
+        email, password = self.register()
+        code, settings, _ = self.request("GET", "/api/account/settings")
+        self.assertEqual(code, 200)
+        owner_id = settings["profile"]["id"]
+        self.assertEqual(settings["profile"]["email"], email)
+        self.assertEqual(len(settings["sessions"]), 1)
+        self.assertTrue(settings["sessions"][0]["current"])
+        owner_session = settings["sessions"][0]["id"]
+        self.assertNotIn("token_hash", json.dumps(settings))
+        self.assertNotIn("csrf_token", json.dumps(settings))
+        self.assertEqual(self.request("PATCH", "/api/account/profile", {"display_name": "   "})[0], 422)
+        self.assertEqual(self.request("PATCH", "/api/account/profile", {"display_name": "Updated", "role": "admin"})[0], 422)
+        self.assertEqual(self.request("PATCH", "/api/account/profile", {"display_name": "  My   Aura  "})[1], {"display_name": "My Aura"})
+        self.assertEqual(self.request("GET", "/api/auth/me")[1]["display_name"], "My Aura")
+        self.grant_health_consent()
+        own_habit = self.request("POST", "/api/habits", {"category": "water", "value": "250", "unit": "ml"})[1]
+        self.grant_ai_consent()
+        conversation = self.request("POST", "/api/aura/conversations", {"title": "Private owner conversation"})[1]
+        with closing(self.app_connection()) as connection:
+            connection.execute("INSERT INTO ai_messages (id, conversation_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)",
+                               (str(uuid4()), conversation["id"], "user", "Private message", "2026-01-01"))
+            account_id = connection.execute("SELECT account_id FROM legacy_account_links WHERE user_id = ?", (owner_id,)).fetchone()[0]
+            connection.commit()
+        own_person = self.face_store().register("Private face", [.1] * 60, owner_account_id=account_id)
+        code, exported, headers = self.request("GET", "/api/account/export")
+        self.assertEqual(code, 200)
+        self.assertIn("attachment", headers["Content-Disposition"])
+        self.assertEqual(exported["profile"]["display_name"], "My Aura")
+        self.assertEqual(exported["data"]["habit_entries"][0]["id"], own_habit["id"])
+        self.assertEqual(exported["data"]["ai_messages"][0]["content"], "Private message")
+        self.assertEqual(exported["data"]["face_profiles"][0]["id"], own_person["id"])
+        for secret in ("password_hash", "credential_hash", "csrf_token", "token_hash", "vector_json"):
+            self.assertNotIn(secret, json.dumps(exported))
+        owner_cookies = self.cookies
+        self.cookies = http.cookiejar.CookieJar()
+        self.client = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.cookies))
+        self.register()
+        self.assertEqual(self.request("DELETE", f"/api/account/sessions/{owner_session}")[0], 404)
+        other_export = self.request("GET", "/api/account/export")[1]
+        for table in ("habit_entries", "ai_messages", "ai_conversations", "face_profiles"):
+            self.assertEqual(other_export["data"][table], [])
+        self.cookies = owner_cookies
+        self.client = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.cookies))
+        self.assertEqual(self.request("GET", "/api/auth/me")[0], 200)
+
+    def test_personal_session_revocation_keeps_current_and_requires_csrf(self):
+        email, password = self.register()
+        first_cookies = self.cookies
+        first_id = self.request("GET", "/api/account/settings")[1]["sessions"][0]["id"]
+        self.cookies = http.cookiejar.CookieJar()
+        self.client = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.cookies))
+        self.assertEqual(self.request("POST", "/api/auth/login", {"email": email, "password": password})[0], 200)
+        self.assertEqual(len(self.request("GET", "/api/account/settings")[1]["sessions"]), 2)
+        # Omitting the CSRF header must prevent session and profile changes.
+        for path, method, payload in (("/api/account/sessions/revoke-others", "POST", None),
+                                      ("/api/account/profile", "PATCH", {"display_name": "Blocked"})):
+            request = urllib.request.Request(self.base_url + path, method=method,
+                                             data=json.dumps(payload).encode() if payload else None,
+                                             headers={"Content-Type": "application/json"})
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                self.client.open(request)
+            self.assertEqual(error.exception.code, 403)
+            error.exception.close()
+        code, remaining, _ = self.request("POST", "/api/account/sessions/revoke-others")
+        self.assertEqual(code, 200)
+        self.assertEqual(len(remaining["sessions"]), 1)
+        self.assertTrue(remaining["sessions"][0]["current"])
+        self.assertNotEqual(remaining["sessions"][0]["id"], first_id)
+        current_cookies = self.cookies
+        self.cookies = first_cookies
+        self.client = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.cookies))
+        self.assertEqual(self.request("GET", "/api/auth/me")[0], 401)
+        self.cookies = current_cookies
+        self.client = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.cookies))
+        current_id = remaining["sessions"][0]["id"]
+        self.assertTrue(self.request("DELETE", f"/api/account/sessions/{current_id}")[1]["signed_out"])
+        self.assertEqual(self.request("GET", "/api/auth/me")[0], 401)
+
     def test_unified_password_change_updates_both_authentication_paths(self):
         email, password = self.register()
         new = "Unified changed password 123"

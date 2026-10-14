@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from backend.database import check_database_connection, initialize_database, close_database_pool
 from backend.database import get_database
 from backend.features import FEATURES, is_enabled
-from backend.routers import arena, assistant, aura, auth, consents, face_analysis, habits, health_hub, progress, vision, manage
+from backend.routers import account, arena, assistant, aura, auth, consents, face_analysis, habits, health_hub, progress, vision, manage
 from backend.identity import initialize_legacy
 from backend.security import get_current_user
 from auth_store import AuthError
@@ -48,6 +48,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(account.router)
 app.include_router(consents.router)
 app.include_router(habits.router)
 app.include_router(health_hub.router)

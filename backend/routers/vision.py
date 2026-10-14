@@ -15,7 +15,7 @@ from fastapi.concurrency import run_in_threadpool
 
 from backend.database import get_database
 from backend.features import is_enabled
-from backend.identity import ensure_legacy_account, legacy_auth, login_legacy, login_limiter, revoke_linked_sessions, save_link
+from backend.identity import ensure_legacy_account, legacy_auth, login_legacy, login_limiter
 from backend.security import clear_session_cookies, create_session, get_current_user, require_csrf, require_consent, verify_password, hash_password
 from backend.settings import SESSION_COOKIE_NAME
 from server import VisionFaceRequestHandler
@@ -130,19 +130,19 @@ def change_password(payload: dict, request: Request, response: Response, user=De
     if not valid:
         raise HTTPException(400, "Mật khẩu hiện tại không đúng.")
     digest = PASSWORDS.hash(new)
-    with auth.faces._connect() as legacy:
-        auth.write_lock(legacy)
-        current = legacy.execute("SELECT password_hash FROM accounts WHERE id = ?", (account["id"],)).fetchone()
-        if current[0] != account["password_hash"]:
+    app_digest = hash_password(new) if row["password_hash"] != "legacy" else "legacy"
+    from backend.transactions import identity_transaction
+    with identity_transaction(connection, auth) as legacy:
+        current = legacy.execute("SELECT password_hash, is_active FROM accounts WHERE id = ?", (account["id"],)).fetchone()
+        app_current = connection.execute("SELECT password_hash FROM users WHERE id = ?", (user["id"],)).fetchone()
+        if not current or not current[1] or not app_current or current[0] != account["password_hash"] or app_current["password_hash"] != row["password_hash"]:
             raise HTTPException(409, "Mật khẩu đã thay đổi. Vui lòng đăng nhập lại.")
         legacy.execute("UPDATE accounts SET password_hash = ?, must_change_password = 0 WHERE id = ?", (digest, account["id"]))
         legacy.execute("DELETE FROM auth_sessions WHERE account_id = ?", (account["id"],))
+        connection.execute("UPDATE users SET password_hash = ? WHERE id = ?", (app_digest, user["id"]))
+        connection.execute("UPDATE legacy_account_links SET credential_hash = ? WHERE user_id = ?", (hashlib.sha256(digest.encode()).hexdigest(), user["id"]))
+        connection.execute("DELETE FROM sessions WHERE user_id = ?", (user["id"],))
         auth.audit(legacy, account["id"], "account.password_changed", account["id"])
-    if row["password_hash"] != "legacy":
-        connection.execute("UPDATE users SET password_hash = ? WHERE id = ?", (hash_password(new), user["id"]))
-        connection.commit()
-    save_link(connection, user["id"], account["id"])
-    revoke_linked_sessions(connection, account["id"])
     clear_session_cookies(response)
     return {"success": True}
 

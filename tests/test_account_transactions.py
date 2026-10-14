@@ -15,6 +15,7 @@ from auth_store import AuthStore, LoginLimiter
 from backend import identity
 from backend.database import initialize_database
 from backend.routers import auth as auth_router
+from backend.routers import vision
 from backend.schemas import RegisterRequest
 from face_store import FaceStore
 
@@ -141,6 +142,32 @@ class AccountTransactionTests(unittest.TestCase):
             identity.delete_user_account(self.connection, user_id)
         self.assertFalse(self.connection.in_transaction)
         self.assertEqual(self.snapshot(), before)
+
+    def assert_password_change_rolls_back(self, commit_failure=False):
+        user_id, _, _ = self.seed_account()
+        self.connection.execute("UPDATE users SET password_hash = 'legacy' WHERE id = ?", (user_id,))
+        self.connection.commit()
+        if commit_failure:
+            self.connection.fail_commit = True
+        else:
+            with self.faces._connect() as legacy:
+                self.failing_trigger(legacy, "audit_logs", "INSERT")
+        before = self.snapshot()
+        user = dict(self.connection.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone())
+        response = Response()
+        with patch.object(vision, "legacy_auth", return_value=self.auth):
+            with self.assertRaisesRegex(sqlite3.DatabaseError, "injected"):
+                vision.change_password({"current_password": "Transaction password 123", "new_password": "Changed password 456"},
+                                       Request({"type": "http", "headers": []}), response, user, None, self.connection)
+        self.assertEqual(self.snapshot(), before)
+        self.assertEqual(response.headers.getlist("set-cookie"), [])
+        self.assertFalse(self.connection.in_transaction)
+
+    def test_password_audit_failure_preserves_both_credentials_and_sessions(self):
+        self.assert_password_change_rolls_back()
+
+    def test_password_commit_failure_preserves_both_credentials_and_sessions(self):
+        self.assert_password_change_rolls_back(commit_failure=True)
 
     def test_registration_link_failure_rolls_back_user_face_account_audit_and_session(self):
         self.failing_trigger(self.connection, "legacy_account_links", "INSERT")
