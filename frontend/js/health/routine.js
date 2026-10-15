@@ -171,7 +171,7 @@ export function initRoutine() {
     renderLibrary();
     if (busy) setBusy(true);
   }));
-  window.addEventListener("hashchange", () => { if (window.location.hash === "#health-hub") void loadRoutine(); });
+  document.addEventListener("auramaxx:routechange", () => { if (window.location.hash === "#health-hub") void loadRoutine(); });
   window.addEventListener("auramaxx:auth-changed", () => {
     sessionNumber++; requestNumber++; routine = null; busy = false;
     render();

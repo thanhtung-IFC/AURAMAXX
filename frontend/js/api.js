@@ -34,7 +34,8 @@ export async function apiRequest(path, options = {}) {
     });
 
     const contentType = response.headers.get("content-type") || "";
-    const payload = contentType.includes("application/json")
+    const noBody = method === "HEAD" || response.status === 204 || response.status === 205;
+    const payload = noBody ? null : contentType.includes("application/json")
       ? await response.json()
       : await response.text();
 
@@ -68,7 +69,7 @@ export async function apiRequest(path, options = {}) {
 
 export const api = {
   health: () => apiRequest("/api/health", { method: "GET" }),
-  get: (path) => apiRequest(path, { method: "GET" }),
+  get: (path, options = {}) => apiRequest(path, { ...options, method: "GET" }),
   post: (path, body) => apiRequest(path, { method: "POST", body: JSON.stringify(body) }),
   patch: (path, body) => apiRequest(path, { method: "PATCH", body: JSON.stringify(body) }),
   delete: (path, body) => apiRequest(path, {

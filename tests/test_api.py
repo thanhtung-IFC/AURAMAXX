@@ -1,6 +1,7 @@
 """Kiểm thử REST API cục bộ, dùng SQLite tạm và không cần cài pytest/httpx."""
 
 import http.cookiejar
+import gzip
 from contextlib import closing
 import json
 import os
@@ -419,6 +420,32 @@ class ApiIntegrationTests(unittest.TestCase):
         for path in ("/.env", "/server.py", "/backend/settings.py", "/face_database.sqlite3", "/api/not-a-route"):
             self.assertEqual(self.request("GET", path)[0], 404, path)
         self.assertEqual(self.request("GET", "/api/status")[0], 200)
+
+    def test_web_assets_are_compressed_and_revalidated(self):
+        for path in ("/app.js", "/styles.css", "/legacy-assets/app.js"):
+            with self.subTest(path=path):
+                with self.client.open(self.base_url + path) as response:
+                    raw = response.read()
+                    etag = response.headers["ETag"]
+                    self.assertEqual(response.headers["Cache-Control"], "public, max-age=0, must-revalidate")
+                request = urllib.request.Request(self.base_url + path, headers={"Accept-Encoding": "gzip"})
+                with self.client.open(request) as response:
+                    compressed = response.read()
+                    self.assertEqual(response.headers["Content-Encoding"], "gzip")
+                    self.assertIn("Accept-Encoding", response.headers["Vary"])
+                    self.assertEqual(gzip.decompress(compressed), raw)
+                    self.assertLess(len(compressed), len(raw) * .6)
+                request = urllib.request.Request(self.base_url + path, headers={"If-None-Match": etag, "Accept-Encoding": "gzip"})
+                with self.assertRaises(urllib.error.HTTPError) as caught:
+                    self.client.open(request)
+                self.assertEqual(caught.exception.code, 304)
+                self.assertEqual(caught.exception.read(), b"")
+                self.assertEqual(caught.exception.headers["Cache-Control"], "public, max-age=0, must-revalidate")
+                caught.exception.close()
+        request = urllib.request.Request(self.base_url + "/", headers={"Accept-Encoding": "gzip"})
+        with self.client.open(request) as response:
+            self.assertEqual(response.headers["Cache-Control"], "no-store")
+            self.assertIn(b"<!doctype html>", gzip.decompress(response.read()))
 
     def test_owner_management_has_one_admin_area_and_protected_data(self):
         self.assertEqual(self.request("GET", "/api/manage/status")[0], 401)

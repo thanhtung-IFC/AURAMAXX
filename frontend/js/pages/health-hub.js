@@ -11,6 +11,7 @@ const CATEGORY_LABELS = {
 const CATEGORY_ICONS = { water: "i-water", sleep: "i-moon", movement: "i-heart", self_care: "i-leaf" };
 let initialized = false;
 let habitRequest = 0;
+let habitController = null;
 
 function ensureJournal() {
   const panel = document.querySelector(".habit-empty");
@@ -98,7 +99,10 @@ function renderRecords(records) {
 }
 
 async function loadHabits() {
+  if (window.location.hash !== "#health-hub") return;
   const request = ++habitRequest;
+  habitController?.abort();
+  habitController = new AbortController();
   ensureJournal();
   const form = document.querySelector("#habit-entry-form");
   const empty = document.querySelector(".habit-empty .empty-state");
@@ -109,7 +113,7 @@ async function loadHabits() {
   empty.innerHTML = `<div class="health-loading">Đang tải nhật ký của bạn…</div>`;
 
   try {
-    const records = await api.get("/api/habits");
+    const records = await api.get("/api/habits", { signal: habitController.signal });
     if (request !== habitRequest) return;
     form.hidden = false;
     renderRecords(records);
@@ -139,7 +143,6 @@ async function createHabit(event) {
     });
     form.reset();
     showToast("Đã lưu bản ghi vào tài khoản của bạn.", "success");
-    await loadHabits();
     window.dispatchEvent(new CustomEvent("auramaxx:habits-changed"));
   } catch (error) {
     showToast(error.message, "error");
@@ -157,7 +160,6 @@ async function deleteHabit(event) {
   try {
     await api.delete(`/api/habits/${encodeURIComponent(button.dataset.recordId)}`);
     showToast("Đã xóa bản ghi.", "success");
-    await loadHabits();
     window.dispatchEvent(new CustomEvent("auramaxx:habits-changed"));
   } catch (error) {
     button.disabled = false;
@@ -165,17 +167,32 @@ async function deleteHabit(event) {
   }
 }
 
+function cancelHabits() {
+  habitRequest++;
+  habitController?.abort();
+}
+
+function resetHabits() {
+  cancelHabits();
+  document.querySelector("#habit-entry-form").hidden = true;
+  document.querySelector("#habit-records").replaceChildren();
+  document.querySelector(".habit-empty .empty-state").hidden = false;
+  showEmpty({ title: "Đăng nhập để xem nhật ký", description: "Dữ liệu sức khỏe chỉ hiển thị trong tài khoản của bạn." }, "login");
+  if (window.location.hash === "#health-hub") void loadHabits();
+}
+
 export function initHealthHub() {
   if (initialized) return;
   initialized = true;
   ensureJournal();
   initRoutine();
-  window.addEventListener("auramaxx:auth-changed", () => void loadHabits());
-  window.addEventListener("hashchange", () => {
+  window.addEventListener("auramaxx:auth-changed", resetHabits);
+  document.addEventListener("auramaxx:routechange", () => {
     if (window.location.hash === "#health-hub") loadHabits();
+    else cancelHabits();
   });
   window.addEventListener("auramaxx:consent-changed", (event) => {
-    if (event.detail?.purpose === "health_tracking" && window.location.hash === "#health-hub") loadHabits();
+    if (event.detail?.purpose === "health_tracking") resetHabits();
   });
   window.addEventListener("auramaxx:habits-changed", () => {
     if (window.location.hash === "#health-hub") void loadHabits();

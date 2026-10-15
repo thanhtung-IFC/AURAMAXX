@@ -42,7 +42,6 @@ export function initMotion() {
 
   document.documentElement.classList.add("motion-ready");
   observeWithin(document);
-  document.addEventListener("auramaxx:routechange", () => observeWithin(document));
   const mutations = new MutationObserver((records) => {
     for (const record of records) {
       record.addedNodes.forEach((node) => {

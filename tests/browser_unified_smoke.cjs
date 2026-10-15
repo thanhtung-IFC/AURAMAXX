@@ -107,7 +107,7 @@ function cdp(ws, exceptions) {
     const click = selector => evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
     const route = async name => {
       await evaluate(`location.hash=${JSON.stringify(name)}`);
-      await until(() => evaluate(`!document.querySelector('[data-page="${name}"]').hidden`), name);
+      await until(() => evaluate(`!document.querySelector('[data-page="${name}"]').hidden && document.querySelector('[data-page="${name}"]').getAttribute('aria-busy') !== 'true'`), name);
     };
     await send('Page.navigate', { url: base });
     await until(() => evaluate(`document.querySelector('#api-status')?.dataset.state === 'online'`), 'main app connected');
@@ -263,7 +263,7 @@ function cdp(ws, exceptions) {
     await performanceMode('quality');
     fs.writeFileSync(path.join(outputRoot,'face-lab-mobile-captured.png'),Buffer.from((await send('Page.captureScreenshot',{format:'png'})).data,'base64'));
     await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});
-    assert.equal(await evaluate(`document.querySelector('#face-capture').parentElement.classList.contains('face-capture-panel') && document.querySelectorAll('#face-capture').length===1`),true,'desktop restores original single capture control');
+    await until(() => evaluate(`document.querySelector('#face-capture').parentElement.classList.contains('face-capture-panel') && document.querySelectorAll('#face-capture').length===1`),'desktop restores original single capture control');
     await evaluate(`document.querySelector('#face-person-name').value='Native Face';document.querySelector('#face-register-form').requestSubmit()`);
     await until(() => evaluate(`document.querySelector('#face-people-list').textContent.includes('Native Face')`),'native registration');
     await evaluate(`window.__fixtureYaw=25`);
@@ -396,9 +396,12 @@ function cdp(ws, exceptions) {
     assert.equal(JSON.stringify(exported).includes('password_hash'),false);
     await send('Page.reload');
     await until(() => evaluate(`document.querySelector('.profile-card h2')?.textContent==='Browser member updated' && !document.querySelector('#logout-button').disabled`),'account reloads with performance preference');
-    assert.equal(await evaluate(`document.querySelector('#aura-performance-mode').value==='quality' && document.querySelector('#face-performance-mode').value==='quality' && document.documentElement.dataset.performanceMode==='quality' && window.__cameraRequests.length===0`),true,'only selected mode persists; camera does not reopen');
+    assert.equal(await evaluate(`document.querySelector('#aura-performance-mode').value==='quality' && !document.querySelector('#face-performance-mode') && document.documentElement.dataset.performanceMode==='quality' && window.__cameraRequests.length===0`),true,'only selected mode persists; Face Lab is deferred and camera does not reopen');
     await evaluate(`document.querySelector('#aura-performance-mode').value='auto';document.querySelector('#aura-performance-mode').dispatchEvent(new Event('change',{bubbles:true}))`);
-    assert.equal(await evaluate(`document.querySelector('#face-performance-mode').value==='auto' && localStorage.getItem('auramaxx-performance-mode')==='auto'`),true,'My Aura can restore automatic mode');
+    assert.equal(await evaluate(`document.documentElement.dataset.performanceMode==='auto' && localStorage.getItem('auramaxx-performance-mode')==='auto'`),true,'My Aura can restore automatic mode');
+    await route('face-lab');
+    assert.equal(await evaluate(`document.querySelector('#face-performance-mode').value==='auto' && window.__cameraRequests.length===0`),true,'deferred Face Lab picks up the saved mode without opening the camera');
+    await route('my-aura');
     await click('#logout-button');
     await until(() => evaluate(`document.querySelector('.profile-card h2').textContent === 'Chưa đăng nhập'`), 'logout');
     await send('Page.navigate', { url: base + '/manage' });

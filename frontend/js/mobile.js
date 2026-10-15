@@ -23,7 +23,6 @@ export function initMobileUI() {
     close();
   };
   document.addEventListener("auramaxx:routechange", updateRoute);
-  window.addEventListener("hashchange", updateRoute);
   updateRoute();
 
   const viewport = window.visualViewport;

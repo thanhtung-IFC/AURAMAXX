@@ -9,7 +9,8 @@ from fastapi.staticfiles import StaticFiles
 
 from backend.database import check_database_connection, initialize_database, close_database_pool
 from backend.database import get_database
-from backend.features import FEATURES, is_enabled
+from backend.features import FEATURES
+from backend.http_performance import WebCompressionMiddleware
 from backend.routers import account, arena, assistant, aura, auth, consents, face_analysis, habits, health_hub, progress, vision, manage
 from backend.identity import initialize_legacy
 from backend.security import get_current_user
@@ -39,6 +40,8 @@ app = FastAPI(
     description="API nền tảng cho dự án AURAMAXX.",
     lifespan=lifespan,
 )
+
+app.add_middleware(WebCompressionMiddleware, minimum_size=1000, compresslevel=5)
 
 # Same-origin by default; explicit development origins remain configurable.
 app.add_middleware(
@@ -78,8 +81,14 @@ async def security_headers(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "SAMEORIGIN"
     response.headers["Referrer-Policy"] = "same-origin"
-    if request.url.path.startswith("/api/") or request.url.path.endswith(".html") or request.url.path in {"/", "/manage", "/admin/login"}:
+    if (request.url.path.startswith("/api/") or request.url.path.endswith(".html")
+            or request.url.path in {"/", "/manage", "/admin/login"}
+            or response.headers.get("Content-Type", "").startswith("text/html")):
         response.headers["Cache-Control"] = "no-store"
+    elif request.method in {"GET", "HEAD"} and response.status_code in {200, 304}:
+        # Asset names are not fingerprinted: validate ETags on reuse so a new
+        # deployment cannot leave the browser with mismatched module versions.
+        response.headers["Cache-Control"] = "public, max-age=0, must-revalidate"
     return response
 
 
@@ -103,7 +112,10 @@ def health_check() -> dict[str, str]:
 
 @app.get("/api/features", include_in_schema=False)
 def public_feature_status(connection=Depends(get_database)):
-    return {"features": {key: is_enabled(connection, key) for key in FEATURES}}
+    overrides = {row["feature_key"]: bool(row["enabled"]) for row in connection.execute(
+        "SELECT feature_key, enabled FROM admin_feature_flags"
+    ).fetchall()}
+    return {"features": {key: overrides.get(key, True) for key in FEATURES}}
 
 
 @app.get("/api/status", include_in_schema=False)

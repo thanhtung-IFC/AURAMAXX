@@ -1,4 +1,5 @@
 /* Economy mode trims decorative work; loading indicators remain visible. */
+.page-load-status { padding: 24px; color: var(--color-text-muted); }
 :root[data-performance-tier="economy"] .page-view,
 :root[data-performance-tier="economy"] .ai-halo,
 :root[data-performance-tier="economy"] .camera-orbit i { animation: none; }

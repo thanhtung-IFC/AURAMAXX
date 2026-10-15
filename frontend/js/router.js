@@ -7,6 +7,7 @@ const PAGES = {
   arena: "AURA FACE ARENA",
   "my-aura": "My Aura",
 };
+let currentRoute = null;
 
 function getRoute() {
   const route = window.location.hash.slice(1);
@@ -15,6 +16,8 @@ function getRoute() {
 
 function renderRoute() {
   const selected = getRoute();
+  if (selected === currentRoute) return;
+  currentRoute = selected;
 
   document.querySelectorAll("[data-page]").forEach((page) => {
     page.hidden = page.dataset.page !== selected;

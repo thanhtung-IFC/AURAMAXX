@@ -63,3 +63,61 @@ API đối chiếu: [applyConstraints](https://developer.mozilla.org/en-US/docs/
 [performance.now](https://developer.mozilla.org/en-US/docs/Web/API/Performance/now),
 [hardwareConcurrency](https://developer.mozilla.org/en-US/docs/Web/API/Navigator/hardwareConcurrency),
 [deviceMemory](https://developer.mozilla.org/en-US/docs/Web/API/Navigator/deviceMemory).
+
+## Rà soát mã nguồn ngày 15/10/2026
+
+Đo trang chủ khi chưa đăng nhập bằng Edge headless, hồ sơ trình duyệt mới và
+backend SQLite tạm. Bản trước thay đổi lấy từ commit `d89a4b7`; hai lần đo dùng
+cùng máy và cùng kịch bản. Chỉ tính JavaScript nội bộ và yêu cầu API của ứng dụng,
+không tính phông chữ bên ngoài, CSS hoặc ảnh.
+
+| Chỉ số tải trang chủ | Trước | Sau |
+| --- | ---: | ---: |
+| Số tệp JavaScript | 26 | 11 |
+| JavaScript sau giải nén | 210.960 byte | 44.176 byte |
+| JavaScript truyền qua mạng | 210.960 byte | 15.343 byte |
+| Yêu cầu API ban đầu | 11 | 3 |
+
+Lượng JavaScript truyền ban đầu giảm khoảng 93%, nhờ tải chức năng theo trang
+và nén gzip. Đây là số đo dung lượng tải trên môi trường local, không phải mức
+tăng FPS hoặc thời gian đáp ứng của máy chủ Supabase/Render.
+
+Các thay đổi:
+
+- Face Lab, Arena, Health Hub, Tiến trình và Aura AI tải mã khi mở lần đầu.
+  Mỗi trang chỉ khởi tạo một lần; rời trang trong lúc tải không khởi tạo trang
+  đã ẩn. Lỗi tải module có nút tải lại trang, giữ địa chỉ trang hiện tại.
+- Tài nguyên web được nén gzip ở mức 5. API được chuyển tiếp trực tiếp để giữ
+  luồng chat và tải bản sao lưu. Tài nguyên tĩnh dùng ETag và yêu cầu xác thực
+  lại cache; HTML và API giữ `no-store` để tránh dùng dữ liệu riêng tư cũ.
+- Bộ định tuyến phát sự kiện khi trang thực sự thay đổi. Bỏ lượt xử lý menu
+  di động và lượt quét hiệu ứng DOM trùng; bỏ tệp trung gian `face-lab.js`.
+- Nhật ký chỉ tải lại một lần sau khi lưu/xóa. Hủy yêu cầu đọc nhật ký, tiến
+  trình và Arena cũ khi chuyển trang; bỏ phản hồi đến muộn. Khi đổi tài khoản,
+  xóa nội dung riêng tư ngay và chỉ tải lại các chức năng đang mở.
+- Các truy vấn Arena độc lập chạy song song; đổi tab bảng xếp hạng hủy yêu
+  cầu trước. Lỗi tải thêm không làm nhảy qua một trang kết quả.
+- Trạng thái tính năng dùng một truy vấn thay cho năm truy vấn. Tổng số bản
+  ghi tiến trình được tính từ kết quả nhóm đã có, bỏ một truy vấn đếm trùng.
+- HTTP `204`, `205` và `HEAD` không đọc JSON từ nội dung rỗng; xóa nhật ký
+  thành công sẽ cập nhật giao diện bình thường.
+
+Đã kiểm tra: 305 bài Python, trong đó 221 bài đạt và 84 bài bỏ qua theo môi
+trường tích hợp; 9 kịch bản Node về camera, chụp ảnh, tài khoản, giao diện và
+database; ba kịch bản trình duyệt về hiệu suất, Aura AI và website hợp nhất.
+Camera/model/nhà cung cấp AI trong các kịch bản giao diện dùng dữ liệu giả lập;
+API, đăng nhập, nhật ký, thuật toán phân tích Python và bản sao lưu dùng backend
+thật với SQLite tạm. Không sửa dữ liệu hoặc triển khai lên máy chủ đang dùng.
+
+Chạy lại kiểm tra hiệu suất và các trường hợp tải chậm, lỗi tải module, chuyển
+trang nhanh, phản hồi tài khoản cũ, lưu/xóa nhật ký:
+
+```powershell
+node tests/browser_performance_smoke.cjs
+.\.venv\Scripts\python.exe -X utf8 -B -m unittest tests.test_web_performance tests.test_api
+```
+
+Kết quả đo mới nằm trong `.test-output/performance-after.json`. Nếu renderer
+Edge không khởi động trong môi trường kiểm thử bị sandbox, có thể đặt
+`$env:EDGE_NO_SANDBOX="1"` cho riêng kịch bản hiệu suất với hồ sơ trình duyệt
+tạm. Cấu hình này không tác động đến website hoặc trình duyệt thường dùng.

@@ -524,6 +524,13 @@ function onComposerKeydown(event) {
   }
 }
 
+export function prepareAuraPrompt(message, attach = false) {
+  $("#chat-input").value = message;
+  $("#chat-attach-report").checked = attach && Boolean(getFaceReport());
+  $("#chat-input").dispatchEvent(new Event("input", { bubbles: true }));
+  $("#chat-input").focus();
+}
+
 export function initAuraAI() {
   const responseOptions = document.createElement("label");
   responseOptions.className = "chat-response-options";
@@ -546,12 +553,6 @@ export function initAuraAI() {
     $("#chat-report-state").textContent = available ? "Báo cáo sẵn sàng. Chọn đính kèm để gửi số đo; ảnh không được gửi." : "Phân tích trong Face Lab để đính kèm số đo. Ảnh không được gửi.";
     setAvailability();
   };
-  const preparePrompt = (message, attach = false) => {
-    $("#chat-input").value = message;
-    $("#chat-attach-report").checked = attach && Boolean(getFaceReport());
-    $("#chat-input").dispatchEvent(new Event("input", { bubbles: true }));
-    $("#chat-input").focus();
-  };
   $("#chat-routine").addEventListener("click", () => { window.location.hash = "health-hub"; });
   $("#chat-reconnect").addEventListener("click", () => void loadAccess());
   $("#chat-history-search").addEventListener("input", renderConversationList);
@@ -567,7 +568,6 @@ export function initAuraAI() {
     if (container.scrollHeight - container.scrollTop - container.clientHeight > 100) container.dataset.readingEarlier = "true";
     else delete container.dataset.readingEarlier;
   }, { passive: true });
-  window.addEventListener("auramaxx:ai-request", event => preparePrompt(event.detail.message, event.detail.attach));
   window.addEventListener("auramaxx:face-report-changed", updateReport);
   $("#chat-form").addEventListener("submit", (event) => void sendMessage(event));
   $("#chat-stop").addEventListener("click", stopGeneration);
@@ -585,7 +585,7 @@ export function initAuraAI() {
     $("#chat-input").dispatchEvent(new Event("input", { bubbles: true }));
     $("#chat-input").focus();
   }));
-  window.addEventListener("hashchange", () => {
+  document.addEventListener("auramaxx:routechange", () => {
     if (window.location.hash === "#aura-ai") void loadAccess();
   });
   const resetAccount = () => {
@@ -621,9 +621,9 @@ export function initAuraAI() {
   });
   window.addEventListener("auramaxx:auth-changed", () => {
     resetAccount();
-    void loadAccess();
+    if (window.location.hash === "#aura-ai") void loadAccess();
   });
   renderConversationList();
   updateReport();
-  void loadAccess();
+  if (window.location.hash === "#aura-ai") void loadAccess();
 }

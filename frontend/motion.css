@@ -5,16 +5,6 @@
   --motion-page: 360ms;
 }
 
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background: radial-gradient(ellipse at 82% 8%, #3478f60a, transparent 40%),
-    radial-gradient(ellipse at 10% 90%, #65d8d20a, transparent 35%);
-}
-
 .page-view { animation-duration: var(--motion-page); animation-timing-function: var(--motion-ease); }
 :where(.button, .icon-button, .nav-link, .feature-card, .chat-conversation-item,
   .chat-suggestions button, .send-button, .face-profile-detail summary, .face-profile-details summary) {
@@ -27,7 +17,6 @@ body::before {
   outline: 2px solid #75a5ff;
   outline-offset: 2px;
 }
-.nav-link:hover { transform: translateX(2px); }
 .nav-link.active { transition: background var(--motion-medium) var(--motion-ease), color var(--motion-medium) var(--motion-ease), border-color var(--motion-medium) var(--motion-ease); }
 
 .motion-ready .motion-reveal {

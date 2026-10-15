@@ -24,10 +24,6 @@ def get_progress_summary(
         "SELECT * FROM habit_entries WHERE user_id = ? ORDER BY recorded_at DESC LIMIT 100",
         (user["id"],),
     ).fetchall()
-    total = connection.execute(
-        "SELECT COUNT(*) AS total FROM habit_entries WHERE user_id = ?",
-        (user["id"],),
-    ).fetchone()["total"]
     categories = connection.execute(
         """
         SELECT category, COUNT(*) AS entries
@@ -36,7 +32,7 @@ def get_progress_summary(
         (user["id"],),
     ).fetchall()
     return {
-        "total_entries": total,
+        "total_entries": sum(row["entries"] for row in categories),
         "categories": [{"category": row["category"], "entries": row["entries"]} for row in categories],
         "entries": [_record(row).model_dump() for row in rows],
     }

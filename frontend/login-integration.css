@@ -1,17 +1,19 @@
 /* Preserve the original VisionFace journey/form layout in the shared palette. */
-.auth-page{color-scheme:inherit;background:radial-gradient(ellipse at top left,var(--color-primary-soft),transparent 65%),var(--color-background);color:var(--color-text);font-family:var(--font-family)}
-.auth-shell{background:var(--color-surface);border:1px solid var(--color-border);box-shadow:var(--shadow-card)}
-.journey{background:radial-gradient(ellipse at 80% 38%,#ab78e6 0%,transparent 58%),radial-gradient(ellipse at 0 100%,#514dba 0%,transparent 65%),linear-gradient(145deg,#4f2687,#7643b7 60%,#2d1c50)}
+.auth-page{color-scheme:inherit;background:var(--color-background);color:var(--color-text);font-family:var(--font-family)}
+.auth-shell{background:var(--color-surface);border:1px solid var(--color-border);border-radius:18px;box-shadow:var(--shadow-card)}
+.journey{background:var(--color-surface-raised);color:var(--color-text);border-radius:12px;border-right:1px solid var(--color-border-subtle)}
+.journey-description{color:var(--color-text-muted)}.journey-badge{color:var(--color-text-muted);border-color:var(--color-border);background:transparent}.journey-steps{color:var(--color-text-muted)}.step-number{color:var(--color-text-subtle);border-color:var(--color-border);background:transparent}
+.journey-steps li{background:transparent;border:1px solid var(--color-border);border-radius:12px;color:var(--color-text-muted)}.journey-steps li.is-current{background:var(--color-surface);border-color:var(--color-border);color:var(--color-text)}
 .journey-brand{font-family:var(--font-family-display);letter-spacing:1px;font-weight:700}.journey-brand>span{font-size:8px;letter-spacing:1px}
-.is-current .step-number{background:#7040c4;border-color:#7040c4}
+.is-current .step-number{background:var(--color-primary-soft);border-color:var(--color-primary-soft);color:var(--blue-hi)}
 .auth-page a,.auth-role-links a[aria-current],.team-credit strong{color:var(--color-primary-hover)}
-.auth-page .journey-brand{color:white}
+.auth-page .journey-brand{color:var(--color-text)}
 .auth-role-links{justify-content:space-between;align-items:center;gap:12px}.auth-role-links button{font:inherit;color:var(--color-text-muted);padding:7px 10px;background:var(--color-surface-raised);border:1px solid var(--color-border);border-radius:8px}
 .form-description,.auth-note,.team-credit,.password-hint,.auth-role-links a{color:var(--color-text-muted)}
 .auth-page .tabs{background:var(--color-surface-high)}.auth-page .tabs button{color:var(--color-text-muted)}.auth-page .tabs button[aria-selected="true"]{background:var(--color-surface);color:var(--color-primary-hover)}
-.auth-page label{color:var(--color-text);font-size:13px}.auth-page input{background:var(--color-surface-raised);color:var(--color-text);border-color:var(--color-border);font-size:13px}.auth-page input::placeholder{color:var(--color-text-subtle)}
+.auth-page label{color:var(--color-text);font-size:13px}.auth-page input{background:var(--color-surface);color:var(--color-text);border-color:var(--color-border);border-radius:9px;font-size:14px;min-height:46px}.auth-page input::placeholder{color:var(--color-text-subtle)}
 .auth-page input:focus{outline-color:var(--color-primary);background:var(--color-surface)}.auth-page .password-toggle{color:var(--color-text-muted)}
-.auth-page button.primary{background:var(--color-primary);border-color:var(--color-primary)}.auth-page button.primary:hover{background:var(--color-primary-hover);box-shadow:0 5px 16px #8650e826}.auth-page button:disabled{opacity:.6;cursor:wait}
+.auth-page button.primary{background:var(--color-primary);border-color:var(--color-primary);border-radius:9px;box-shadow:none;min-height:46px}.auth-page button.primary:hover{background:color-mix(in srgb,var(--color-primary) 86%,#000);box-shadow:none}.auth-page button:disabled{opacity:.6;cursor:wait}
 .auth-page button:focus-visible,.auth-page a:focus-visible{outline-color:var(--color-primary)}
 .auth-page .message{color:var(--color-danger)}.auth-page .message.success{color:var(--color-success)}.auth-divider{color:var(--color-text-subtle)}.auth-divider::before,.auth-divider::after{background:var(--color-border)}
 [hidden]{display:none!important}
@@ -20,6 +22,7 @@
 [data-login-role="admin"] #admin-login-form>label{display:block;margin:16px 0 7px}
 [data-login-role="admin"] #admin-submit{margin-top:22px}
 @media(max-width:760px){
+  .auth-page input{font-size:16px}.journey{border-right:0;border-bottom:1px solid var(--color-border-subtle)}
   [data-login-role="admin"] .journey{padding:24px;min-height:0}
   [data-login-role="admin"] .journey-content{margin-top:18px}
   [data-login-role="admin"] .journey h1{margin:14px 0 0;font-size:28px;line-height:1.2}

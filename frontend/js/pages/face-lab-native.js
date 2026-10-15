@@ -32,7 +32,7 @@ let mobileActionBar = null;
 
 function renderPage() {
   page.innerHTML = `
-    <div class="page-heading-row face-lab-heading"><div><div class="eyebrow"><span class="eyebrow-dot"></span> FACE LAB · KHÁM PHÁ TỪNG ĐƯỜNG NÉT</div><h1 id="face-title">Hiểu khuôn mặt, <span>hiểu mình hơn.</span></h1><p class="page-lead">Căn khung hình, chụp khi ổn định và xem kết quả cùng giới hạn của từng phép đo.</p></div><span class="face-private-badge"><svg><use href="#i-shield"/></svg> Bạn kiểm soát ảnh chụp</span></div>
+    <div class="page-heading-row face-lab-heading"><div><div class="eyebrow"><span class="eyebrow-dot"></span> FACE LAB · KHÁM PHÁ TỪNG ĐƯỜNG NÉT</div><h1 id="face-title">Khám phá khuôn mặt.</h1><p class="page-lead">Căn khung hình, chụp khi ổn định và xem kết quả cùng giới hạn của từng phép đo.</p></div><span class="face-private-badge"><svg><use href="#i-shield"/></svg> Bạn kiểm soát ảnh chụp</span></div>
     <ol class="face-workflow" aria-label="Các bước phân tích"><li id="face-step-camera" data-state="active"><span>01</span><div><b>Căn khung hình</b><small>Đủ sáng, một khuôn mặt</small></div></li><li id="face-step-capture"><span>02</span><div><b>Chụp ảnh</b><small>Chính diện, thêm góc nghiêng</small></div></li><li id="face-step-report"><span>03</span><div><b>Khám phá kết quả</b><small>Số đo và điều kiện ảnh</small></div></li></ol>
     <div class="face-native-layout">
       <div class="face-native-main">
@@ -686,11 +686,11 @@ export function initFaceLab() {
   $("#face-register-form").addEventListener("submit", event => void registerFace(event));
   $("#face-person").addEventListener("change", event => { const person = knownPeople.find(item => item.id === event.target.value); $("#face-person-name").value = person?.name || ""; $("#face-person-name").readOnly = Boolean(person); });
   $("#face-refresh-people").addEventListener("click", () => void loadPeople());
-  window.addEventListener("hashchange", () => {
+  document.addEventListener("auramaxx:routechange", () => {
     if (window.location.hash !== "#face-lab") { stopCamera(); detector?.close(); detector = null; clearShots(); $("#face-result-content").querySelectorAll(".face-report-figure").forEach(figure => figure.remove()); }
     else void loadPeople();
   });
-  window.addEventListener("auramaxx:auth-changed", () => { clearSensitiveView(); void loadPeople(); });
+  window.addEventListener("auramaxx:auth-changed", () => { clearSensitiveView(); if (window.location.hash === "#face-lab") void loadPeople(); });
   window.addEventListener("auramaxx:bot-selected", () => {
     const button = page.querySelector('[data-face-action="bot"]');
     if (!button) return;
@@ -701,7 +701,7 @@ export function initFaceLab() {
   });
   window.addEventListener("auramaxx:consent-changed", event => { if (event.detail?.purpose === "face_analysis" && !event.detail.granted) clearSensitiveView(); });
   document.addEventListener("visibilitychange", () => { if (document.hidden) stopCamera(); });
-  navigator.mediaDevices?.addEventListener?.("devicechange", () => void enumerateCameras().catch(() => {}));
+  navigator.mediaDevices?.addEventListener?.("devicechange", () => { if (window.location.hash === "#face-lab") void enumerateCameras().catch(() => {}); });
   window.addEventListener("pagehide", clearSensitiveView);
   void enumerateCameras().catch(() => {}); void loadPeople();
 }

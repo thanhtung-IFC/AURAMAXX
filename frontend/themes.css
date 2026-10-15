@@ -30,19 +30,19 @@ a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visib
 :root[data-theme="light"],
 :root[data-theme="light"] body { background: var(--color-background); color: var(--color-text); }
 :root[data-theme="light"] body {
-  background: radial-gradient(ellipse at 76% 3%, #7040c40b 0, transparent 34rem), var(--color-background);
+  background: var(--color-background);
 }
 :root[data-theme="light"] .sidebar {
-  background: #fff;
-  border-color: var(--color-border);
-  box-shadow: 8px 0 30px #29213f0b;
+  background: var(--color-surface);
+  border-color: var(--color-border-subtle);
+  box-shadow: none;
 }
 :root[data-theme="light"] .topbar,
 :root[data-theme="light"] .mobile-nav {
   color: var(--color-text);
-  background: #ffffffed;
+  background: var(--color-surface);
   border-color: var(--color-border);
-  box-shadow: 0 5px 22px #29213f0b;
+  box-shadow: none;
 }
 :root[data-theme="light"] .breadcrumbs,
 :root[data-theme="light"] .workspace-label,
@@ -106,11 +106,11 @@ a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visib
   border-color: var(--color-border);
 }
 :root[data-theme="light"] .hero-panel {
-  background: linear-gradient(115deg, #fff 0%, #f3effb 100%);
+  background: var(--color-surface);
   border-color: var(--color-border);
   box-shadow: var(--shadow-card);
 }
-:root[data-theme="light"] .hero-panel::after { background: linear-gradient(100deg, transparent 45%, #7040c407 80%); }
+:root[data-theme="light"] .hero-panel::after { display: none; }
 :root[data-theme="light"] .panel,
 :root[data-theme="light"] .feature-card,
 :root[data-theme="light"] .habit-card,
@@ -144,7 +144,7 @@ a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visib
 :root[data-theme="light"] textarea,
 :root[data-theme="light"] select { color: var(--color-text); }
 :root[data-theme="light"] .chat-message-content { background: var(--color-surface-raised); border-color: var(--color-border); }
-:root[data-theme="light"] .chat-message-user .chat-message-content { color: #fff; background: var(--color-primary); border-color: var(--color-primary); }
+:root[data-theme="light"] .chat-message-user .chat-message-content { color: var(--color-text); background: var(--color-primary-soft); border-color: var(--color-primary-soft); }
 :root[data-theme="light"] .chat-composer textarea::placeholder { color: var(--color-text-subtle); }
 :root[data-theme="light"] .chat-composer { background: #fff; }
 :root[data-theme="light"] .modal {

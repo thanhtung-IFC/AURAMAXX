@@ -15,7 +15,7 @@ function applyAppearance() {
   root.dataset.theme = theme;
   root.dataset.reducedMotion = String(reduceMotion || Boolean(systemMotion?.matches));
   const themeColor = document.querySelector('meta[name="theme-color"]');
-  if (themeColor) themeColor.content = theme === "light" ? "#f4f5f9" : "#100d1d";
+  if (themeColor) themeColor.content = theme === "light" ? "#f6f6f3" : "#111315";
   const toggle = document.querySelector("#theme-toggle");
   if (toggle) {
     const label = `Chuyển sang giao diện ${theme === "dark" ? "sáng" : "tối"}`;

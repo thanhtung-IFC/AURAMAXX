@@ -22,6 +22,8 @@ let leaderboard = [];
 let hasMore = false;
 let loadingMore = false;
 let bots = [];
+let arenaRequest = 0, arenaController = null;
+let leaderboardRequest = 0, leaderboardController = null;
 
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (character) => ({
@@ -33,8 +35,8 @@ function renderPage() {
   page.innerHTML = `
     <header class="arena-heading page-heading-row">
       <div><div class="eyebrow"><span class="eyebrow-dot"></span> AURAMAXX · COMPETITIVE MODE</div>
-        <h1 id="arena-title">AURA FACE <span>ARENA</span></h1>
-        <p class="page-lead">Analyze. Compete. Ascend. · Phân tích khuôn mặt, thử thách bản thân và chinh phục bảng xếp hạng.</p>
+        <h1 id="arena-title">Face Arena</h1>
+        <p class="page-lead">Chọn đối thủ, luyện tập cùng BOT và theo dõi kết quả của bạn.</p>
       </div><span class="arena-live-badge" id="arena-live-badge"><i></i> BETA · MINH BẠCH</span>
     </header>
     <section class="arena-status panel" id="arena-status" role="status"><span class="arena-status-mark">!</span><div><b>Đang kiểm tra chế độ thi đấu…</b><p>Trạng thái được lấy từ backend, không dùng dữ liệu minh họa.</p></div></section>
@@ -188,15 +190,22 @@ function renderLeaderboard() {
 }
 
 async function fetchLeaderboard(reset = true) {
+  const request = ++leaderboardRequest;
+  leaderboardController?.abort();
+  leaderboardController = new AbortController();
+  const offset = reset ? 0 : pageOffset + 20;
   if (reset) {
     pageOffset = 0;
     leaderboard = [];
+    loadingMore = false;
   }
   const state = page.querySelector("#arena-leaderboard-state");
   state.hidden = false;
   state.textContent = "Đang tải dữ liệu từ backend…";
   try {
-    const result = await api.get(`/api/arena/leaderboard?tab=${activeTab}&limit=20&offset=${pageOffset}`);
+    const result = await api.get(`/api/arena/leaderboard?tab=${activeTab}&limit=20&offset=${offset}`, { signal: leaderboardController.signal });
+    if (request !== leaderboardRequest) return;
+    pageOffset = offset;
     if (reset) leaderboard = result.entries;
     else leaderboard.push(...result.entries);
     hasMore = result.has_more;
@@ -206,6 +215,7 @@ async function fetchLeaderboard(reset = true) {
       state.textContent = "Chưa có hệ thống kết bạn. Không có người chơi nào được tạo giả để minh họa.";
     }
   } catch (error) {
+    if (request !== leaderboardRequest) return;
     state.hidden = false;
     state.textContent = `Không tải được bảng xếp hạng: ${error.message}`;
   }
@@ -221,9 +231,10 @@ async function selectTab(tab) {
 async function loadMore() {
   if (loadingMore || !hasMore) return;
   loadingMore = true;
-  pageOffset += 20;
+  const tab = activeTab;
   renderLeaderboard();
   await fetchLeaderboard(false);
+  if (tab !== activeTab) return;
   loadingMore = false;
   renderLeaderboard();
 }
@@ -235,27 +246,45 @@ async function saveProfile(event) {
   const message = form.querySelector("#arena-save-message");
   button.disabled = true;
   message.textContent = "Đang lưu…";
+  const request = arenaRequest;
   try {
-    profile = await api.patch("/api/arena/profile", {
+    const updated = await api.patch("/api/arena/profile", {
       display_name: form.elements.display_name.value,
       leaderboard_public: form.elements.leaderboard_public.checked,
     });
+    if (request !== arenaRequest) return;
+    profile = updated;
     renderProfile();
     page.querySelector("#arena-save-message").textContent = "Đã lưu hồ sơ.";
     showToast("Hồ sơ Arena đã được cập nhật.", "success");
     if (activeTab !== "friends") await fetchLeaderboard();
   } catch (error) {
+    if (request !== arenaRequest) return;
     message.textContent = error.message;
   } finally {
     const currentButton = page.querySelector("#arena-profile-form button[type=submit]");
-    if (currentButton) currentButton.disabled = false;
+    if (currentButton && request === arenaRequest) currentButton.disabled = false;
   }
 }
 
 async function loadArena() {
-  try {
-    const result = await api.get("/api/arena/bots");
-    bots = result.bots;
+  if (window.location.hash !== "#arena") return;
+  const request = ++arenaRequest;
+  arenaController?.abort();
+  arenaController = new AbortController();
+  const options = { signal: arenaController.signal };
+  const [accessResults] = await Promise.all([
+    Promise.allSettled([
+      api.get("/api/arena/bots", options),
+      api.get("/api/arena/status", options),
+      api.get("/api/arena/profile", options),
+    ]),
+    fetchLeaderboard(),
+  ]);
+  const [botResult, statusResult, profileResult] = accessResults;
+  if (request !== arenaRequest) return;
+  if (botResult.status === "fulfilled") {
+    bots = botResult.value.bots;
     renderBots();
     const selectedId = getSelectedArenaBot();
     const selectedBot = bots.find((bot) => bot.id === selectedId);
@@ -266,53 +295,67 @@ async function loadArena() {
       selected.textContent = `Đã chọn ${selectedBot.name} · BOT ${selectedBot.elo} Elo. Hãy mở Face Lab và hoàn tất một lần phân tích.`;
       page.querySelector("#arena-bot-start").textContent = `Phân tích rồi đấu ${selectedBot.name}`;
     }
-  } catch (error) {
-    page.querySelector("#arena-bot-list").innerHTML = `<p>Không tải được danh sách BOT: ${escapeHtml(error.message)}</p>`;
+  } else {
+    page.querySelector("#arena-bot-list").innerHTML = `<p>Không tải được danh sách BOT: ${escapeHtml(botResult.reason.message)}</p>`;
   }
-  try {
-    arenaStatus = await api.get("/api/arena/status");
+  if (statusResult.status === "fulfilled") {
+    arenaStatus = statusResult.value;
     updateStatus(arenaStatus);
-  } catch (error) {
+  } else {
     const banner = page.querySelector("#arena-status");
     banner.dataset.state = "error";
     banner.querySelector("b").textContent = "Không kết nối được Arena backend.";
-    banner.querySelector("p").textContent = error.message;
+    banner.querySelector("p").textContent = statusResult.reason.message;
   }
-  const tasks = [fetchLeaderboard()];
-  try {
-    profile = await api.get("/api/arena/profile");
-    renderProfile();
-  } catch (error) {
-    profile = null;
-    renderProfile();
-    if (error.status !== 401) showToast(`Không tải được hồ sơ Arena: ${error.message}`, "error");
+  profile = profileResult.status === "fulfilled" ? profileResult.value : null;
+  renderProfile();
+  if (profileResult.status === "rejected") {
+    if (profileResult.reason.status !== 401) showToast(`Không tải được hồ sơ Arena: ${profileResult.reason.message}`, "error");
     return;
   }
-  try {
-    const [summary, botMatches] = await Promise.all([
-      api.get("/api/arena/bot-matches/summary"),
-      api.get("/api/arena/bot-matches/history"),
-    ]);
-    renderBotSummary(summary);
-    renderBotHistory(botMatches);
-  } catch (error) {
-    if (error.status !== 401) showToast(`Không tải được lịch sử BOT: ${error.message}`, "error");
-  }
-  try {
-    const matches = await api.get("/api/arena/matches/history");
+  const results = await Promise.allSettled([
+    api.get("/api/arena/bot-matches/summary", options),
+    api.get("/api/arena/bot-matches/history", options),
+    api.get("/api/arena/matches/history", options),
+  ]);
+  if (request !== arenaRequest) return;
+  if (results[0].status === "fulfilled") renderBotSummary(results[0].value);
+  if (results[1].status === "fulfilled") renderBotHistory(results[1].value);
+  if (results[2].status === "fulfilled") {
+    const matches = results[2].value;
     const history = page.querySelector("#arena-history");
     if (matches.length) history.innerHTML = `<span class="panel-overline">LỊCH SỬ TRẬN</span><p>${matches.length} trận đã được máy chủ ghi nhận.</p>`;
-  } catch (error) {
-    showToast(`Không tải được lịch sử Arena: ${error.message}`, "error");
   }
-  await Promise.all(tasks);
+  for (const result of results) {
+    if (result.status === "rejected" && result.reason.status !== 401) showToast(`Không tải được lịch sử Arena: ${result.reason.message}`, "error");
+  }
+}
+
+function cancelArena() {
+  arenaRequest++; leaderboardRequest++;
+  arenaController?.abort(); leaderboardController?.abort();
+}
+
+function clearPrivateArena() {
+  profile = null;
+  renderProfile();
+  const summary = page.querySelector("#arena-bot-summary");
+  summary.hidden = true;
+  summary.replaceChildren();
+  page.querySelector("#arena-bot-history").innerHTML = '<span class="panel-overline">LỊCH SỬ BOT RIÊNG</span><p>Đăng nhập để xem các trận BOT đã lưu.</p>';
+  page.querySelector("#arena-history").innerHTML = '<span class="panel-overline">LỊCH SỬ TRẬN</span><p>Chưa có trận đấu được máy chủ xác nhận.</p>';
 }
 
 export function initArena() {
   renderPage();
-  window.addEventListener("auramaxx:auth-changed", () => void loadArena());
+  window.addEventListener("auramaxx:auth-changed", () => {
+    cancelArena();
+    clearPrivateArena();
+    if (window.location.hash === "#arena") void loadArena();
+  });
   void loadArena();
   document.addEventListener("auramaxx:routechange", (event) => {
     if (event.detail?.route === "arena") void loadArena();
+    else cancelArena();
   });
 }

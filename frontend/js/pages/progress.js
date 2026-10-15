@@ -2,6 +2,8 @@ import { api } from "../api.js";
 
 const LABELS = { water: "Uống nước", sleep: "Nghỉ ngơi", movement: "Vận động", self_care: "Chăm sóc bản thân" };
 let initialized = false;
+let progressRequest = 0;
+let progressController = null;
 
 function showAccessMessage(title, description, action) {
   const empty = document.querySelector(".progress-empty-panel .empty-state");
@@ -88,28 +90,46 @@ function renderProgress(summary) {
 }
 
 async function loadProgress() {
+  if (window.location.hash !== "#progress") return;
+  const request = ++progressRequest;
+  progressController?.abort();
+  progressController = new AbortController();
   try {
-    const summary = await api.get("/api/progress/summary");
+    const summary = await api.get("/api/progress/summary", { signal: progressController.signal });
+    if (request !== progressRequest) return;
     renderProgress(summary);
   } catch (error) {
+    if (request !== progressRequest) return;
     if (error.status === 401) showAccessMessage("Đăng nhập để xem tiến trình", "Tiến trình chỉ tổng hợp dữ liệu thuộc tài khoản của bạn.", "login");
     else if (error.status === 403) showAccessMessage("Bạn chưa bật theo dõi sức khỏe", "Hãy xem lựa chọn Health Hub trong My Aura nếu bạn muốn xem tiến trình.", "consent");
     else showAccessMessage("Chưa tải được tiến trình", "Dữ liệu chưa thay đổi. Kiểm tra kết nối backend rồi thử lại.", "retry");
   }
 }
 
+function cancelProgress() {
+  progressRequest++;
+  progressController?.abort();
+}
+
+function resetProgress() {
+  cancelProgress();
+  showAccessMessage("Đăng nhập để xem tiến trình", "Tiến trình chỉ tổng hợp dữ liệu thuộc tài khoản của bạn.", "login");
+  if (window.location.hash === "#progress") void loadProgress();
+}
+
 export function initProgress() {
   if (initialized) return;
   initialized = true;
-  window.addEventListener("auramaxx:auth-changed", () => void loadProgress());
-  window.addEventListener("hashchange", () => {
+  window.addEventListener("auramaxx:auth-changed", resetProgress);
+  document.addEventListener("auramaxx:routechange", () => {
     if (window.location.hash === "#progress") loadProgress();
+    else cancelProgress();
   });
   window.addEventListener("auramaxx:progress-refresh", () => {
     if (window.location.hash === "#progress") loadProgress();
   });
   window.addEventListener("auramaxx:consent-changed", (event) => {
-    if (event.detail?.purpose === "health_tracking" && window.location.hash === "#progress") loadProgress();
+    if (event.detail?.purpose === "health_tracking") resetProgress();
   });
   if (window.location.hash === "#progress") loadProgress();
 }

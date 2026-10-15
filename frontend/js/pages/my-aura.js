@@ -430,7 +430,7 @@ export function initMyAura() {
   window.addEventListener("auramaxx:appearance-changed", syncAppearance);
   window.addEventListener("auramaxx:auth-required", (event) => openAuth(event.detail?.mode || "login"));
   window.addEventListener("auramaxx:auth-changed", () => { generation += 1; clearPrivateView(); loadAccount(); });
-  window.addEventListener("hashchange", () => {
+  document.addEventListener("auramaxx:routechange", () => {
     if (window.location.hash === "#my-aura") loadAccount();
     else {
       $("#aura-password-form").reset();

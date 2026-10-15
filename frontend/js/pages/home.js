@@ -23,8 +23,8 @@ export async function initHome() {
     if (result.status !== "ok" || result.database !== "ok") {
       throw new Error("Backend chưa sẵn sàng.");
     }
-    setApiStatus("online", "API đang hoạt động");
+    setApiStatus("online", "Đã kết nối");
   } catch {
-    setApiStatus("offline", "API ngoại tuyến");
+    setApiStatus("offline", "Mất kết nối");
   }
 }
