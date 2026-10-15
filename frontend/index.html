@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#10131B">
   <meta name="description" content="AURAMAXX — chăm sóc bản thân, theo nhịp độ của bạn.">
   <title>AURAMAXX — Personal wellness, reimagined</title>
@@ -20,6 +20,7 @@
   <link rel="stylesheet" href="my-aura.css">
   <link rel="stylesheet" href="aura-ai.css">
   <link rel="stylesheet" href="face-lab.css">
+  <link rel="stylesheet" href="mobile.css">
   <script type="module" src="app.js"></script>
 </head>
 <body>
@@ -210,12 +211,14 @@
   <nav class="mobile-nav" aria-label="Điều hướng nhanh">
     <a href="#home" data-nav="home"><svg><use href="#i-grid"/></svg><span>Tổng quan</span></a>
     <a href="#face-lab" data-nav="face-lab"><svg><use href="#i-face"/></svg><span>Face Lab</span></a>
-    <a href="#arena" data-nav="arena"><svg><use href="#i-chart"/></svg><span>Arena</span></a>
     <a href="#health-hub" data-nav="health-hub"><svg><use href="#i-heart"/></svg><span>Sức khỏe</span></a>
     <a href="#aura-ai" data-nav="aura-ai"><svg><use href="#i-spark"/></svg><span>Aura AI</span></a>
-    <a href="#progress" data-nav="progress"><svg><use href="#i-chart"/></svg><span>Tiến trình</span></a>
-    <a href="#my-aura" data-nav="my-aura"><svg><use href="#i-user"/></svg><span>My Aura</span></a>
+    <button class="mobile-more-toggle" id="mobile-more-toggle" type="button" aria-haspopup="dialog" aria-controls="mobile-more-dialog" aria-expanded="false"><svg><use href="#i-menu"/></svg><span>Thêm</span></button>
   </nav>
+  <dialog class="mobile-more-dialog" id="mobile-more-dialog" aria-labelledby="mobile-more-title">
+    <div class="mobile-more-heading"><div><span class="panel-overline">KHÔNG GIAN CỦA BẠN</span><h2 id="mobile-more-title">Khám phá thêm</h2></div><button class="icon-button" id="mobile-more-close" type="button" aria-label="Đóng menu"><svg><use href="#i-close"/></svg></button></div>
+    <nav class="mobile-more-links" aria-label="Các trang khác"><a href="#my-aura" data-nav="my-aura"><svg><use href="#i-user"/></svg><span><b>My Aura</b><small>Tài khoản, giao diện và quyền riêng tư</small></span><i aria-hidden="true">›</i></a><a href="#progress" data-nav="progress"><svg><use href="#i-chart"/></svg><span><b>Tiến trình</b><small>Xem lại những thay đổi của bạn</small></span><i aria-hidden="true">›</i></a><a href="#arena" data-nav="arena"><svg><use href="#i-face"/></svg><span><b>Face Arena</b><small>Khám phá đối thủ và lịch sử luyện tập</small></span><i aria-hidden="true">›</i></a></nav>
+  </dialog>
   <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
 </body>
 </html>

@@ -2,6 +2,30 @@
 
 ## Thay đổi
 
+- Camera có chế độ tự động: mở HD, đọc `getCapabilities()`, thử nâng tới Full HD
+  khi thiết bị quảng bá khả năng phù hợp, giữ luồng đang dùng nếu cấu hình thất bại.
+  `getSettings()` và kích thước video được dùng để hiển thị cấu hình nhận được.
+  Không suy đoán chất lượng camera từ thương hiệu hay tên thiết bị.
+- Camera trước/sau trên thiết bị cảm ứng dùng `facingMode`; webcam tích hợp,
+  USB và iPhone qua Continuity Camera vẫn chọn theo danh sách thiết bị trình duyệt.
+  Chuyển trước/sau không mang theo `deviceId` của camera cũ. Lật gương tự theo
+  hướng camera đến khi người dùng chỉnh bằng tay.
+- Bấm dừng khi đang xin quyền sẽ hủy phiên mở; nếu quyền được cấp sau đó, luồng
+  đến muộn được đóng. Camera bận không gây vòng lặp mở lại. Camera bị tháo,
+  tạm ngắt hoặc ngừng phát khung hình làm mất trạng thái sẵn sàng chụp.
+- Lấy nét, phơi sáng và cân bằng trắng liên tục chỉ được yêu cầu khi capability
+  tương ứng có hỗ trợ; lỗi điều khiển tùy chọn không chặn mở camera.
+- Nhận diện dùng cạnh dài 960px, tự giảm tới 640/480px khi thời gian xử lý cao
+  kéo dài, phục hồi khi máy xử lý nhanh ổn định. Ảnh chụp giữ riêng tới cạnh dài
+  1920px, đúng tỷ lệ nguồn, JPEG 0.92; không phóng lớn nguồn độ phân giải thấp.
+  Landmark chuẩn hóa và ảnh chụp vẫn thuộc cùng khung hình đã xử lý.
+- Dùng `requestVideoFrameCallback()` nếu có, bộ hẹn giờ nếu thiếu; không nhận
+  diện trùng frame hoặc chạy chồng phiên khi đổi camera. Khi video đổi kích thước
+  (ví dụ xoay điện thoại), bỏ kết quả cũ và yêu cầu giữ yên lại. Khung căn mặt
+  tính theo vùng video thực sự hiển thị, tránh đặt hướng dẫn vào dải đen của ảnh.
+- Kiểm tra độ nét bằng năng lượng Laplacian trên ROI mặt 64×64, ngưỡng RMS 2.
+  Đây là quy tắc loại ảnh quá ít chi tiết, chưa được hiệu chuẩn trên tập ảnh thật;
+  không phải confidence hay bảo đảm phát hiện mọi trường hợp nhòe.
 - MediaPipe chạy trong classic Web Worker trên trình duyệt hỗ trợ; `importScripts`
   của bộ tải WASM không hoạt động trong module worker. Nếu worker không khởi tạo
   được, ứng dụng dùng bộ xử lý trực tiếp với GPU/CPU như trước.
@@ -31,6 +55,7 @@ $env:FACE_DATABASE_PATH="$PWD/.test-output/face-algorithm-import.sqlite3"
 $env:AURAMAXX_DB_BACKEND='sqlite'
 .\.venv\Scripts\python.exe -B -m unittest tests.test_face_measurements tests.test_algorithm_pipeline tests.test_frontend tests.test_api tests.test_health_hub tests.test_vision_context
 node tests/test_capture_stability.cjs
+node tests/test_camera.cjs
 node tests/check_face_worker_browser.cjs
 node tests/browser_unified_smoke.cjs
 
@@ -49,4 +74,18 @@ Chưa có tập ảnh gắn nhãn và số đo chuẩn để công bố phần t
 Điểm tổng hợp vẫn là chỉ số theo quy tắc, không phải phép đo chuẩn lâm sàng.
 Model và trọng số điểm không được thay bằng một bộ chưa đánh giá.
 
+Kiểm thử trình duyệt bổ sung các tình huống: hủy khi quyền còn chờ; tự nâng
+Full HD và hiển thị kích thước thật; máy xử lý chậm; ảnh đủ sáng nhưng thiếu nét;
+đổi camera trước/sau không giữ ID cũ; video đổi sang 1080×1920; nhận diện nối tiếp;
+ảnh chụp 1920×1080 vẫn khớp điểm mốc khi lượt nhận diện kế tiếp đang chạy.
+
+Trước khi phát hành rộng, cần thử trên Safari iPhone, Safari MacBook, Chrome
+Android, webcam USB và Continuity Camera thật. Kiểm tra cho phép/từ chối quyền,
+đổi camera, xoay máy, khóa/mở màn hình, tháo camera và ảnh trong các điều kiện sáng.
+Phiên bản web dùng luồng video được trình duyệt cấp, chưa thu dữ liệu TrueDepth
+hoặc ảnh tĩnh riêng qua ImageCapture.
+
 Tài liệu đối chiếu: [MediaPipe Face Landmarker cho web](https://developers.google.com/edge/mediapipe/solutions/vision/face_landmarker/web_js).
+Các API camera: [capabilities](https://developer.mozilla.org/en-US/docs/Web/API/MediaStreamTrack/getCapabilities),
+[applyConstraints](https://developer.mozilla.org/en-US/docs/Web/API/MediaStreamTrack/applyConstraints),
+[requestVideoFrameCallback](https://developer.mozilla.org/en-US/docs/Web/API/HTMLVideoElement/requestVideoFrameCallback).

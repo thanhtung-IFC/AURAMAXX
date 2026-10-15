@@ -58,7 +58,7 @@ function installMocks() {
   };
 }
 let html = fs.readFileSync(path.join(root, 'frontend/index.html'), 'utf8')
-  .replace('<script type="module" src="app.js"></script>', '<script>(' + installMocks.toString() + ')()</script><script type="module">import {initAuraAI} from "./js/pages/aura-ai.js"; document.querySelectorAll("[data-page]").forEach(page=>page.hidden=page.dataset.page!=="aura-ai"); location.hash="aura-ai"; initAuraAI(); window.auraFixtureReady=true;</script>')
+  .replace('<script type="module" src="app.js"></script>', '<script>(' + installMocks.toString() + ')()</script><script type="module">import {initAuraAI} from "./js/pages/aura-ai.js"; import {initMobileUI} from "./js/mobile.js"; document.querySelectorAll("[data-page]").forEach(page=>page.hidden=page.dataset.page!=="aura-ai"); location.hash="aura-ai"; initMobileUI(); initAuraAI(); window.auraFixtureReady=true;</script>')
   .replace(/<link[^>]+href="https:[^>]+>/g, '');
 const server = http.createServer((request, response) => {
   const relative = decodeURIComponent(new URL(request.url, 'http://local').pathname).replace(/^\/+/, '');
@@ -155,6 +155,25 @@ const server = http.createServer((request, response) => {
     await click('#chat-history-toggle');
     assert.equal(await evaluate(`document.querySelector('#chat-history-toggle').getAttribute('aria-expanded')`), 'true');
     await click('#chat-history-toggle');
+    await evaluate(`document.querySelector('#chat-input').focus()`);
+    // Emulate iOS: the layout viewport stays tall while only the visible area shrinks.
+    await evaluate(`Object.defineProperty(visualViewport,'height',{configurable:true,value:460});visualViewport.dispatchEvent(new Event('resize'))`);
+    await until(() => evaluate(`document.documentElement.dataset.mobileKeyboard==='true'`),'keyboard with unchanged layout viewport');
+    await pause(200);
+    assert.equal(await evaluate(`innerHeight===844 && document.querySelector('#chat-send').getBoundingClientRect().bottom<=visualViewport.height+visualViewport.offsetTop`),true,'send visible when only visual viewport shrinks');
+    await evaluate(`delete visualViewport.height;visualViewport.dispatchEvent(new Event('resize'))`);
+    await until(() => evaluate(`document.documentElement.dataset.mobileKeyboard==='false'`),'visual viewport restored');
+    await send('Emulation.setDeviceMetricsOverride', { width:390, height:460, deviceScaleFactor:1, mobile:true });
+    await until(() => evaluate(`document.documentElement.dataset.mobileKeyboard==='true'`),'keyboard reduces the visual viewport');
+    await pause(200);
+    assert.equal(await evaluate(`getComputedStyle(document.querySelector('.mobile-nav')).display==='none' && getComputedStyle(document.querySelector('#chat-input')).fontSize==='16px'`),true,'keyboard frees navigation space and readable input');
+    const composer=await evaluate(`(()=>{const r=document.querySelector('#chat-send').getBoundingClientRect();return{top:r.top,bottom:r.bottom,height:r.height,viewport:visualViewport.height};})()`);
+    assert.ok(composer.top>=0 && composer.bottom<=composer.viewport && composer.height>=44,'send remains above keyboard: '+JSON.stringify(composer));
+    await screenshot('aura-ai-mobile-keyboard.png');
+    await evaluate(`document.querySelector('#chat-input').blur()`);
+    await send('Emulation.setDeviceMetricsOverride', { width:320, height:667, deviceScaleFactor:1, mobile:true });
+    await until(() => evaluate(`document.documentElement.dataset.mobileKeyboard==='false'`),'navigation returns after keyboard closes');
+    assert.equal(await evaluate(`document.documentElement.scrollWidth<=innerWidth+1 && getComputedStyle(document.querySelector('.mobile-nav')).display==='grid'`),true,'small phone chat and restored navigation');
     await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false });
     await evaluate(`document.documentElement.dataset.theme='light'`); await pause(200);
     await screenshot('aura-ai-light.png');

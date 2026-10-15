@@ -37,6 +37,8 @@
 [data-page="face-lab"] .face-camera-settings { margin-top: 18px; gap: 12px; }
 [data-page="face-lab"] .face-camera-settings label { font-size: 11px; }
 [data-page="face-lab"] .face-camera-settings select { font-size: 12px; background: var(--color-background); }
+[data-page="face-lab"] .face-camera-info, [data-page="face-lab"] .face-camera-tip { grid-column: 1 / -1; margin: 0; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; color: var(--color-text-subtle); }
+[data-page="face-lab"] .face-camera-info { color: var(--color-text-muted); }
 [data-page="face-lab"] .face-privacy-note { border: 0; background: transparent; padding: 14px 0 0; margin-top: 14px; border-top: 1px solid var(--color-border-subtle); }
 [data-page="face-lab"] .face-privacy-note p { font-size: 10px; line-height: 1.7; color: var(--color-text-subtle); }
 [data-page="face-lab"] .face-capture-column { position: sticky; top: 88px; }

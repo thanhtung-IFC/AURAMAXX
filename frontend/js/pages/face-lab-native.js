@@ -4,13 +4,15 @@ import { createLandmarker } from "../face/landmarker.js";
 import { drawLandmarkOverlay, sampleFrameLight } from "../face/analysis.js";
 import { evaluateCapturePose } from "../face/capture-pose.js";
 import { CaptureStability } from "../face/capture-stability.js";
+import { openCamera, cameraSettings, fittedFrame, CameraWorkload } from "../face/camera.js";
 import { escapeText, renderReportDetails, reportToArenaGroups, setFaceReport } from "../face/report.js";
 import { getSelectedArenaBotProfile as getSelectedArenaBot } from "../arena/bot-selection.js";
 
 const $ = selector => document.querySelector(selector);
 const page = document.querySelector('[data-page="face-lab"]');
-const SCAN_INTERVAL = 66;
 let stream = null, detector = null, timer = 0, operation = 0, starting = false;
+let videoFrameHandle = 0, watchdog = 0, scanBusy = false, openController = null, formatEpoch = 0, lastFrameAt = 0;
+let mirrorChosen = false;
 let frame = null, front = null, profile = null, report = null;
 let autoCapture = false, autoTimeout = 0, lastServerAt = 0, serverBusy = false, analyzing = false;
 let facingMode = "user", selectedDevice = "", lastDetectionTime = 0, challengeActive = false, challengeVerified = false;
@@ -21,6 +23,10 @@ const stability = new CaptureStability();
 const sourceCanvas = document.createElement("canvas");
 const captureCanvas = document.createElement("canvas");
 const lightCanvas = document.createElement("canvas");
+const inferenceCanvas = document.createElement("canvas");
+const workload = new CameraWorkload();
+const mobileViewport = window.matchMedia("(max-width: 760px)");
+let mobileActionBar = null;
 
 function renderPage() {
   page.innerHTML = `
@@ -32,9 +38,9 @@ function renderPage() {
           <div class="panel-heading"><div><span class="panel-overline">01 · CAMERA CỦA BẠN</span><h2>Giữ khuôn mặt trong khung</h2></div><span class="face-live-state" id="face-live-state" data-state="idle"><i></i><span>Camera đang tắt</span></span></div>
           <div class="face-camera-stage" id="face-camera-stage"><div class="face-camera-empty" id="face-camera-empty"><div class="camera-orbit"><svg><use href="#i-camera"/></svg><i></i></div><b>Sẵn sàng khi bạn cho phép</b><span>Webcam, camera USB hoặc camera điện thoại.</span></div><video id="face-video" autoplay muted playsinline hidden aria-label="Camera trực tiếp"></video><canvas id="face-overlay" hidden aria-hidden="true"></canvas><div class="face-guide-frame" id="face-guide-frame" hidden aria-hidden="true"><span></span><i></i></div><div class="face-camera-chip" id="face-camera-chip" hidden><i></i> VISIONFACE LIVE</div></div>
           <p class="face-live-message" id="face-live-message" role="status" aria-live="polite">Bật camera để bắt đầu. Bạn có thể dùng ảnh có sẵn để phân tích.</p>
-          <div class="face-quality-checks" aria-label="Điều kiện ảnh chụp"><span id="face-quality-light" data-state="idle">Chờ kiểm tra ánh sáng</span><span id="face-quality-pose" data-state="idle">Chờ căn góc chụp</span><span id="face-quality-motion" data-state="idle">Chờ khung hình ổn định</span></div>
+          <div class="face-quality-checks" aria-label="Điều kiện ảnh chụp"><span id="face-quality-light" data-state="idle">Chờ kiểm tra ánh sáng</span><span id="face-quality-detail" data-state="idle">Chờ kiểm tra độ nét</span><span id="face-quality-pose" data-state="idle">Chờ căn góc chụp</span><span id="face-quality-motion" data-state="idle">Chờ khung hình ổn định</span></div>
           <div class="face-camera-actions"><button class="button button-primary" id="face-start-camera" type="button"><svg><use href="#i-camera"/></svg> Bật camera</button><button class="button button-outline" id="face-stop-camera" type="button" hidden>Dừng camera</button><button class="button button-outline" id="face-switch-camera" type="button" hidden>Đổi nhanh camera</button><button class="button button-outline" id="face-upload-button" type="button"><svg><use href="#i-upload"/></svg> Tải ảnh lên</button><input id="face-upload" type="file" accept="image/jpeg,image/png,image/webp" hidden></div>
-          <div class="face-camera-settings"><label>Thiết bị camera<select id="face-device" aria-label="Thiết bị camera"><option value="">Camera mặc định</option></select></label><label>Độ phân giải<select id="face-resolution"><option value="720">HD · 1280 × 720</option><option value="1080">Full HD · 1920 × 1080</option><option value="480">VGA · 640 × 480</option></select></label><div class="face-camera-toggles"><label><input id="face-mirror" type="checkbox" checked> Lật gương</label><label><input id="face-show-mesh" type="checkbox" checked> Điểm mốc</label></div></div>
+          <div class="face-camera-settings"><label>Thiết bị camera<select id="face-device" aria-label="Thiết bị camera"><option value="">Camera mặc định</option></select></label><label>Chất lượng camera<select id="face-resolution"><option value="auto">Tự động · ưu tiên ảnh rõ</option><option value="1080">Full HD · 1920 × 1080</option><option value="720">HD · 1280 × 720</option><option value="480">Tiết kiệm · 640 × 480</option></select></label><div class="face-camera-toggles"><label><input id="face-mirror" type="checkbox" checked> Lật gương</label><label><input id="face-show-mesh" type="checkbox" checked> Điểm mốc</label></div><p class="face-camera-info" id="face-camera-info" role="status">Camera sẽ tự chọn cấu hình phù hợp khi mở.</p><p class="face-camera-tip">Để đo nhất quán, tắt hiệu ứng làm đẹp hoặc tự căn khung. Trên Mac, kiểm tra Portrait, Studio Light và Center Stage nếu đang bật.</p></div>
           <div class="face-privacy-note"><svg><use href="#i-shield"/></svg><p>Điểm mốc được gửi để nhận diện và xác thực. Ảnh được gửi khi bạn chọn phân tích; ảnh không tự lưu. Mô hình nhận diện tải từ CDN/Google.</p></div>
         </article>
         <section class="panel face-biometrics-panel"><div class="panel-heading"><div><span class="panel-overline">TÍN HIỆU TRỰC TIẾP</span><h2>Nhận diện & xác thực</h2></div><button class="button button-outline" id="face-challenge-start" type="button" disabled>Bắt đầu liveness</button></div><div class="face-biometric-grid"><div><span>Trạng thái mắt</span><b id="face-ear">—</b></div><div><span>Khẩu độ miệng</span><b id="face-mar">—</b></div><div><span>Góc quay đầu</span><b id="face-yaw">—</b></div><div><span>Đối chiếu hồ sơ</span><b id="face-match">Chưa nhận diện</b></div></div><p id="face-challenge-message" role="status">Chớp mắt, há miệng và quay đầu theo hướng dẫn khi bắt đầu.</p><progress id="face-challenge-progress" max="100" value="0" aria-label="Tiến độ xác thực"></progress></section>
@@ -51,6 +57,42 @@ function live(text, state = "idle") { setText("#face-live-state span", text); $(
 function cancelAuto() { autoCapture = false; clearTimeout(autoTimeout); autoTimeout = 0; $("#face-cancel-auto").hidden = true; }
 function resetStability() { frame = null; stability.reset(); $("#face-capture-stability").value = 0; $("#face-capture").disabled = true; $("#face-register").disabled = !front; }
 function clearShots() { front = null; profile = null; cancelAuto(); resetStability(); updateShots(); }
+
+function updateMobileActions() {
+  if (!mobileActionBar) return;
+  mobileActionBar.hidden = !mobileViewport.matches || (!stream && !front && !analyzing && !uploading);
+  mobileActionBar.dataset.hasFront = String(Boolean(front));
+  mobileActionBar.dataset.complete = String(Boolean(front && profile));
+  $("#face-analyze").hidden = mobileViewport.matches && !front;
+}
+
+function initMobileCapture() {
+  mobileActionBar = document.createElement("div");
+  mobileActionBar.className = "face-mobile-actionbar";
+  mobileActionBar.setAttribute("role", "group");
+  mobileActionBar.setAttribute("aria-label", "Chụp và phân tích ảnh");
+  mobileActionBar.hidden = true;
+  $(".face-quality-checks").after(mobileActionBar);
+  const controls = ["face-capture", "face-analyze", "face-auto-profile", "face-cancel-auto", "face-progress"].map(id => {
+    const button = $(`#${id}`), marker = document.createComment(`original-${id}`);
+    button.before(marker);
+    return { button, marker };
+  });
+  const settings = $(".face-camera-settings"), options = document.createElement("details"), summary = document.createElement("summary");
+  options.className = "face-camera-options";
+  summary.textContent = "Cài đặt camera";
+  options.append(summary); settings.before(options); options.append(settings);
+  const arrange = () => {
+    for (const { button, marker } of controls) {
+      if (mobileViewport.matches) mobileActionBar.append(button);
+      else marker.after(button);
+    }
+    options.open = !mobileViewport.matches;
+    updateMobileActions();
+  };
+  mobileViewport.addEventListener("change", arrange);
+  arrange();
+}
 
 function updateShots() {
   $("#face-step-camera").dataset.state = front ? "done" : "active";
@@ -70,6 +112,7 @@ function updateShots() {
   $("#face-capture").hidden = Boolean(front && profile);
   $("#face-analyze").disabled = !front || analyzing;
   $("#face-register").disabled = !front && !frame?.stable;
+  updateMobileActions();
 }
 
 async function hasConsent() {
@@ -98,59 +141,100 @@ async function enumerateCameras() {
   const current = stream?.getVideoTracks()[0]?.getSettings().deviceId || selectedDevice;
   select.replaceChildren(new Option("Camera mặc định", ""));
   devices.forEach((device, index) => {
-    const external = /usb|logitech|obs|droidcam|external/i.test(device.label);
-    select.add(new Option(`${external ? "USB · " : ""}${device.label || `Camera ${index + 1}`}`, device.deviceId));
+    select.add(new Option(device.label || `Camera ${index + 1}`, device.deviceId));
   });
   if (devices.some(device => device.deviceId === current)) select.value = current;
-  $("#face-switch-camera").hidden = !stream || devices.length < 2;
+  const phone = navigator.maxTouchPoints > 0;
+  $("#face-switch-camera").hidden = !stream || (!phone && devices.length < 2);
+  $("#face-switch-camera").textContent = phone ? (facingMode === "environment" ? "Dùng camera trước" : "Dùng camera sau") : "Đổi webcam";
 }
 
-async function openCameraDevice(deviceId, mode) {
-  const height = Number($("#face-resolution").value), width = height === 480 ? 640 : Math.round(height * 16 / 9);
-  const device = deviceId ? { deviceId: { exact: deviceId } } : { facingMode: { ideal: mode } };
-  const presets = [{ ...device, width: { ideal: width }, height: { ideal: height }, frameRate: { ideal: 20, max: 30 } }, { ...device, width: { ideal: width }, height: { ideal: height } }, { ...device, width: { ideal: 640 } }, device];
-  let lastError;
-  for (const video of presets) {
-    try { return await navigator.mediaDevices.getUserMedia({ video, audio: false }); }
-    catch (error) { lastError = error; if (!["OverconstrainedError", "NotReadableError", "AbortError"].includes(error.name)) throw error; }
-  }
-  throw lastError;
+function updateCameraGuide() {
+  const video = $("#face-video"), stage = $("#face-camera-stage"), guide = $("#face-guide-frame");
+  if (!stream || !video.videoWidth || !video.videoHeight) return;
+  const scale = Math.min(stage.clientWidth / video.videoWidth, stage.clientHeight / video.videoHeight);
+  const height = Math.min(video.videoHeight * scale * .78, video.videoWidth * scale * 1.25);
+  guide.style.height = `${Math.round(height)}px`;
+  guide.style.width = `${Math.round(height * .68)}px`;
+}
+
+function showCameraSettings() {
+  if (!stream) return;
+  const video = $("#face-video"), track = stream.getVideoTracks()[0], settings = cameraSettings(track);
+  const width = video.videoWidth || settings.width, height = video.videoHeight || settings.height;
+  const rate = Number.isFinite(settings.frameRate) ? ` · ${Math.round(settings.frameRate)} FPS` : "";
+  const size = width && height ? `${width} × ${height}${rate}` : "Đang nhận hình ảnh";
+  setText("#face-camera-info", `${track.label || "Camera đang dùng"} · ${size}`);
+  updateCameraGuide();
+}
+
+function cancelScan() {
+  clearTimeout(timer); timer = 0;
+  if (videoFrameHandle) $("#face-video").cancelVideoFrameCallback?.(videoFrameHandle);
+  videoFrameHandle = 0;
+}
+
+function scheduleScan(delay = 0) {
+  cancelScan();
+  if (!stream || !detector || document.hidden) return;
+  const id = operation;
+  timer = window.setTimeout(() => {
+    timer = 0;
+    if (id !== operation || !stream) return;
+    const video = $("#face-video");
+    if (typeof video.requestVideoFrameCallback === "function") videoFrameHandle = video.requestVideoFrameCallback(() => { videoFrameHandle = 0; if (id === operation) void scanFrame(); });
+    else void scanFrame();
+  }, delay);
 }
 
 async function startCamera(deviceId = $("#face-device").value, mode = facingMode) {
   if (starting || analyzing || uploading) return;
   starting = true;
   const id = ++operation;
+  const controller = new AbortController(); openController = controller;
   $("#face-start-camera").disabled = true;
+  $("#face-stop-camera").hidden = false;
+  for (const selector of ["#face-device", "#face-resolution", "#face-switch-camera"]) $(selector).disabled = true;
   try {
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) throw new Error("Mở web bằng localhost hoặc HTTPS để dùng camera.");
-    if (!await hasConsent() || id !== operation) return;
+    if (!await hasConsent() || id !== operation) { if (id === operation) stopCamera(); return; }
     message("Đang mở camera…"); live("Đang mở", "loading");
-    const next = await openCameraDevice(deviceId, mode);
+    const opened = await openCamera({ deviceId, facingMode: mode, strictFacing: !deviceId && mode !== facingMode, resolution: $("#face-resolution").value, signal: controller.signal });
+    const next = opened.stream;
     if (id !== operation) { next.getTracks().forEach(track => track.stop()); return; }
-    stream = next; facingMode = mode;
+    stream = next; facingMode = opened.settings.facingMode || mode;
+    workload.reset(); lastFrameAt = performance.now();
     lastVideoTime = -1; lastServerAt = 0; networkRetryAt = 0;
     selectedDevice = next.getVideoTracks()[0]?.getSettings().deviceId || deviceId;
     const video = $("#face-video"); video.srcObject = next; video.hidden = false;
     $("#face-camera-empty").hidden = true; $("#face-overlay").hidden = false;
     $("#face-guide-frame").hidden = false; $("#face-camera-chip").hidden = false;
     $("#face-start-camera").hidden = true; $("#face-stop-camera").hidden = false;
+    if (!mirrorChosen) $("#face-mirror").checked = facingMode !== "environment";
     mirrorCamera(); await video.play();
     if (id !== operation) return;
     await enumerateCameras();
+    showCameraSettings();
+    if (opened.fallback) showToast("Camera đã chọn không còn khả dụng. Đã mở camera mặc định.");
     message("Camera đã mở. Đang tải nhận diện điểm mốc…");
     const nextDetector = detector || await createLandmarker();
     if (id !== operation) { if (nextDetector !== detector) nextDetector.close(); return; }
     detector = nextDetector;
     next.getVideoTracks()[0]?.addEventListener("ended", () => { if (id === operation) { stopCamera(); message("Camera đã ngắt kết nối. Hãy chọn lại thiết bị.", "error"); } }, { once: true });
+    next.getVideoTracks()[0]?.addEventListener("mute", () => { if (id === operation) { resetStability(); message("Camera đang tạm dừng. Mở lại camera hoặc ứng dụng để tiếp tục."); } });
+    watchdog = window.setInterval(() => {
+      if (id === operation && stream && performance.now() - lastFrameAt > 2500) { resetStability(); live("Đang chờ camera", "loading"); message("Chưa nhận được khung hình mới. Kiểm tra camera hoặc bật lại."); }
+    }, 1000);
     $("#face-challenge-start").disabled = false; updateShots();
-    live("Đang tìm khuôn mặt", "loading"); timer = window.setTimeout(scanFrame, 50);
+    live("Đang tìm khuôn mặt", "loading"); scheduleScan();
+    if (mobileViewport.matches) $("#face-camera-stage").scrollIntoView({ block: "start", behavior: "instant" });
   } catch (error) { if (id === operation) { stopCamera(); message(cameraError(error), "error"); live("Camera chưa sẵn sàng", "error"); } }
-  finally { if (id === operation) { starting = false; $("#face-start-camera").disabled = false; } }
+  finally { if (openController === controller) openController = null; if (id === operation) { starting = false; $("#face-start-camera").disabled = false; for (const selector of ["#face-device", "#face-resolution", "#face-switch-camera"]) $(selector).disabled = false; } }
 }
 
 function stopCamera() {
-  operation++; starting = false; clearTimeout(timer); timer = 0; cancelAuto();
+  operation++; starting = false; openController?.abort(); openController = null; cancelScan(); clearInterval(watchdog); watchdog = 0; cancelAuto();
+  for (const selector of ["#face-device", "#face-resolution", "#face-switch-camera"]) $(selector).disabled = false;
   processController?.abort(); processController = null; serverBusy = false;
   analysisController?.abort(); analysisController = null;
   analyzing = false; uploading = false; $("#face-progress").hidden = true;
@@ -160,14 +244,16 @@ function stopCamera() {
   stream = null; resetStability();
   overlayPoints = null;
   setText("#face-capture-hint", front ? "Ảnh đã chụp được giữ lại. Bật camera để chụp thêm." : "Bật camera và giữ yên trong giây lát.");
-  for (const id of ["face-quality-light", "face-quality-pose", "face-quality-motion"]) { $(`#${id}`).dataset.state = "idle"; }
-  setText("#face-quality-light", "Chờ kiểm tra ánh sáng"); setText("#face-quality-pose", "Chờ căn góc chụp"); setText("#face-quality-motion", "Chờ khung hình ổn định");
+  for (const id of ["face-quality-light", "face-quality-detail", "face-quality-pose", "face-quality-motion"]) { $(`#${id}`).dataset.state = "idle"; }
+  setText("#face-quality-light", "Chờ kiểm tra ánh sáng"); setText("#face-quality-detail", "Chờ kiểm tra độ nét"); setText("#face-quality-pose", "Chờ căn góc chụp"); setText("#face-quality-motion", "Chờ khung hình ổn định");
+  setText("#face-camera-info", "Camera sẽ tự chọn cấu hình phù hợp khi mở.");
   const video = $("#face-video"); video.pause(); video.srcObject = null; video.hidden = true;
   for (const id of ["face-overlay", "face-guide-frame", "face-camera-chip", "face-stop-camera", "face-switch-camera"]) $(`#${id}`).hidden = true;
   $("#face-camera-empty").hidden = false; $("#face-start-camera").hidden = false; $("#face-start-camera").disabled = false;
   $("#face-challenge-start").disabled = true; $("#face-auto-profile").disabled = true;
   $("#face-overlay").getContext("2d")?.clearRect(0, 0, $("#face-overlay").width, $("#face-overlay").height);
   live("Camera đang tắt");
+  updateMobileActions();
 }
 
 function mirrorCamera() {
@@ -198,20 +284,24 @@ function drawOverlay(landmarks) {
 function snapshot(source, landmarks, yaw = 0) {
   const canvas = document.createElement("canvas"); canvas.width = source.width; canvas.height = source.height;
   canvas.getContext("2d").drawImage(source, 0, 0);
-  return { image: canvas.toDataURL("image/jpeg", .88), landmarks: landmarks.map(point => ({ x: point.x, y: point.y, z: point.z || 0 })), width: canvas.width, height: canvas.height, poseYaw: yaw, deviceId: selectedDevice };
+  return { image: canvas.toDataURL("image/jpeg", .92), landmarks: landmarks.map(point => ({ x: point.x, y: point.y, z: point.z || 0 })), width: canvas.width, height: canvas.height, poseYaw: yaw, deviceId: selectedDevice };
 }
 
 function trackCapture(landmarks, now) {
   const step = front ? 2 : 1;
   let quality = evaluateCapturePose(landmarks, step, front?.poseYaw || 0, sourceCanvas.width / sourceCanvas.height);
+  const poseReady = quality.ready;
   const light = sampleFrameLight(sourceCanvas, lightCanvas, landmarks);
-  if (light.mean < 36 || light.mean > 228 || light.contrast < 8) quality = { ...quality, ready: false, message: "Điều chỉnh ánh sáng để thấy rõ các đường nét." };
+  const lightReady = light.mean >= 36 && light.mean <= 228 && light.contrast >= 8;
+  // A conservative floor above smooth 8-bit gradients; not calibrated confidence.
+  const detailReady = Number.isFinite(light.sharpness) && light.sharpness >= 2;
+  if (!lightReady) quality = { ...quality, ready: false, message: "Điều chỉnh ánh sáng để thấy rõ các đường nét." };
+  else if (!detailReady) quality = { ...quality, ready: false, message: "Ảnh còn mờ. Giữ máy chắc tay, lau ống kính và chờ lấy nét." };
   const { stable, progress } = stability.update(landmarks, quality.yaw, now, quality.ready);
   frame = { landmarks, yaw: (quality.yaw || 0) + (front?.poseYaw || 0), stable, time: now };
   $("#face-capture-stability").value = progress;
   setText("#face-capture-hint", stable ? "Đã ổn định. Bạn có thể chụp ngay." : quality.message);
-  const lightReady = light.mean >= 36 && light.mean <= 228 && light.contrast >= 8;
-  for (const [id, ok, label] of [["face-quality-light", lightReady, lightReady ? "Ánh sáng phù hợp" : "Cần chỉnh ánh sáng"], ["face-quality-pose", quality.ready, quality.ready ? "Đúng góc chụp" : "Đang căn góc chụp"], ["face-quality-motion", stable, stable ? "Khung hình ổn định" : "Giữ yên một chút"]]) {
+  for (const [id, ok, label] of [["face-quality-light", lightReady, lightReady ? "Ánh sáng phù hợp" : "Cần chỉnh ánh sáng"], ["face-quality-detail", detailReady, detailReady ? "Ảnh đủ nét" : "Chờ ảnh rõ hơn"], ["face-quality-pose", poseReady, poseReady ? "Đúng góc chụp" : "Đang căn góc chụp"], ["face-quality-motion", stable, stable ? "Khung hình ổn định" : "Giữ yên một chút"]]) {
     $(`#${id}`).dataset.state = ok ? "ready" : "pending"; setText(`#${id}`, label);
   }
   $("#face-guide-frame").dataset.state = stable ? "ready" : "align";
@@ -253,24 +343,33 @@ async function processFrame(landmarks, id) {
 
 async function scanFrame() {
   if (!stream || !detector || document.hidden) return;
+  if (scanBusy) { scheduleScan(workload.interval); return; }
+  scanBusy = true;
   const id = operation;
+  const started = performance.now(), format = formatEpoch;
+  let processed = false;
   try {
     const video = $("#face-video");
     if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth && video.currentTime !== lastVideoTime) {
       lastVideoTime = video.currentTime;
-      const scale = Math.min(1, 1280 / video.videoWidth);
-      const width = Math.round(video.videoWidth * scale), height = Math.round(video.videoHeight * scale);
+      processed = true;
+      lastFrameAt = performance.now();
+      const { width, height } = fittedFrame(video.videoWidth, video.videoHeight, 1920);
       if (sourceCanvas.width !== width) sourceCanvas.width = width;
       if (sourceCanvas.height !== height) sourceCanvas.height = height;
       sourceCanvas.getContext("2d").drawImage(video, 0, 0, sourceCanvas.width, sourceCanvas.height);
+      const input = fittedFrame(width, height, workload.longestEdge);
+      if (inferenceCanvas.width !== input.width) inferenceCanvas.width = input.width;
+      if (inferenceCanvas.height !== input.height) inferenceCanvas.height = input.height;
+      inferenceCanvas.getContext("2d").drawImage(sourceCanvas, 0, 0, input.width, input.height);
       const now = Math.max(performance.now(), lastDetectionTime + 1); lastDetectionTime = now;
-      const faces = (await detector.detectForVideo(sourceCanvas, now)).faceLandmarks || [];
-      if (id !== operation || !stream) return;
+      const faces = (await detector.detectForVideo(inferenceCanvas, now)).faceLandmarks || [];
+      if (id !== operation || !stream || format !== formatEpoch) return;
       if (faces.length !== 1) {
         trackingEpoch++; overlayPoints = null; processController?.abort();
         resetStability(); live(faces.length > 1 ? "Có nhiều khuôn mặt" : "Chưa thấy khuôn mặt", "idle");
-        for (const id of ["face-quality-light", "face-quality-pose", "face-quality-motion"]) $(`#${id}`).dataset.state = "idle";
-        setText("#face-quality-light", "Chờ một khuôn mặt"); setText("#face-quality-pose", "Chờ căn góc chụp"); setText("#face-quality-motion", "Chờ khung hình ổn định");
+        for (const id of ["face-quality-light", "face-quality-detail", "face-quality-pose", "face-quality-motion"]) $(`#${id}`).dataset.state = "idle";
+        setText("#face-quality-light", "Chờ một khuôn mặt"); setText("#face-quality-detail", "Chờ kiểm tra độ nét"); setText("#face-quality-pose", "Chờ căn góc chụp"); setText("#face-quality-motion", "Chờ khung hình ổn định");
         for (const id of ["face-ear", "face-mar", "face-yaw"]) setText(`#${id}`, "—");
         setText("#face-match", "Chưa nhận diện");
         message(faces.length > 1 ? "Chỉ để một khuôn mặt trong khung để nhận diện và phân tích." : "Đưa khuôn mặt vào giữa khung.");
@@ -289,12 +388,18 @@ async function scanFrame() {
     if (id !== operation) return;
     stopCamera(); detector?.close(); detector = null;
     message(cameraError(error), "error");
+  } finally {
+    scanBusy = false;
+    if (id === operation && stream) {
+      if (processed) workload.observe(performance.now() - started);
+      scheduleScan(Math.max(0, workload.interval - (performance.now() - started)));
+    }
   }
-  if (stream && id === operation) timer = window.setTimeout(scanFrame, SCAN_INTERVAL);
 }
 
 function captureShot() {
-  if (!frame?.stable || performance.now() - frame.time > 450 || analyzing || !stream) return;
+  if (!frame?.stable || analyzing || !stream) return;
+  if (performance.now() - frame.time > 450) { resetStability(); message("Đang chờ khung hình mới. Giữ yên rồi chụp lại."); return; }
   const captured = snapshot(captureCanvas, frame.landmarks, frame.yaw);
   invalidateReport();
   if (!front) { front = captured; profile = null; }
@@ -457,6 +562,7 @@ async function uploadImage(event) {
   stopCamera(); clearResults(); const id = operation; uploading = true;
   let imageDetector;
   $("#face-progress").hidden = false;
+  updateMobileActions();
   try {
     const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
     const canvas = document.createElement("canvas"), scale = Math.min(1, 1280 / Math.max(bitmap.width, bitmap.height));
@@ -471,12 +577,11 @@ async function uploadImage(event) {
     front = snapshot(canvas, faces[0], pose.yaw); profile = null; updateShots();
     await analyzeFace();
   } catch (error) { if (id === operation) message(error.message || "Không đọc được ảnh.", "error"); }
-  finally { imageDetector?.close(); if (id === operation) { uploading = false; $("#face-progress").hidden = !analyzing; } }
+  finally { imageDetector?.close(); if (id === operation) { uploading = false; $("#face-progress").hidden = !analyzing; updateMobileActions(); } }
 }
 
 async function changeCamera(deviceId, mode = facingMode) {
   clearResults(); selectedDevice = deviceId;
-  await new Promise(resolve => window.setTimeout(resolve, 250));
   if (window.location.hash === "#face-lab") await startCamera(deviceId, mode);
 }
 
@@ -488,24 +593,31 @@ function clearSensitiveView() {
   $("#face-challenge-progress").value = 0; $("#face-match").textContent = "Chưa nhận diện";
   for (const id of ["face-ear", "face-mar", "face-yaw"]) $(`#${id}`).textContent = "—";
   detector?.close(); detector = null;
-  for (const canvas of [sourceCanvas, captureCanvas, lightCanvas]) { canvas.width = 1; canvas.height = 1; }
+  for (const canvas of [sourceCanvas, captureCanvas, lightCanvas, inferenceCanvas]) { canvas.width = 1; canvas.height = 1; }
 }
 
 export function initFaceLab() {
   renderPage();
+  initMobileCapture();
   $("#face-start-camera").addEventListener("click", () => void startCamera());
   $("#face-stop-camera").addEventListener("click", () => { stopCamera(); message("Camera đã tắt."); });
   $("#face-device").addEventListener("change", event => { selectedDevice = event.target.value; if (stream) void changeCamera(selectedDevice); });
   $("#face-resolution").addEventListener("change", () => { if (stream) void changeCamera(selectedDevice); });
   $("#face-switch-camera").addEventListener("click", () => {
+    if (starting) return;
+    if (navigator.maxTouchPoints > 0) {
+      void changeCamera("", facingMode === "user" ? "environment" : "user");
+      return;
+    }
     const devices = [...$("#face-device").options].filter(option => option.value);
     const index = devices.findIndex(option => option.value === selectedDevice);
     const next = devices[(index + 1) % Math.max(1, devices.length)];
-    const previousFacingMode = facingMode;
-    const nextMode = previousFacingMode === "user" ? "environment" : "user";
-    void changeCamera(next?.value || "", nextMode);
+    void changeCamera(next?.value || "");
   });
-  $("#face-mirror").addEventListener("change", mirrorCamera);
+  $("#face-mirror").addEventListener("change", () => { mirrorChosen = true; mirrorCamera(); });
+  $("#face-video").addEventListener("resize", () => { formatEpoch++; lastVideoTime = -1; resetStability(); overlayPoints = null; showCameraSettings(); });
+  if (typeof ResizeObserver === "function") new ResizeObserver(updateCameraGuide).observe($("#face-camera-stage"));
+  else window.addEventListener("resize", updateCameraGuide, { passive: true });
   $("#face-capture").addEventListener("click", captureShot);
   $("#face-auto-profile").addEventListener("click", () => { if (!stream || !front) return; autoCapture = true; $("#face-cancel-auto").hidden = false; autoTimeout = window.setTimeout(() => { cancelAuto(); message("Đã hết thời gian tự chụp. Bạn có thể thử lại."); }, 20000); });
   $("#face-cancel-auto").addEventListener("click", cancelAuto);

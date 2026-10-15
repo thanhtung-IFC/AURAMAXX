@@ -9,9 +9,11 @@ import { initAuraAI } from "./js/pages/aura-ai.js";
 import { initTheme } from "./js/theme.js";
 import { initMotion } from "./js/motion.js";
 import { initArena } from "./js/pages/arena.js";
+import { initMobileUI } from "./js/mobile.js";
 
 initTheme();
 initRouter();
+initMobileUI();
 initFaceLab();
 initHome();
 initMyAura();

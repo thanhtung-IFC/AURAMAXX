@@ -99,7 +99,9 @@ class FrontendContractTests(unittest.TestCase):
         self.assertNotIn("measureFaceProfile", face)
         for endpoint in ("process", "register", "faces", "challenge/start", "analyze_face"):
             self.assertIn("/api/vision/" + endpoint, face)
-        for capability in ("getUserMedia", "detectForVideo", 'createLandmarker("IMAGE")', "stream.getTracks()", "NotReadableError", "faces.length > 1", "front.poseYaw".replace(".", "?.", 1)):
+        camera = (FRONTEND / "js/face/camera.js").read_text(encoding="utf-8")
+        self.assertIn("getUserMedia", camera)
+        for capability in ("detectForVideo", 'createLandmarker("IMAGE")', "stream.getTracks()", "NotReadableError", "faces.length > 1", "front.poseYaw".replace(".", "?.", 1)):
             self.assertIn(capability, face)
         self.assertIn("URL.revokeObjectURL", face)
         self.assertIn("reportToArenaGroups(report)", face)
