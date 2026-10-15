@@ -74,6 +74,13 @@ function connect(ws) {
     ws.addEventListener('message', event=>{const data=JSON.parse(event.data);if(data.method==='Runtime.exceptionThrown' && !/extension:/.test(data.params.exceptionDetails.url||''))errors.push(data.params.exceptionDetails.text);});
     await send('Page.navigate', {url:base+'/#arena'});
     await until(()=>evaluate('document.querySelectorAll("[data-select-bot]").length===5'), 'arena catalog');
+    await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1080,deviceScaleFactor:1,mobile:false});
+    await evaluate('document.querySelector(".arena-bot-card").scrollIntoView({behavior:"instant",block:"start"})');
+    await until(()=>evaluate('[...document.querySelectorAll("#arena-bot-list img")].every(img=>img.complete&&img.naturalWidth>0)'), 'bot portraits decoded');
+    const portraits=await evaluate('[...document.querySelectorAll("[data-select-bot]")].map(button=>({id:button.dataset.selectBot,src:button.querySelector("img").currentSrc,x:button.getBoundingClientRect().x,y:button.getBoundingClientRect().y,style:button.querySelector("[data-portrait-style]").dataset.portraitStyle}))');
+    assert.deepEqual(portraits.map(item=>item.id),['rookie','casual','skilled','elite','champion']);
+    portraits.forEach((item,i)=>{assert(item.src.includes('/'+item.id+'-'));assert(Math.abs(item.y-portraits[0].y)<2);if(i)assert(item.x>portraits[i-1].x);});
+    assert.deepEqual(portraits.slice(0,2).map(item=>item.style),['pixel','pixel']);
     await evaluate('document.fonts.ready.then(()=>true)');
     const click=selector=>evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
     await click('[data-select-bot="rookie"]');
@@ -118,7 +125,9 @@ function connect(ws) {
       for(const theme of ['light','dark']){
         await evaluate(`import('/js/theme.js').then(m=>m.setTheme('${theme}'))`);await pause(450);
         const layout=await evaluate('({width:innerWidth,scroll:document.documentElement.scrollWidth,theme:document.documentElement.dataset.theme,buttons:document.querySelectorAll("[data-select-bot]").length,title:document.querySelector("#arena-title").getBoundingClientRect().height,titleColor:getComputedStyle(document.querySelector("#arena-title")).color})');
-        assert(layout.scroll<=layout.width,JSON.stringify(layout));console.log('LAYOUT',JSON.stringify(layout));
+        assert(layout.scroll<=layout.width,JSON.stringify(layout));
+        if(width<=760){assert(await evaluate('document.querySelector("#arena-bot-list").scrollWidth>document.querySelector("#arena-bot-list").clientWidth'),'portraits scroll horizontally on mobile');}
+        console.log('LAYOUT',JSON.stringify(layout));
         if(width===1895||width===390){await evaluate('window.scrollTo({top:0,behavior:"instant"})');await pause(100);await screenshot(`arena-${width}-${theme}`);}
       }
     }

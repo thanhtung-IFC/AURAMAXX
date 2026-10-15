@@ -48,6 +48,7 @@
 .arena-grid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(290px, 1fr); align-items: start; gap: 20px; }
 .arena-main-column, .arena-side-column { display: grid; gap: 20px; min-width: 0; }
 .arena-main-column > .panel, .arena-side-column > .panel { min-width: 0; padding: 24px; }
+[data-page="arena"] > .arena-bot-card { min-width: 0; padding: 24px; margin-bottom: 20px; }
 .arena-bot-card, .arena-results { scroll-margin-top: 86px; }
 .arena-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .arena-panel-heading h2 { margin: 5px 0 0; font: 600 18px var(--display); letter-spacing: -.4px; }
@@ -58,8 +59,11 @@
 .arena-filters button, .arena-tabs button { display: inline-flex; align-items: center; justify-content: center; min-height: 34px; padding: 6px 11px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--color-text-muted); font-size: 11px; cursor: pointer; transition: background 160ms, color 160ms; }
 .arena-filters button:hover, .arena-tabs button:hover { background: var(--color-surface-raised); }
 .arena-filters button[aria-pressed="true"], .arena-tabs button[aria-selected="true"] { background: var(--color-primary-soft); color: var(--blue-hi); }
-.arena-bot-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-.arena-bot-option { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; padding: 14px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-surface); color: var(--color-text); text-align: left; cursor: pointer; transition: background 160ms, border-color 160ms; }
+.arena-opponent-order { display: flex; align-items: center; gap: 9px; margin: 0 0 14px; color: var(--color-text-subtle); font-size: 10px; }
+.arena-opponent-order > span:first-child { color: var(--blue-hi); font-variant-numeric: tabular-nums; }
+.arena-swipe-hint { display: none; margin-left: auto; }
+.arena-bot-list { position: relative; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; min-width: 0; }
+.arena-bot-option { display: flex; flex-direction: column; align-items: center; min-width: 0; padding: 14px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-surface); color: var(--color-text); text-align: center; cursor: pointer; transition: background 160ms, border-color 160ms; scroll-snap-align: center; }
 .arena-bot-option:hover { border-color: var(--color-text-subtle); background: var(--color-surface-raised); }
 .arena-bot-option.is-selected { border-color: var(--color-primary); background: color-mix(in srgb, var(--color-primary-soft) 35%, var(--color-surface)); }
 .arena-bot-topline { display: flex; align-items: center; justify-content: space-between; width: 100%; margin-bottom: 12px; color: var(--color-text-subtle); }
@@ -67,13 +71,14 @@
 .arena-bot-check { display: grid; place-items: center; width: 19px; height: 19px; border-radius: 50%; }
 [data-page="arena"] .arena-bot-check svg { width: 12px; height: 12px; }
 .is-selected .arena-bot-check { color: #fff; background: var(--color-primary); }
-.arena-bot-avatar { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 14px; background: var(--color-primary-soft); color: var(--blue-hi); }
-[data-page="arena"] .arena-bot-avatar svg { width: 30px; height: 30px; stroke-width: 1.2; }
-.arena-bot-avatar[data-level="1"] { color: var(--color-secondary); background: color-mix(in srgb, var(--color-secondary) 12%, transparent); }
-.arena-bot-avatar[data-level="2"] { color: var(--blue-hi); }
-.arena-bot-avatar[data-level="4"] { color: var(--color-warning); background: color-mix(in srgb, var(--color-warning) 12%, transparent); }
-.arena-bot-avatar[data-level="5"] { color: var(--color-danger); background: color-mix(in srgb, var(--color-danger) 12%, transparent); }
-.arena-bot-copy { display: grid; gap: 3px; margin: 10px 0 8px; }
+.arena-bot-avatar { position: relative; display: grid; place-items: center; width: 100%; max-width: 160px; aspect-ratio: 1; overflow: hidden; flex: none; border: 1px solid var(--color-border-subtle); border-radius: 12px; background: linear-gradient(145deg, var(--color-surface-high), var(--color-primary-soft)); color: var(--blue-hi); }
+.arena-bot-avatar img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.arena-bot-avatar[data-portrait-style="pixel"] img { image-rendering: pixelated; }
+[data-page="arena"] .arena-bot-avatar > svg { display: none; position: absolute; width: 30px; height: 30px; stroke-width: 1.2; }
+.arena-bot-avatar img[data-failed] { display: none; }
+[data-page="arena"] .arena-bot-avatar img[data-failed] + svg, [data-page="arena"] .arena-bot-avatar > svg:only-child { display: block; }
+.arena-bot-avatar-compact { width: 48px; max-width: 48px; border-radius: 10px; }
+.arena-bot-copy { display: grid; justify-items: center; gap: 3px; margin: 12px 0 8px; }
 .arena-bot-copy b { font: 600 14px var(--display); }
 .arena-bot-copy > span { font-size: 10px; color: var(--color-text-subtle); }
 .arena-bot-rating { color: var(--color-text-subtle); font-size: 10px; }
@@ -84,6 +89,9 @@
 .arena-bot-hint { margin-top: 7px; color: var(--color-text-subtle); font-size: 9px; }
 .arena-bot-selected { margin-top: 18px; padding: 17px; border: 1px solid var(--color-border-subtle); border-radius: 11px; background: var(--color-surface-raised); }
 .arena-selection-heading { display: flex; justify-content: space-between; gap: 16px; }
+.arena-selection-identity { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.arena-selection-identity > div { min-width: 0; }
+.arena-selection-description { margin: 12px 0 0; color: var(--color-text-muted); font-size: 11px; line-height: 1.7; }
 .arena-selection-heading h3 { margin: 6px 0 4px; font: 600 17px var(--display); }
 .arena-selection-heading h3 small { display: inline; margin-left: 5px; font: 400 11px var(--sans); color: var(--color-text-subtle); }
 .arena-selection-heading p { margin: 0; color: var(--color-text-muted); font-size: 11px; line-height: 1.7; }
@@ -121,6 +129,8 @@
 .arena-match-row summary:hover { background: var(--color-surface-raised); }
 .arena-result-badge { display: inline-flex; align-items: center; justify-content: center; padding: 5px 6px; border-radius: 6px; font-size: 10px; }
 .arena-match-copy { display: grid; gap: 4px; min-width: 0; }
+.arena-match-opponent { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.arena-match-opponent .arena-bot-avatar-compact { width: 34px; max-width: 34px; border-radius: 8px; }
 .arena-match-copy > b { font-size: 12px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .arena-match-copy > b small { color: var(--color-text-subtle); font-size: 8px; }
 .arena-match-copy > small { color: var(--color-text-subtle); font-size: 9px; line-height: 1.6; }
@@ -193,14 +203,13 @@
 @media (max-width: 1080px) {
   .arena-grid { grid-template-columns: minmax(0, 1.5fr) minmax(260px, 1fr); gap: 16px; }
   .arena-main-column > .panel, .arena-side-column > .panel { padding: 20px; }
-  .arena-bot-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   :root [data-page="arena"] .arena-overview { gap: 24px; grid-template-columns: minmax(0, 1fr) 260px; padding: 26px; }
 }
 @media (max-width: 980px) {
   .arena-grid { grid-template-columns: 1fr; }
+  .arena-bot-list { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 148px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; scrollbar-width: thin; scrollbar-color: var(--color-border) transparent; padding: 4px 3px 12px; }
   .arena-side-column { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
   .arena-battle-card { grid-column: 1 / -1; }
-  .arena-bot-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .arena-stat-grid > div { padding: 16px; }
   .arena-stat-grid > div > span { display: none; }
 }
@@ -223,7 +232,9 @@
   .arena-main-column > .panel, .arena-side-column > .panel { padding: 20px; }
   .arena-filters button { min-height: 44px; padding-inline: 10px; }
   .arena-panel-heading h2 { font-size: 17px; }
-  .arena-bot-list { gap: 10px; }
+  [data-page="arena"] > .arena-bot-card { padding: 20px; }
+  .arena-bot-list { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: clamp(148px, 42vw, 176px); gap: 10px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; scrollbar-width: thin; scrollbar-color: var(--color-border) transparent; padding: 4px 3px 12px; scroll-padding-inline: 3px; }
+  .arena-swipe-hint { display: inline; }
   .arena-side-column { grid-template-columns: 1fr; }
   .arena-comparison-row { grid-template-columns: minmax(85px, 1fr) minmax(30px, 1fr) 64px; gap: 8px; font-size: 10px; }
   .arena-match-row summary { grid-template-columns: 40px minmax(0, 1fr) 65px 34px; gap: 7px; padding: 12px 10px; }
@@ -231,7 +242,7 @@
   .arena-match-points small { font-size: 10px; }
 }
 @media (max-width: 560px) {
-  .arena-bot-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  [data-page="arena"] > .arena-bot-card { padding: 18px; }
   .arena-main-column > .panel, .arena-side-column > .panel { padding: 18px; }
   .arena-panel-heading { gap: 8px; flex-wrap: wrap; }
   .arena-panel-heading > .text-link { min-height: 32px; }
@@ -245,6 +256,8 @@
   .arena-match-actions { display: grid; grid-template-columns: 1fr; }
   .arena-comparison-row { grid-template-columns: minmax(74px, 1fr) minmax(25px, .7fr) 61px; gap: 7px; }
   .arena-match-copy > b { font-size: 11px; }
+  .arena-match-opponent { gap: 6px; }
+  .arena-match-opponent .arena-bot-avatar-compact { width: 26px; max-width: 26px; border-radius: 6px; }
   .arena-match-detail { padding-inline: 12px; }
   .arena-match-detail-footer { flex-wrap: wrap; }
   .arena-weight-list { grid-template-columns: 1fr; }
