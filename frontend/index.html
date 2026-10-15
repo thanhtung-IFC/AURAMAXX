@@ -29,7 +29,7 @@
 <body>
   <svg class="icon-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></symbol>
-    <symbol id="i-face" viewBox="0 0 24 24"><path d="M12 3a8.5 8.5 0 0 0-8.5 8.5c0 5.2 4 9.5 8.5 9.5s8.5-4.3 8.5-9.5A8.5 8.5 0 0 0 12 3Z"/><path d="M8.5 10h.01M15.5 10h.01M8.5 15c1.8 1.8 5.2 1.8 7 0"/></symbol>
+    <symbol id="i-face" viewBox="0 0 24 24"><path d="M3 8V6.2A3.2 3.2 0 0 1 6.2 3H8m8 0h1.8A3.2 3.2 0 0 1 21 6.2V8m0 8v1.8a3.2 3.2 0 0 1-3.2 3.2H16m-8 0H6.2A3.2 3.2 0 0 1 3 17.8V16"/><path d="M7.8 9.3v2m8.4-2v2M12 9.3v3.6c0 1-.4 1.4-1.3 1.4m-1.6 2.4c1.6 1.2 4.2 1.2 5.8 0"/></symbol>
     <symbol id="i-heart" viewBox="0 0 24 24"><path d="M20.8 8.8c0 5.2-8.8 10.2-8.8 10.2S3.2 14 3.2 8.8a4.8 4.8 0 0 1 8.8-2.6 4.8 4.8 0 0 1 8.8 2.6Z"/><path d="M4 12h4l2-4 3.5 8 2-4H20"/></symbol>
     <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 2 1.8 7.2L21 12l-7.2 1.8L12 21l-1.8-7.2L3 12l7.2-2.8L12 2Z"/><path d="m19 16 .9 2.1L22 19l-2.1.9L19 22l-.9-2.1L16 19l2.1-.9L19 16Z"/></symbol>
     <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 19V5M4 19h17"/><path d="m7 15 4-4 3 2 6-7"/><path d="M16 6h4v4"/></symbol>
@@ -97,13 +97,19 @@
               <div class="hero-actions"><button class="button button-primary" data-go="face-lab" type="button">Bắt đầu với Face Lab <svg><use href="#i-arrow"/></svg></button><a class="text-link" href="#health-hub">Khám phá Health Hub <svg><use href="#i-arrow"/></svg></a></div>
             </div>
             <div class="hero-visual" aria-hidden="true">
-              <svg viewBox="0 0 280 240" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect x="46" y="18" width="188" height="204" rx="94" class="hero-face-frame"/>
-                <path d="M93 90c0-34 18-53 47-53s47 19 47 53v42c0 35-26 63-47 63s-47-28-47-63V90Z" stroke="currentColor" stroke-width="1.5"/>
-                <path d="M105 101c7-4 15-4 22 0m26 0c7-4 15-4 22 0m-35 6-6 34h13m-26 17c12 7 26 7 38 0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                <path d="M62 120h156M140 26v188" class="hero-face-axis"/>
-                <g class="hero-face-points"><circle cx="116" cy="105" r="3"/><circle cx="164" cy="105" r="3"/><circle cx="140" cy="142" r="3"/><circle cx="123" cy="158" r="3"/><circle cx="157" cy="158" r="3"/></g>
-              </svg>
+              <div class="hero-face-stage">
+                <svg class="hero-face-art" viewBox="0 0 24 24" width="216" height="216" fill="none" xmlns="http://www.w3.org/2000/svg" focusable="false">
+                  <defs>
+                    <linearGradient id="hero-face-gradient" x1="3" y1="3" x2="21" y2="21" gradientUnits="userSpaceOnUse">
+                      <stop class="face-gradient-cyan"/>
+                      <stop class="face-gradient-blue" offset=".34"/>
+                      <stop class="face-gradient-violet" offset=".66"/>
+                      <stop class="face-gradient-pink" offset="1"/>
+                    </linearGradient>
+                  </defs>
+                  <use href="#i-face" width="24" height="24" stroke="url(#hero-face-gradient)" stroke-width="1.05" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
               <span>GÓC NHÌN MỚI VỀ CHÍNH BẠN</span>
             </div>
           </article>
