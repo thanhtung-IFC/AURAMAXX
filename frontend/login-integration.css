@@ -5,6 +5,7 @@
 .journey-description{color:var(--color-text-muted)}.journey-badge{color:var(--color-text-muted);border-color:var(--color-border);background:transparent}.journey-steps{color:var(--color-text-muted)}.step-number{color:var(--color-text-subtle);border-color:var(--color-border);background:transparent}
 .journey-steps li{background:transparent;border:1px solid var(--color-border);border-radius:12px;color:var(--color-text-muted)}.journey-steps li.is-current{background:var(--color-surface);border-color:var(--color-border);color:var(--color-text)}
 .journey-brand{font-family:var(--font-family-display);letter-spacing:1px;font-weight:700}.journey-brand>span{font-size:8px;letter-spacing:1px}
+.journey-brand .brand-logo{width:144px;max-width:100%}.journey-brand{gap:16px}.journey-brand>span{border-color:var(--color-border);color:var(--color-text-muted)}
 .is-current .step-number{background:var(--color-primary-soft);border-color:var(--color-primary-soft);color:var(--blue-hi)}
 .auth-page a,.auth-role-links a[aria-current],.team-credit strong{color:var(--color-primary-hover)}
 .auth-page .journey-brand{color:var(--color-text)}
