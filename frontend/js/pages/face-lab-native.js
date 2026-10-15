@@ -3,29 +3,36 @@ import { showToast } from "../ui.js";
 import { createLandmarker } from "../face/landmarker.js";
 import { drawLandmarkOverlay, sampleFrameLight } from "../face/analysis.js";
 import { evaluateCapturePose } from "../face/capture-pose.js";
+import { CaptureStability } from "../face/capture-stability.js";
 import { escapeText, renderReportDetails, reportToArenaGroups, setFaceReport } from "../face/report.js";
 import { getSelectedArenaBotProfile as getSelectedArenaBot } from "../arena/bot-selection.js";
 
 const $ = selector => document.querySelector(selector);
 const page = document.querySelector('[data-page="face-lab"]');
-const SCAN_INTERVAL = 120, STABLE_MS = 650;
+const SCAN_INTERVAL = 66;
 let stream = null, detector = null, timer = 0, operation = 0, starting = false;
-let frame = null, front = null, profile = null, report = null, stableSince = 0, previousPose = null;
+let frame = null, front = null, profile = null, report = null;
 let autoCapture = false, autoTimeout = 0, lastServerAt = 0, serverBusy = false, analyzing = false;
 let facingMode = "user", selectedDevice = "", lastDetectionTime = 0, challengeActive = false, challengeVerified = false;
 let botRequestId = null, knownPeople = [], uploading = false, peopleRequest = 0;
+let lastVideoTime = -1, processController = null, analysisController = null, networkRetryAt = 0;
+let trackingEpoch = 0, overlayPoints = null;
+const stability = new CaptureStability();
 const sourceCanvas = document.createElement("canvas");
+const captureCanvas = document.createElement("canvas");
 const lightCanvas = document.createElement("canvas");
 
 function renderPage() {
   page.innerHTML = `
-    <div class="page-heading-row"><div><div class="eyebrow"><span class="eyebrow-dot"></span> FACE LAB · VISIONFACE</div><h1 id="face-title">Hiểu khuôn mặt,<br><span>theo cách của bạn.</span></h1><p class="page-lead">Nhận diện, xác thực và phân tích đường nét trong cùng một không gian. Kết quả từ bộ phân tích VisionFace của bạn.</p></div><span class="coming-badge"><i></i> VISIONFACE ĐÃ TÍCH HỢP</span></div>
+    <div class="page-heading-row face-lab-heading"><div><div class="eyebrow"><span class="eyebrow-dot"></span> FACE LAB · KHÁM PHÁ TỪNG ĐƯỜNG NÉT</div><h1 id="face-title">Hiểu khuôn mặt, <span>hiểu mình hơn.</span></h1><p class="page-lead">Căn khung hình, chụp khi ổn định và xem kết quả cùng giới hạn của từng phép đo.</p></div><span class="face-private-badge"><svg><use href="#i-shield"/></svg> Bạn kiểm soát ảnh chụp</span></div>
+    <ol class="face-workflow" aria-label="Các bước phân tích"><li id="face-step-camera" data-state="active"><span>01</span><div><b>Căn khung hình</b><small>Đủ sáng, một khuôn mặt</small></div></li><li id="face-step-capture"><span>02</span><div><b>Chụp ảnh</b><small>Chính diện, thêm góc nghiêng</small></div></li><li id="face-step-report"><span>03</span><div><b>Khám phá kết quả</b><small>Số đo và điều kiện ảnh</small></div></li></ol>
     <div class="face-native-layout">
       <div class="face-native-main">
         <article class="panel face-camera-panel">
           <div class="panel-heading"><div><span class="panel-overline">01 · CAMERA CỦA BẠN</span><h2>Giữ khuôn mặt trong khung</h2></div><span class="face-live-state" id="face-live-state" data-state="idle"><i></i><span>Camera đang tắt</span></span></div>
           <div class="face-camera-stage" id="face-camera-stage"><div class="face-camera-empty" id="face-camera-empty"><div class="camera-orbit"><svg><use href="#i-camera"/></svg><i></i></div><b>Sẵn sàng khi bạn cho phép</b><span>Webcam, camera USB hoặc camera điện thoại.</span></div><video id="face-video" autoplay muted playsinline hidden aria-label="Camera trực tiếp"></video><canvas id="face-overlay" hidden aria-hidden="true"></canvas><div class="face-guide-frame" id="face-guide-frame" hidden aria-hidden="true"><span></span><i></i></div><div class="face-camera-chip" id="face-camera-chip" hidden><i></i> VISIONFACE LIVE</div></div>
           <p class="face-live-message" id="face-live-message" role="status" aria-live="polite">Bật camera để bắt đầu. Bạn có thể dùng ảnh có sẵn để phân tích.</p>
+          <div class="face-quality-checks" aria-label="Điều kiện ảnh chụp"><span id="face-quality-light" data-state="idle">Chờ kiểm tra ánh sáng</span><span id="face-quality-pose" data-state="idle">Chờ căn góc chụp</span><span id="face-quality-motion" data-state="idle">Chờ khung hình ổn định</span></div>
           <div class="face-camera-actions"><button class="button button-primary" id="face-start-camera" type="button"><svg><use href="#i-camera"/></svg> Bật camera</button><button class="button button-outline" id="face-stop-camera" type="button" hidden>Dừng camera</button><button class="button button-outline" id="face-switch-camera" type="button" hidden>Đổi nhanh camera</button><button class="button button-outline" id="face-upload-button" type="button"><svg><use href="#i-upload"/></svg> Tải ảnh lên</button><input id="face-upload" type="file" accept="image/jpeg,image/png,image/webp" hidden></div>
           <div class="face-camera-settings"><label>Thiết bị camera<select id="face-device" aria-label="Thiết bị camera"><option value="">Camera mặc định</option></select></label><label>Độ phân giải<select id="face-resolution"><option value="720">HD · 1280 × 720</option><option value="1080">Full HD · 1920 × 1080</option><option value="480">VGA · 640 × 480</option></select></label><div class="face-camera-toggles"><label><input id="face-mirror" type="checkbox" checked> Lật gương</label><label><input id="face-show-mesh" type="checkbox" checked> Điểm mốc</label></div></div>
           <div class="face-privacy-note"><svg><use href="#i-shield"/></svg><p>Điểm mốc được gửi để nhận diện và xác thực. Ảnh được gửi khi bạn chọn phân tích; ảnh không tự lưu. Mô hình nhận diện tải từ CDN/Google.</p></div>
@@ -38,13 +45,17 @@ function renderPage() {
     <section class="panel face-profiles-panel"><div class="panel-heading"><div><span class="panel-overline">04 · HỒ SƠ CỦA BẠN</span><h2>Lưu mẫu, nhận diện lần sau</h2></div><button class="text-link" id="face-refresh-people" type="button">Tải lại</button></div><form id="face-register-form" class="face-register-form"><label>Hồ sơ<select id="face-person"><option value="">Tạo hồ sơ mới</option></select></label><label>Tên hồ sơ<input id="face-person-name" maxlength="120" required placeholder="Tên bạn muốn lưu"></label><button class="button button-primary" id="face-register" type="submit" disabled>Lưu mẫu khuôn mặt</button></form><p class="face-muted" id="face-people-status">Đăng nhập để quản lý hồ sơ và mẫu khuôn mặt của bạn.</p><div id="face-people-list" class="face-people-list"></div></section>`;
 }
 
-function message(text, state = "info") { $("#face-live-message").textContent = text; $("#face-live-message").dataset.state = state; }
-function live(text, state = "idle") { $("#face-live-state span").textContent = text; $("#face-live-state").dataset.state = state; }
+function setText(selector, text) { const element = $(selector); if (element.textContent !== text) element.textContent = text; }
+function message(text, state = "info") { setText("#face-live-message", text); $("#face-live-message").dataset.state = state; }
+function live(text, state = "idle") { setText("#face-live-state span", text); $("#face-live-state").dataset.state = state; }
 function cancelAuto() { autoCapture = false; clearTimeout(autoTimeout); autoTimeout = 0; $("#face-cancel-auto").hidden = true; }
-function resetStability() { frame = null; stableSince = 0; previousPose = null; $("#face-capture-stability").value = 0; $("#face-capture").disabled = true; $("#face-register").disabled = !front; }
+function resetStability() { frame = null; stability.reset(); $("#face-capture-stability").value = 0; $("#face-capture").disabled = true; $("#face-register").disabled = !front; }
 function clearShots() { front = null; profile = null; cancelAuto(); resetStability(); updateShots(); }
 
 function updateShots() {
+  $("#face-step-camera").dataset.state = front ? "done" : "active";
+  $("#face-step-capture").dataset.state = report ? "done" : front ? "active" : "pending";
+  $("#face-step-report").dataset.state = report ? "active" : "pending";
   for (const [kind, shot] of [["front", front], ["profile", profile]]) {
     const host = $(`#face-${kind}-preview`); host.replaceChildren();
     if (shot) { const image = new Image(); image.src = shot.image; image.alt = kind === "front" ? "Ảnh chính diện đã chụp" : "Ảnh góc nghiêng đã chụp"; host.append(image); }
@@ -118,6 +129,7 @@ async function startCamera(deviceId = $("#face-device").value, mode = facingMode
     const next = await openCameraDevice(deviceId, mode);
     if (id !== operation) { next.getTracks().forEach(track => track.stop()); return; }
     stream = next; facingMode = mode;
+    lastVideoTime = -1; lastServerAt = 0; networkRetryAt = 0;
     selectedDevice = next.getVideoTracks()[0]?.getSettings().deviceId || deviceId;
     const video = $("#face-video"); video.srcObject = next; video.hidden = false;
     $("#face-camera-empty").hidden = true; $("#face-overlay").hidden = false;
@@ -139,11 +151,17 @@ async function startCamera(deviceId = $("#face-device").value, mode = facingMode
 
 function stopCamera() {
   operation++; starting = false; clearTimeout(timer); timer = 0; cancelAuto();
+  processController?.abort(); processController = null; serverBusy = false;
+  analysisController?.abort(); analysisController = null;
   analyzing = false; uploading = false; $("#face-progress").hidden = true;
   challengeActive = false; challengeVerified = false; $("#face-challenge-progress").value = 0;
   $("#face-challenge-message").textContent = "Bật camera và bắt đầu liveness để xác thực.";
   if (stream) stream.getTracks().forEach(track => track.stop());
   stream = null; resetStability();
+  overlayPoints = null;
+  setText("#face-capture-hint", front ? "Ảnh đã chụp được giữ lại. Bật camera để chụp thêm." : "Bật camera và giữ yên trong giây lát.");
+  for (const id of ["face-quality-light", "face-quality-pose", "face-quality-motion"]) { $(`#${id}`).dataset.state = "idle"; }
+  setText("#face-quality-light", "Chờ kiểm tra ánh sáng"); setText("#face-quality-pose", "Chờ căn góc chụp"); setText("#face-quality-motion", "Chờ khung hình ổn định");
   const video = $("#face-video"); video.pause(); video.srcObject = null; video.hidden = true;
   for (const id of ["face-overlay", "face-guide-frame", "face-camera-chip", "face-stop-camera", "face-switch-camera"]) $(`#${id}`).hidden = true;
   $("#face-camera-empty").hidden = false; $("#face-start-camera").hidden = false; $("#face-start-camera").disabled = false;
@@ -158,11 +176,23 @@ function mirrorCamera() {
 }
 
 function drawOverlay(landmarks) {
+  // Smooth the display only. Capture and server requests always keep raw landmarks.
+  if (!overlayPoints || overlayPoints.length !== landmarks.length) overlayPoints = landmarks.map(point => ({ ...point }));
+  else {
+    const motion = Math.hypot(landmarks[1].x - overlayPoints[1].x, landmarks[1].y - overlayPoints[1].y);
+    const alpha = motion > .025 ? .85 : .45;
+    for (let index = 0; index < landmarks.length; index++) {
+      overlayPoints[index].x += alpha * (landmarks[index].x - overlayPoints[index].x);
+      overlayPoints[index].y += alpha * (landmarks[index].y - overlayPoints[index].y);
+    }
+  }
   const canvas = $("#face-overlay"), video = $("#face-video"), rect = canvas.getBoundingClientRect();
-  const dpr = Math.min(devicePixelRatio || 1, 2); canvas.width = Math.max(1, rect.width * dpr); canvas.height = Math.max(1, rect.height * dpr);
-  if (!$("#face-show-mesh").checked) return;
-  const scale = Math.max(canvas.width / video.videoWidth, canvas.height / video.videoHeight);
-  drawLandmarkOverlay(canvas.getContext("2d"), landmarks, video.videoWidth, video.videoHeight, { scale, offsetX: (canvas.width - video.videoWidth * scale) / 2, offsetY: (canvas.height - video.videoHeight * scale) / 2 });
+  const dpr = Math.min(devicePixelRatio || 1, 2), width = Math.max(1, Math.round(rect.width * dpr)), height = Math.max(1, Math.round(rect.height * dpr));
+  if (canvas.width !== width) canvas.width = width;
+  if (canvas.height !== height) canvas.height = height;
+  if (!$("#face-show-mesh").checked) { canvas.getContext("2d").clearRect(0, 0, width, height); return; }
+  const scale = Math.min(canvas.width / video.videoWidth, canvas.height / video.videoHeight);
+  drawLandmarkOverlay(canvas.getContext("2d"), overlayPoints, video.videoWidth, video.videoHeight, { scale, offsetX: (canvas.width - video.videoWidth * scale) / 2, offsetY: (canvas.height - video.videoHeight * scale) / 2 });
 }
 
 function snapshot(source, landmarks, yaw = 0) {
@@ -174,16 +204,17 @@ function snapshot(source, landmarks, yaw = 0) {
 function trackCapture(landmarks, now) {
   const step = front ? 2 : 1;
   let quality = evaluateCapturePose(landmarks, step, front?.poseYaw || 0, sourceCanvas.width / sourceCanvas.height);
-  const light = sampleFrameLight(sourceCanvas, lightCanvas);
+  const light = sampleFrameLight(sourceCanvas, lightCanvas, landmarks);
   if (light.mean < 36 || light.mean > 228 || light.contrast < 8) quality = { ...quality, ready: false, message: "Điều chỉnh ánh sáng để thấy rõ các đường nét." };
-  const previous = previousPose;
-  const moving = !previous || now - previous.time > 350 || Math.abs(quality.yaw - previous.yaw) > 4 || Math.hypot(landmarks[1].x - previous.x, landmarks[1].y - previous.y) > .018;
-  if (!quality.ready || moving) stableSince = now;
-  previousPose = { time: now, yaw: quality.yaw, x: landmarks[1].x, y: landmarks[1].y };
-  const stable = quality.ready && now - stableSince >= STABLE_MS;
+  const { stable, progress } = stability.update(landmarks, quality.yaw, now, quality.ready);
   frame = { landmarks, yaw: (quality.yaw || 0) + (front?.poseYaw || 0), stable, time: now };
-  $("#face-capture-stability").value = quality.ready ? Math.min(100, (now - stableSince) / STABLE_MS * 100) : 0;
-  $("#face-capture-hint").textContent = quality.message;
+  $("#face-capture-stability").value = progress;
+  setText("#face-capture-hint", stable ? "Đã ổn định. Bạn có thể chụp ngay." : quality.message);
+  const lightReady = light.mean >= 36 && light.mean <= 228 && light.contrast >= 8;
+  for (const [id, ok, label] of [["face-quality-light", lightReady, lightReady ? "Ánh sáng phù hợp" : "Cần chỉnh ánh sáng"], ["face-quality-pose", quality.ready, quality.ready ? "Đúng góc chụp" : "Đang căn góc chụp"], ["face-quality-motion", stable, stable ? "Khung hình ổn định" : "Giữ yên một chút"]]) {
+    $(`#${id}`).dataset.state = ok ? "ready" : "pending"; setText(`#${id}`, label);
+  }
+  $("#face-guide-frame").dataset.state = stable ? "ready" : "align";
   $("#face-capture").disabled = !stable || analyzing;
   $("#face-register").disabled = !front && (!stable || step !== 1);
   if (stable && autoCapture && step === 2 && !profile) captureShot();
@@ -192,11 +223,14 @@ function trackCapture(landmarks, now) {
 }
 
 async function processFrame(landmarks, id) {
-  if (serverBusy || performance.now() - lastServerAt < 360) return;
+  const now = performance.now();
+  if (serverBusy || now < networkRetryAt || now - lastServerAt < (challengeActive ? 220 : 850)) return;
   serverBusy = true; lastServerAt = performance.now();
+  const controller = new AbortController(); processController = controller;
+  const tracked = trackingEpoch;
   try {
-    const result = await api.post("/api/vision/process", { landmarks, check_challenge: challengeActive });
-    if (id !== operation || !stream) return;
+    const result = await apiRequest("/api/vision/process", { method: "POST", body: JSON.stringify({ landmarks, check_challenge: challengeActive }), timeout: 10000, signal: controller.signal });
+    if (id !== operation || !stream || tracked !== trackingEpoch) return;
     const metrics = result.biometrics || {};
     $("#face-ear").textContent = Number.isFinite(metrics.ear) ? `${metrics.is_eye_closed ? "Đang nhắm" : "Đang mở"} · ${metrics.ear}` : "—";
     $("#face-mar").textContent = Number.isFinite(metrics.mar) ? `${metrics.is_mouth_open ? "Đang mở" : "Khép"} · ${metrics.mar}` : "—";
@@ -209,40 +243,59 @@ async function processFrame(landmarks, id) {
       challengeActive = Boolean(result.challenge.is_active);
     }
   } catch (error) {
-    if (id !== operation) return;
+    if (id !== operation || controller.signal.aborted) return;
+    networkRetryAt = performance.now() + 2500;
     if (error.status === 401 || error.status === 403) clearSensitiveView();
     message(`Chưa nhận được kết quả nhận diện: ${error.message}`, "error");
   }
-  finally { serverBusy = false; }
+  finally { if (processController === controller) { serverBusy = false; processController = null; } }
 }
 
-function scanFrame() {
+async function scanFrame() {
   if (!stream || !detector || document.hidden) return;
   const id = operation;
   try {
     const video = $("#face-video");
-    if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+    if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth && video.currentTime !== lastVideoTime) {
+      lastVideoTime = video.currentTime;
       const scale = Math.min(1, 1280 / video.videoWidth);
-      sourceCanvas.width = Math.round(video.videoWidth * scale); sourceCanvas.height = Math.round(video.videoHeight * scale);
+      const width = Math.round(video.videoWidth * scale), height = Math.round(video.videoHeight * scale);
+      if (sourceCanvas.width !== width) sourceCanvas.width = width;
+      if (sourceCanvas.height !== height) sourceCanvas.height = height;
       sourceCanvas.getContext("2d").drawImage(video, 0, 0, sourceCanvas.width, sourceCanvas.height);
       const now = Math.max(performance.now(), lastDetectionTime + 1); lastDetectionTime = now;
-      const faces = detector.detectForVideo(sourceCanvas, now).faceLandmarks || [];
+      const faces = (await detector.detectForVideo(sourceCanvas, now)).faceLandmarks || [];
+      if (id !== operation || !stream) return;
       if (faces.length !== 1) {
+        trackingEpoch++; overlayPoints = null; processController?.abort();
         resetStability(); live(faces.length > 1 ? "Có nhiều khuôn mặt" : "Chưa thấy khuôn mặt", "idle");
+        for (const id of ["face-quality-light", "face-quality-pose", "face-quality-motion"]) $(`#${id}`).dataset.state = "idle";
+        setText("#face-quality-light", "Chờ một khuôn mặt"); setText("#face-quality-pose", "Chờ căn góc chụp"); setText("#face-quality-motion", "Chờ khung hình ổn định");
+        for (const id of ["face-ear", "face-mar", "face-yaw"]) setText(`#${id}`, "—");
+        setText("#face-match", "Chưa nhận diện");
         message(faces.length > 1 ? "Chỉ để một khuôn mặt trong khung để nhận diện và phân tích." : "Đưa khuôn mặt vào giữa khung.");
         $("#face-capture-hint").textContent = "Đang chờ một khuôn mặt rõ trong khung.";
         $("#face-overlay").getContext("2d").clearRect(0, 0, $("#face-overlay").width, $("#face-overlay").height);
       } else {
+        // Freeze the image associated with these landmarks. The next inference can
+        // update sourceCanvas while the user clicks capture on this completed frame.
+        if (captureCanvas.width !== sourceCanvas.width) captureCanvas.width = sourceCanvas.width;
+        if (captureCanvas.height !== sourceCanvas.height) captureCanvas.height = sourceCanvas.height;
+        captureCanvas.getContext("2d").drawImage(sourceCanvas, 0, 0);
         drawOverlay(faces[0]); trackCapture(faces[0], now); void processFrame(faces[0], id);
       }
     }
-  } catch (error) { resetStability(); message(cameraError(error), "error"); }
+  } catch (error) {
+    if (id !== operation) return;
+    stopCamera(); detector?.close(); detector = null;
+    message(cameraError(error), "error");
+  }
   if (stream && id === operation) timer = window.setTimeout(scanFrame, SCAN_INTERVAL);
 }
 
 function captureShot() {
   if (!frame?.stable || performance.now() - frame.time > 450 || analyzing || !stream) return;
-  const captured = snapshot(sourceCanvas, frame.landmarks, frame.yaw);
+  const captured = snapshot(captureCanvas, frame.landmarks, frame.yaw);
   invalidateReport();
   if (!front) { front = captured; profile = null; }
   else { profile = captured; cancelAuto(); }
@@ -257,15 +310,16 @@ async function analyzeFace() {
   const savedFront = front, savedProfile = profile;
   stopCamera(); const id = operation;
   invalidateReport(); analyzing = true; $("#face-progress").hidden = false; updateShots();
+  const controller = new AbortController(); analysisController = controller;
   try {
     const payload = savedProfile ? { width: savedFront.width, height: savedFront.height, frontal: savedFront, profile: savedProfile } : { image: savedFront.image, landmarks: savedFront.landmarks, width: savedFront.width, height: savedFront.height };
-    const result = await apiRequest("/api/vision/analyze_face", { method: "POST", body: JSON.stringify(payload), timeout: 45000 });
+    const result = await apiRequest("/api/vision/analyze_face", { method: "POST", body: JSON.stringify(payload), timeout: 45000, signal: controller.signal });
     if (id !== operation) return;
     if (!result.success) throw new Error(result.error || result.message || "VisionFace chưa phân tích được ảnh này.");
     report = result; setFaceReport(result); showResults(result, savedFront, savedProfile);
     message("Đã phân tích với VisionFace. Bạn có thể xem chi tiết hoặc xây dựng routine trong Health Hub.", "success");
   } catch (error) { if (id === operation) { message(error.message, "error"); showToast(error.message, "error"); } }
-  finally { if (id === operation) { analyzing = false; $("#face-progress").hidden = true; updateShots(); } }
+  finally { if (id === operation) { analysisController = null; analyzing = false; $("#face-progress").hidden = true; updateShots(); } }
 }
 
 function showResults(result, frontShot, profileShot) {
@@ -383,7 +437,7 @@ async function loadPeople() {
 
 async function registerFace(event) {
   event.preventDefault();
-  const captured = front || (frame?.stable ? snapshot(sourceCanvas, frame.landmarks, frame.yaw) : null);
+  const captured = front || (frame?.stable && performance.now() - frame.time <= 450 ? snapshot(captureCanvas, frame.landmarks, frame.yaw) : null);
   if (!captured || !await hasConsent()) return;
   const button = $("#face-register"); button.disabled = true;
   try {
@@ -409,9 +463,12 @@ async function uploadImage(event) {
     canvas.width = Math.round(bitmap.width * scale); canvas.height = Math.round(bitmap.height * scale); canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height); bitmap.close();
     imageDetector = await createLandmarker("IMAGE");
     if (id !== operation) return;
-    const faces = imageDetector.detect(canvas).faceLandmarks || [];
+    const faces = (await imageDetector.detect(canvas)).faceLandmarks || [];
+    if (id !== operation) return;
     if (faces.length !== 1) throw new Error(faces.length ? "Ảnh có nhiều khuôn mặt. Chọn ảnh chỉ có một người." : "Không tìm thấy khuôn mặt trong ảnh. Chọn ảnh chính diện rõ hơn.");
-    front = snapshot(canvas, faces[0]); profile = null; updateShots();
+    const pose = evaluateCapturePose(faces[0], 1, 0, canvas.width / canvas.height);
+    if (!pose.ready) throw new Error(`Ảnh chưa phù hợp để đo chính diện: ${pose.message}`);
+    front = snapshot(canvas, faces[0], pose.yaw); profile = null; updateShots();
     await analyzeFace();
   } catch (error) { if (id === operation) message(error.message || "Không đọc được ảnh.", "error"); }
   finally { imageDetector?.close(); if (id === operation) { uploading = false; $("#face-progress").hidden = !analyzing; } }
@@ -431,6 +488,7 @@ function clearSensitiveView() {
   $("#face-challenge-progress").value = 0; $("#face-match").textContent = "Chưa nhận diện";
   for (const id of ["face-ear", "face-mar", "face-yaw"]) $(`#${id}`).textContent = "—";
   detector?.close(); detector = null;
+  for (const canvas of [sourceCanvas, captureCanvas, lightCanvas]) { canvas.width = 1; canvas.height = 1; }
 }
 
 export function initFaceLab() {
@@ -461,7 +519,7 @@ export function initFaceLab() {
   $("#face-person").addEventListener("change", event => { const person = knownPeople.find(item => item.id === event.target.value); $("#face-person-name").value = person?.name || ""; $("#face-person-name").readOnly = Boolean(person); });
   $("#face-refresh-people").addEventListener("click", () => void loadPeople());
   window.addEventListener("hashchange", () => {
-    if (window.location.hash !== "#face-lab") { stopCamera(); clearShots(); $("#face-result-content").querySelectorAll(".face-report-figure").forEach(figure => figure.remove()); }
+    if (window.location.hash !== "#face-lab") { stopCamera(); detector?.close(); detector = null; clearShots(); $("#face-result-content").querySelectorAll(".face-report-figure").forEach(figure => figure.remove()); }
     else void loadPeople();
   });
   window.addEventListener("auramaxx:auth-changed", () => { clearSensitiveView(); void loadPeople(); });

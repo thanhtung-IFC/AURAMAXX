@@ -3,8 +3,11 @@ const configuredBase = window.AURAMAXX_API_BASE || window.location.origin;
 const API_BASE = configuredBase.replace(/\/$/, "");
 
 export async function apiRequest(path, options = {}) {
-  const { timeout = 30000, ...requestOptions } = options;
+  const { timeout = 30000, signal: externalSignal, ...requestOptions } = options;
   const controller = new AbortController();
+  const cancel = () => controller.abort(externalSignal.reason);
+  if (externalSignal?.aborted) cancel();
+  else externalSignal?.addEventListener("abort", cancel, { once: true });
   const timer = window.setTimeout(() => controller.abort(), timeout);
   const headers = new Headers(options.headers || {});
   const method = (requestOptions.method || "GET").toUpperCase();
@@ -49,6 +52,7 @@ export async function apiRequest(path, options = {}) {
 
     return payload;
   } catch (error) {
+    if (externalSignal?.aborted) throw error;
     if (error.name === "AbortError") {
       throw new Error("Máy chủ phản hồi quá lâu. Vui lòng thử lại.");
     }
@@ -58,6 +62,7 @@ export async function apiRequest(path, options = {}) {
     throw error;
   } finally {
     window.clearTimeout(timer);
+    externalSignal?.removeEventListener("abort", cancel);
   }
 }
 

@@ -1,4 +1,4 @@
-"""Trạng thái API server cho Face Lab; xử lý khuôn mặt diễn ra trong trình duyệt."""
+"""Face Lab landmark detection runs locally; image measurements run on the server."""
 
 from fastapi import APIRouter, Depends
 
@@ -12,9 +12,9 @@ router.dependencies.append(Depends(require_feature("face_analysis")))
 @router.get("/status")
 def face_analysis_status() -> dict[str, str | bool]:
     return {
-        "available": False,
-        "status": "client_side_only",
+        "available": True,
+        "status": "ready",
         "advanced_available": True,
         "advanced_endpoint": "/api/vision/analyze_face",
-        "message": "Backend không nhận hoặc xử lý hình ảnh. Face Landmarker chạy trong trình duyệt trên thiết bị người dùng.",
+        "message": "Điểm mốc được phát hiện trên thiết bị; ảnh chỉ gửi tới máy chủ khi bạn chọn phân tích.",
     }

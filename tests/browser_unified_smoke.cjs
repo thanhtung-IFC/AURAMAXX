@@ -116,6 +116,7 @@ function cdp(ws, exceptions) {
     await click('#face-start-camera');
     await until(() => evaluate(`location.pathname === '/login.html' && !!document.querySelector('#username')`),'original login page');
     assert.equal(await evaluate(`!!document.querySelector('.journey-steps') && document.querySelector('#username').type === 'text'`),true);
+    await until(() => evaluate(`!!document.documentElement.dataset.theme`), 'login theme initialized');
     await click('#theme-toggle');
     assert.equal(await evaluate(`document.documentElement.dataset.theme`),'light');
     fs.writeFileSync(path.join(outputRoot,'native-login-desktop.png'),Buffer.from((await send('Page.captureScreenshot',{format:'png'})).data,'base64'));
@@ -167,6 +168,21 @@ function cdp(ws, exceptions) {
     await until(() => evaluate(`document.querySelector('#face-ear').textContent !== '\u2014'`),'real server liveness');
     await click('#face-challenge-start');
     await until(() => evaluate(`window.__visionRequests.some(item=>item.url.endsWith('/challenge/start'))`),'challenge started');
+    await evaluate(`document.querySelector('#toast-region').replaceChildren();window.scrollTo({top:0,behavior:'instant'})`);
+    await pause(200);
+    fs.writeFileSync(path.join(outputRoot,'face-lab-camera-desktop.png'),Buffer.from((await send('Page.captureScreenshot',{format:'png'})).data,'base64'));
+    await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+    await evaluate(`document.querySelector('#face-camera-stage').scrollIntoView({block:'start',behavior:'instant'})`);
+    await pause(200);
+    assert.equal(await evaluate(`document.documentElement.scrollWidth <= innerWidth+1`),true,'Face Lab camera fits mobile');
+    fs.writeFileSync(path.join(outputRoot,'face-lab-camera-mobile.png'),Buffer.from((await send('Page.captureScreenshot',{format:'png'})).data,'base64'));
+    await evaluate(`document.documentElement.dataset.theme='light'`);
+    await pause(150);
+    fs.writeFileSync(path.join(outputRoot,'face-lab-camera-light.png'),Buffer.from((await send('Page.captureScreenshot',{format:'png'})).data,'base64'));
+    await evaluate(`document.documentElement.dataset.theme='dark'`);
+    await send('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});
+    const detectionCount=await evaluate(`window.__fixtureMarker=true;window.__fixtureDelay=120;window.__fixtureDetectionCount`);
+    await until(() => evaluate(`window.__fixtureDetectionCount>=${detectionCount+2} && window.__fixtureDetectionPending && !document.querySelector('#face-capture').disabled`),'capture during asynchronous inference');
     await click('#face-capture');
     await evaluate(`document.querySelector('#face-person-name').value='Native Face';document.querySelector('#face-register-form').requestSubmit()`);
     await until(() => evaluate(`document.querySelector('#face-people-list').textContent.includes('Native Face')`),'native registration');
@@ -178,6 +194,8 @@ function cdp(ws, exceptions) {
     const analyzed=await evaluate(`window.__visionRequests.find(item=>item.url.endsWith('/analyze_face')).body`);
     assert.equal(analyzed.frontal.landmarks.length,478);assert.equal(analyzed.profile.landmarks.length,478);
     assert.ok(analyzed.frontal.image.startsWith('data:image/jpeg'));assert.ok(analyzed.profile.poseYaw >= 15);
+    const snapshotPixel=await evaluate(`(async()=>{const image=new Image();image.src=${JSON.stringify(analyzed.frontal.image)};await image.decode();const canvas=document.createElement('canvas');canvas.width=image.width;canvas.height=image.height;const context=canvas.getContext('2d');context.drawImage(image,0,0);return context.getImageData(8,8,1,1).data[0]})()`);
+    assert.ok(Math.abs(snapshotPixel-analyzed.frontal.landmarks[477].z*255)<=10,'captured image matches completed landmarks while next inference is pending');
     assert.equal(await evaluate(`document.querySelectorAll('.face-report-figure').length`),2);
     fs.writeFileSync(path.join(outputRoot,'native-face-desktop.png'),Buffer.from((await send('Page.captureScreenshot',{format:'png'})).data,'base64'));
     await route('arena');

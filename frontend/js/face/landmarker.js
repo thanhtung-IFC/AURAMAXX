@@ -1,9 +1,20 @@
+import { createWorkerLandmarker } from "./landmarker-worker-client.js";
+
 const MEDIAPIPE_VERSION = "1.1.0";
 const MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
 
 let modulePromise;
 
 export async function createLandmarker(runningMode = "VIDEO") {
+  if (typeof document !== "undefined" && typeof Worker !== "undefined" && typeof OffscreenCanvas !== "undefined" && typeof createImageBitmap === "function") {
+    try { return await createWorkerLandmarker(runningMode); }
+    catch { /* Some browsers block module workers; keep camera support via the direct adapter. */ }
+  }
+  const detector = await createDirectLandmarker(runningMode);
+  detector.executionMode = "direct";
+  return detector;
+}
+export async function createDirectLandmarker(runningMode = "VIDEO") {
   modulePromise ||= import(`https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MEDIAPIPE_VERSION}/vision_bundle.mjs`).catch(error => {
     modulePromise = undefined;
     throw error;

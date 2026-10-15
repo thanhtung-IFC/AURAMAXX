@@ -524,8 +524,10 @@ class ApiIntegrationTests(unittest.TestCase):
 
         code, data, _ = self.request("GET", "/api/face-analyses/status")
         self.assertEqual(code, 200)
-        self.assertFalse(data["available"])
-        self.assertEqual(data["status"], "client_side_only")
+        self.assertTrue(data["available"])
+        self.assertEqual(data["status"], "ready")
+        self.assertTrue(data["advanced_available"])
+        self.assertEqual(data["advanced_endpoint"], "/api/vision/analyze_face")
 
         code, _, headers = self.request("OPTIONS", "/api/health", origin="http://localhost:8000")
         self.assertEqual(code, 200)

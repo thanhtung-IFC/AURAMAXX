@@ -19,11 +19,20 @@ function midpoint(landmarks, indexes, width, height) {
   };
 }
 
-export function sampleFrameLight(video, canvas) {
+export function sampleFrameLight(video, canvas, landmarks = null) {
   const context = canvas.getContext("2d", { willReadFrequently: true });
-  canvas.width = 64;
-  canvas.height = 64;
-  context.drawImage(video, 0, 0, canvas.width, canvas.height);
+  if (canvas.width !== 64) canvas.width = 64;
+  if (canvas.height !== 64) canvas.height = 64;
+  const width = video.videoWidth || video.width, height = video.videoHeight || video.height;
+  const outline = landmarks && [10, 152, 234, 454].map(index => landmarks[index]);
+  if (outline?.every(point => point && Number.isFinite(point.x) && Number.isFinite(point.y))) {
+    const x = Math.max(0, Math.min(...outline.map(point => point.x)) * width);
+    const y = Math.max(0, Math.min(...outline.map(point => point.y)) * height);
+    const right = Math.min(width, Math.max(...outline.map(point => point.x)) * width);
+    const bottom = Math.min(height, Math.max(...outline.map(point => point.y)) * height);
+    if (right > x && bottom > y) context.drawImage(video, x, y, right - x, bottom - y, 0, 0, 64, 64);
+    else context.drawImage(video, 0, 0, 64, 64);
+  } else context.drawImage(video, 0, 0, 64, 64);
   const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
   let sum = 0;
   let squareSum = 0;

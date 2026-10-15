@@ -4,6 +4,9 @@ exports.injection = `(() => {
   window.__fixtureYaw = 0;
   window.__fixtureFaceCount = 1;
   window.__cameraStops = 0;
+  window.__fixtureMarker = false;
+  window.__fixtureDetectionCount = 0;
+  window.__fixtureDetectionPending = false;
   const originalFetch = window.fetch.bind(window);
   window.fetch = async (url, options = {}) => {
     if (options.body && String(url).includes('/api/')) window.__visionRequests.push({url: String(url), body: JSON.parse(options.body)});
@@ -33,7 +36,8 @@ exports.injection = `(() => {
     const canvas = document.createElement('canvas'); canvas.width=640; canvas.height=480;
     const context=canvas.getContext('2d'), gradient=context.createLinearGradient(0,0,640,480);
     gradient.addColorStop(0,'#444'); gradient.addColorStop(1,'#ddd');
-    const paint = () => { context.fillStyle=gradient;context.fillRect(0,0,640,480);context.fillStyle='#999';context.fillRect(260,200,80,80); };
+    let marker=20;
+    const paint = () => { context.fillStyle=gradient;context.fillRect(0,0,640,480);context.fillStyle='#999';context.fillRect(260,200,80,80);if(window.__fixtureMarker){marker=(marker+70)%240;context.fillStyle='rgb('+marker+',0,0)';context.fillRect(0,0,24,24);} };
     paint(); const interval = setInterval(paint,50);
     const stream=canvas.captureStream(20), track=stream.getVideoTracks()[0];
     const settings=track.getSettings.bind(track), stop=track.stop.bind(track);
@@ -45,6 +49,15 @@ exports.injection = `(() => {
 })();`;
 
 exports.model = `export async function createLandmarker(mode='VIDEO') {
-  const detect = () => ({faceLandmarks:Array.from({length:window.__fixtureFaceCount},()=>window.__fixtureFace())});
-  return {detect,detectForVideo:detect,close(){}};
+  const detect = source => ({faceLandmarks:Array.from({length:window.__fixtureFaceCount},()=>{
+    const points=window.__fixtureFace();
+    if(window.__fixtureMarker)points[477].z=source.getContext('2d').getImageData(8,8,1,1).data[0]/255;
+    return points;
+  })});
+  const detectForVideo = async source => {
+    const result=detect(source);window.__fixtureDetectionCount++;window.__fixtureDetectionPending=true;
+    await new Promise(resolve=>setTimeout(resolve,window.__fixtureDelay||0));
+    window.__fixtureDetectionPending=false;return result;
+  };
+  return {detect,detectForVideo,close(){}};
 }`;

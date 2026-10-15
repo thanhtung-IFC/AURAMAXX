@@ -79,28 +79,15 @@ def analyze_facial_symmetry(points: List[FaceAnalyzerPoint], img_w: int, img_h: 
     forehead = points[10]
     chin = points[152]
 
-    # Tâm mắt an toàn cho cả chuẩn 468 điểm (không iris) và 478 điểm (có iris)
-    has_iris = len(points) >= 478
-    if has_iris:
-        eye_center_l = points[468]
-        eye_center_r = points[473]
-    else:
-        eye_center_l = FaceAnalyzerPoint(
-            (points[159].x + points[145].x) / 2.0,
-            (points[159].y + points[145].y) / 2.0,
-            0.0, img_w, img_h
-        )
-        eye_center_r = FaceAnalyzerPoint(
-            (points[386].x + points[374].x) / 2.0,
-            (points[386].y + points[374].y) / 2.0,
-            0.0, img_w, img_h
-        )
+    # Eye corners describe the structure; pupil centers move when the user looks aside.
+    eye_center_l = FaceAnalyzerPoint((points[33].x + points[133].x) / 2, (points[33].y + points[133].y) / 2, 0, img_w, img_h)
+    eye_center_r = FaceAnalyzerPoint((points[362].x + points[263].x) / 2, (points[362].y + points[263].y) / 2, 0, img_w, img_h)
 
     # Các cặp đối xứng quan trọng và trọng số
     pairs = [
-        ("Mắt (Tâm đồng tử)", eye_center_l, eye_center_r, 1.25),
-        ("Khóe mắt ngoài", points[33], points[362], 1.0),
-        ("Khóe mắt trong", points[133], points[263], 1.0),
+        ("Tâm hai khóe mắt", eye_center_l, eye_center_r, 1.25),
+        ("Khóe mắt ngoài", points[33], points[263], 1.0),
+        ("Khóe mắt trong", points[133], points[362], 1.0),
         ("Gò má", points[234], points[454], 1.15),
         ("Cánh mũi", points[102], points[331], 1.05),
         ("Khóe miệng", points[61], points[291], 1.1),
@@ -581,12 +568,13 @@ def analyze_skin_condition(image_pil: Image.Image, points: List[FaceAnalyzerPoin
     if not valid_rois:
         return {
             "skin_tone": "Không rõ",
-            "smoothness_score": 65.0,
-            "uniformity_score": 65.0,
-            "dark_circles_index": 25.0,
-            "oiliness_score": 30.0,
-            "redness_score": 20.0,
-            "skin_health_evaluation": "Chưa đủ điều kiện ánh sáng để đo chính xác bề mặt da."
+            "smoothness_score": None,
+            "uniformity_score": None,
+            "dark_circles_index": None,
+            "oiliness_score": None,
+            "redness_score": None,
+            "measurement_available": False,
+            "skin_health_evaluation": "Không lấy được vùng da phù hợp; các chỉ số da chưa được đo."
         }
 
     combined_skin = np.concatenate([r.reshape(-1, 3) for r in valid_rois], axis=0)
@@ -614,8 +602,13 @@ def analyze_skin_condition(image_pil: Image.Image, points: List[FaceAnalyzerPoin
     cheek_texture = []
     for cheek_roi in (roi_left_cheek, roi_right_cheek):
         if cheek_roi is not None and cheek_roi.size:
-            gray = np.dot(cheek_roi[..., :3], [0.299, 0.587, 0.114])
-            cheek_texture.append(float(np.std(gray)))
+            # Compare patches at the same scale and remove a linear lighting gradient.
+            patch = np.asarray(Image.fromarray(cheek_roi).resize((32, 32), Image.Resampling.BILINEAR), dtype=np.float32)
+            gray = np.dot(patch[..., :3], [0.299, 0.587, 0.114])
+            yy, xx = np.mgrid[:32, :32]
+            design = np.column_stack((xx.ravel(), yy.ravel(), np.ones(32 * 32)))
+            fitted = design @ np.linalg.lstsq(design, gray.ravel(), rcond=None)[0]
+            cheek_texture.append(float(np.std(gray.ravel() - fitted)))
     # Use both cheeks and the median so one shadowed side is less influential.
     std_dev = float(np.median(cheek_texture)) if cheek_texture else 0.0
     smoothness_score = round(max(35.0, min(95.0, 95.0 - std_dev * 3.2)), 1)
@@ -626,16 +619,17 @@ def analyze_skin_condition(image_pil: Image.Image, points: List[FaceAnalyzerPoin
     uniformity_score = round(max(40.0, min(95.0, 95.0 - diff_between_zones * 2.2)), 1)
 
     # Quầng thâm mắt
-    dark_circles_index = 15.0
+    dark_circles_index = None
     if roi_under_eye_l is not None and roi_left_cheek is not None:
         eye_lum = np.mean(0.299 * roi_under_eye_l[...,0] + 0.587 * roi_under_eye_l[...,1] + 0.114 * roi_under_eye_l[...,2])
         cheek_lum = np.mean(np.dot(roi_left_cheek[..., :3], [0.299, 0.587, 0.114]))
-        if cheek_lum > eye_lum:
+        dark_circles_index = 0.0
+        if cheek_lum > eye_lum and cheek_lum > 0:
             ratio_dark = (cheek_lum - eye_lum) / cheek_lum
             dark_circles_index = round(min(90.0, ratio_dark * 220.0), 1)
 
     # Độ bóng nhờn vùng trán (T-zone)
-    oiliness_score = 15.0
+    oiliness_score = None
     if roi_forehead is not None:
         forehead_gray = np.dot(roi_forehead[...,:3], [0.299, 0.587, 0.114])
         shiny_pixels = np.sum(forehead_gray > 215)
@@ -643,22 +637,23 @@ def analyze_skin_condition(image_pil: Image.Image, points: List[FaceAnalyzerPoin
 
     # Đánh giá da chân thật, chỉ rõ khuyết điểm
     skin_flaws = []
-    if dark_circles_index > 35.0:
-        skin_flaws.append(f"Quầng thâm mắt rõ ({dark_circles_index}%), dấu hiệu thiếu ngủ hoặc mỏi mắt")
-    if oiliness_score > 45.0:
-        skin_flaws.append(f"Vùng chữ T nhiều dầu bóng nhờn ({oiliness_score}%)")
+    if dark_circles_index is not None and dark_circles_index > 35.0:
+        skin_flaws.append(f"Vùng dưới mắt tối hơn má trong ảnh (chỉ số tương phản {dark_circles_index}); có thể chịu ảnh hưởng của bóng đổ")
+    if oiliness_score is not None and oiliness_score > 45.0:
+        skin_flaws.append(f"Vùng trán có nhiều điểm sáng trong ảnh (chỉ số phản sáng {oiliness_score}); chưa xác định được lượng dầu thực tế")
     if smoothness_score < 70.0:
-        skin_flaws.append("Bề mặt da chưa mịn màng, có dấu hiệu lỗ chân lông to hoặc sần sùi nhẹ")
+        skin_flaws.append("Vùng má có nhiều biến thiên độ sáng; texture ảnh, nhiễu và trang điểm đều có thể ảnh hưởng")
     if uniformity_score < 72.0:
         skin_flaws.append("Sắc tố da không đều giữa các vùng má và trán")
 
     if not skin_flaws:
-        skin_health_desc = "Tình trạng da khá tốt, bề mặt sạch và sắc tố tương đối ổn định."
+        skin_health_desc = "Các vùng ảnh được lấy mẫu có độ sáng tương đối đồng đều. Chỉ số phản ánh ảnh chụp, không xác định sức khỏe da."
     else:
-        skin_health_desc = "Cảnh báo khuyết điểm da: " + " • ".join(skin_flaws) + "."
+        skin_health_desc = "Quan sát từ ảnh: " + " • ".join(skin_flaws) + "."
 
     return {
         "skin_tone": skin_tone,
+        "measurement_available": True,
         "undertone": undertone,
         "hex_color": f"#{int(mean_r):02x}{int(mean_g):02x}{int(mean_b):02x}",
         "smoothness_score": smoothness_score,
@@ -1114,6 +1109,12 @@ def run_comprehensive_face_analysis(
             "success": False,
             "error": "Dữ liệu khuôn mặt không đủ 468 điểm mốc để phân tích chính xác."
         }
+    if any(not all(math.isfinite(value) for value in (point.x, point.y, point.z)) for point in points):
+        return {"success": False, "error": "Điểm mốc chứa giá trị không hợp lệ. Hãy chụp lại ảnh."}
+    if (dist_2d(points[234], points[454]) < max(8, actual_w * .03)
+            or dist_2d(points[10], points[152]) < max(8, actual_h * .05)
+            or dist_2d(points[33], points[263]) < max(4, actual_w * .01)):
+        return {"success": False, "error": "Các điểm mốc không tạo thành khuôn mặt đủ rõ để đo. Hãy chụp gần hơn và nhìn thẳng."}
 
     quality = _pose_quality(points, actual_w, actual_h)
     quality_warnings = _front_quality_warnings(quality)
@@ -1127,14 +1128,12 @@ def run_comprehensive_face_analysis(
     hair = analyze_hair_and_hairline(pil_img, points, proportions["face_shape"], proportions.get("trichion"))
 
     # Weighted composite of the displayed heuristic measurements.
-    harmony_score = round(
-        symmetry["overall_symmetry_score"] * 0.25 +
-        proportions["rule_of_thirds"]["harmony_score"] * 0.25 +
-        nose["nose_aesthetic_score"] * 0.18 +
-        jawline["jawline_sharpness_score"] * 0.17 +
-        skin["smoothness_score"] * 0.15,
-        1
-    )
+    components = [(symmetry["overall_symmetry_score"], .25), (proportions["rule_of_thirds"]["harmony_score"], .25),
+                  (nose["nose_aesthetic_score"], .18), (jawline["jawline_sharpness_score"], .17), (skin["smoothness_score"], .15)]
+    measured = [(score, weight) for score, weight in components if score is not None and math.isfinite(score)]
+    harmony_score = round(sum(score * weight for score, weight in measured) / sum(weight for _, weight in measured), 1)
+    if not skin.get("measurement_available", True):
+        quality_warnings.append("Không đo được vùng da; chỉ số tổng hợp chỉ dùng các nhóm hình học có dữ liệu.")
 
     # Categories describe this heuristic score only; no population percentile is implied.
     if harmony_score >= 85.0:
