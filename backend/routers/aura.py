@@ -23,7 +23,8 @@ from backend.services.ai_service import (
     ai_configuration,
     get_ai_service,
 )
-from backend.settings import AI_MODEL, AI_PROVIDER, AI_RATE_LIMIT_PER_MINUTE
+from backend.settings import AI_MODEL, AI_PROVIDER
+from backend.services.ai_quota import reserve_request, user_status
 
 
 router = APIRouter(prefix="/api/aura", tags=["Aura AI"], dependencies=[Depends(require_feature("aura_ai"))])
@@ -58,23 +59,7 @@ def _require_ai_consent(connection: sqlite3.Connection, user_id: str) -> None:
 
 
 def _check_rate_limit(connection: sqlite3.Connection, user_id: str) -> None:
-    now = datetime.now(timezone.utc)
-    now_text = now.isoformat()
-    cutoff = (now - timedelta(seconds=60)).isoformat()
-    connection.execute("BEGIN IMMEDIATE")
-    connection.execute("DELETE FROM ai_request_limits WHERE created_at < ?", (cutoff,))
-    count = connection.execute(
-        "SELECT COUNT(*) FROM ai_request_limits WHERE user_id = ? AND created_at >= ?",
-        (user_id, cutoff),
-    ).fetchone()[0]
-    if count >= AI_RATE_LIMIT_PER_MINUTE:
-        connection.rollback()
-        raise HTTPException(status_code=429, detail="Bạn đã dùng hết lượt chat tạm thời. Hãy chờ một phút rồi thử lại.")
-    connection.execute(
-        "INSERT INTO ai_request_limits (id, user_id, created_at) VALUES (?, ?, ?)",
-        (str(uuid.uuid4()), user_id, now_text),
-    )
-    connection.commit()
+    reserve_request(connection, user_id)
 
 
 def _reject_secret_like(message: str) -> None:
@@ -94,6 +79,11 @@ def _event(event_type: str, **payload: str | int) -> bytes:
 def aura_status() -> dict[str, str | bool]:
     """Public readiness check; never returns secrets or provider error payloads."""
     return ai_configuration()
+
+
+@router.get("/quota")
+def quota(user=Depends(get_current_user), connection=Depends(get_database)):
+    return user_status(connection, user["id"])
 
 
 @router.get("/conversations")
@@ -182,7 +172,7 @@ async def _stream_chat(payload: AuraChatRequest, user_id: str, connection: sqlit
     history.append({"role": "user", "content": content})
 
     try:
-        service = get_ai_service()
+        service = get_ai_service(response_style=payload.response_style)
         chunks: list[str] = []
         size = 0
         async for delta in service.stream_reply(history):
@@ -220,7 +210,7 @@ async def _stream_chat(payload: AuraChatRequest, user_id: str, connection: sqlit
             ],
         )
         connection.commit()
-        yield _event("done", conversation_id=conversation_id, provider=getattr(service, "provider", AI_PROVIDER), model=getattr(service, "model", AI_MODEL))
+        yield _event("done", conversation_id=conversation_id, title=title, updated_at=now, provider=getattr(service, "provider", AI_PROVIDER), model=getattr(service, "model", AI_MODEL))
     except asyncio.CancelledError:
         # A client stop/close cancels provider streaming; uncommitted turns are not saved.
         connection.rollback()
@@ -252,9 +242,9 @@ async def chat(
     config = ai_configuration()
     if not config["available"]:
         raise HTTPException(status_code=503, detail=str(config["message"]))
-    _check_rate_limit(connection, user["id"])
     if payload.conversation_id:
         _owned_conversation(connection, str(payload.conversation_id), user["id"])
+    _check_rate_limit(connection, user["id"])
     return StreamingResponse(
         _stream_chat(payload, user["id"], connection),
         media_type="text/event-stream",

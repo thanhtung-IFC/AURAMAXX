@@ -16,10 +16,92 @@ from backend.services.ai_service import (
     ai_configuration,
     get_ai_service,
     _bounded_context,
+    ai_http_pool,
 )
 
 
 class AIServiceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_pool_is_reused_with_request_local_keys_context_and_timeouts(self):
+        received = []
+        def responder(request):
+            received.append((request.headers["authorization"], json.loads(request.content), request.extensions["timeout"]))
+            return httpx.Response(200, text='data: {"type":"response.output_text.delta","delta":"OK"}\n\ndata: {"type":"response.completed"}\n\n')
+        shared = httpx.AsyncClient(transport=httpx.MockTransport(responder))
+        with patch("backend.services.ai_service.httpx.AsyncClient", return_value=shared) as factory:
+            async with ai_http_pool():
+                with patch.multiple("backend.services.ai_service", AI_PROVIDER="openai", AI_API_KEY="first-key", AI_MODEL="test-model"):
+                    first = get_ai_service(response_style="quick")
+                with patch.multiple("backend.services.ai_service", AI_PROVIDER="openai", AI_API_KEY="second-key", AI_MODEL="test-model"):
+                    second = get_ai_service(response_style="thorough")
+                first.timeout, second.timeout = 7, 19
+                await asyncio.gather(first.reply([{"role": "user", "content": "first question"}]), second.reply([{"role": "user", "content": "second question"}]))
+                self.assertFalse(shared.is_closed)
+                self.assertIs(first._shared_client, second._shared_client)
+            self.assertTrue(shared.is_closed)
+            factory.assert_called_once()
+        self.assertEqual({key for key, _, _ in received}, {"Bearer first-key", "Bearer second-key"})
+        for key, body, timeout in received:
+            first_request = key == "Bearer first-key"
+            self.assertEqual(body["input"][0]["content"], "first question" if first_request else "second question")
+            self.assertEqual(timeout["read"], 7 if first_request else 19)
+            self.assertNotIn("first-key", body["instructions"])
+            self.assertNotIn("second-key", body["instructions"])
+
+    async def test_styles_set_documented_gemini_thinking_without_changing_model(self):
+        for style, level in (("quick", "low"), ("balanced", "medium"), ("thorough", "high")):
+            received = []
+            def responder(request):
+                received.append(json.loads(request.content))
+                return httpx.Response(200, text='data: {"candidates":[{"content":{"parts":[{"text":"OK"}]},"finishReason":"STOP"}]}\n\n')
+            service = GeminiService("secret", "gemini-3.8-flash", response_style=style, max_output_tokens=8192, transport=httpx.MockTransport(responder))
+            await service.reply([{"role": "user", "content": "hello"}])
+            self.assertEqual(received[0]["generationConfig"], {"maxOutputTokens": 8192, "thinkingConfig": {"thinkingLevel": level}})
+            self.assertIn("Response style:", received[0]["systemInstruction"]["parts"][0]["text"])
+            self.assertEqual(service.model, "gemini-3.8-flash")
+        received.clear()
+        service = GeminiService("secret", "gemini-2.5-flash", response_style="quick", transport=httpx.MockTransport(responder))
+        await service.reply([{"role": "user", "content": "hello"}])
+        self.assertNotIn("thinkingConfig", received[0]["generationConfig"])
+
+    def test_context_keeps_whole_turns_and_latest_correction(self):
+        messages = [
+            {"role": "user", "content": "important beginning " + "x" * 7000},
+            {"role": "assistant", "content": "y" * 5000},
+            {"role": "user", "content": "Tôi sửa lại: da tôi khô, không phải da dầu."},
+            {"role": "assistant", "content": "Đã hiểu."},
+            {"role": "user", "content": "Vậy chọn gì?"},
+        ]
+        self.assertEqual(_bounded_context(messages), messages[2:])
+        oversized = [{"role": "user", "content": "question start " + "x" * MAX_CONTEXT_CHARS}]
+        with self.assertRaises(AIServiceUnavailable) as error:
+            _bounded_context(oversized)
+        self.assertEqual(error.exception.kind, "invalid_input")
+
+    async def test_cancel_closes_provider_stream_without_closing_shared_pool(self):
+        waiting = asyncio.Event()
+        closed = []
+        class Stream(httpx.AsyncByteStream):
+            async def __aiter__(self):
+                yield b'data: {"type":"response.output_text.delta","delta":"first"}\n\n'
+                waiting.set()
+                await asyncio.Event().wait()
+            async def aclose(self):
+                closed.append(True)
+        async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _: httpx.Response(200, stream=Stream()))) as client:
+            service = OpenAIResponsesService("secret", "test-model", client=client)
+            seen = []
+            async def consume():
+                async for chunk in service.stream_reply([{"role": "user", "content": "hello"}]):
+                    seen.append(chunk)
+            task = asyncio.create_task(consume())
+            await asyncio.wait_for(waiting.wait(), timeout=1)
+            self.assertEqual(seen, ["first"], "first token is available before provider completes")
+            task.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+            self.assertEqual(closed, [True])
+            self.assertFalse(client.is_closed)
+
     async def test_stream_uses_server_key_bounded_context_and_no_provider_storage(self) -> None:
         received: dict[str, object] = {}
 

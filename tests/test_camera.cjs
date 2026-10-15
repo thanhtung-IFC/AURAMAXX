@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 (async () => {
-  const { openCamera, fittedFrame, CameraWorkload } = await import('../frontend/js/face/camera.js');
+  const { openCamera, fittedFrame, CameraWorkload, CameraConfigurator } = await import('../frontend/js/face/camera.js');
+  const { performanceHint } = await import('../frontend/js/performance.js');
   function device(capabilities={}, initial={width:1280,height:720,frameRate:24}, rejectConfiguration=false) {
     let settings={...initial}, stops=0;
     const configurations=[];
@@ -60,12 +61,48 @@ const assert = require('node:assert/strict');
   finishConfiguration();await assert.rejects(configuration,{name:'AbortError'});
   assert.deepEqual(fittedFrame(1080,1920,960),{width:540,height:960});
   assert.deepEqual(fittedFrame(640,480,1920),{width:640,height:480},'never upscale capture');
-  const workload=new CameraWorkload();
-  for(let i=0;i<12;i++)workload.observe(180);
-  assert.equal(workload.longestEdge,480,'sustained slow inference reduces input size');
-  for(let i=0;i<100;i++)workload.observe(10);
+  const workload=new CameraWorkload({now:0});let time=0;
+  for(let i=0;i<3;i++){workload.observe(900,{now:time});time+=100;}
+  for(let i=0;i<30;i++){workload.observe(10,{now:time});time+=100;}
+  assert.equal(workload.phase,'ready');
+  assert.equal(workload.tier,'quality','warmup spikes excluded from initial calibration');
+  workload.observe(600,{now:time});time+=100;
+  for(let i=0;i<15;i++){workload.observe(10,{now:time});time+=100;}
+  assert.equal(workload.tier,'quality','brief spike does not cause tier oscillation');
+  for(let i=0;i<35;i++){workload.observe(180,{now:time});time+=200;}
+  assert.equal(workload.tier,'economy','sustained pressure lowers tier');
+  for(let i=0;i<20;i++){workload.observe(10,{now:time});time+=200;}
+  assert.equal(workload.tier,'economy','recovery waits for sustained evidence');
+  for(let i=0;i<180;i++){workload.observe(10,{now:time});time+=200;}
   assert.equal(workload.longestEdge,960,'sustained recovery restores detail');
-  workload.observe(NaN); workload.reset();
-  assert.equal(workload.interval,66);
-  console.log('PASS: camera capabilities, Full HD/portrait, old APIs, negotiation fallback, busy devices, cancellation and adaptive workload.');
+  workload.observe(NaN); workload.reset({mode:'economy',now:0});
+  for(let i=0;i<80;i++)workload.observe(1,{now:i*100});
+  assert.equal(workload.tier,'economy','manual choice stays fixed');
+  workload.setLiveness(true,8000);
+  assert.equal(workload.interval,66,'liveness retains normal sampling cadence');
+  assert.equal(workload.longestEdge,640,'liveness retains input detail');
+  workload.setLiveness(false,8100);
+  assert.equal(workload.interval,125,'economy cadence returns after liveness');
+  workload.reset({now:0});
+  for(let i=0;i<40;i++)workload.observe(10,{now:i*100,uiDelay:90});
+  assert.equal(workload.tier,'economy','UI pressure influences calibration even with fast inference');
+  assert.equal(performanceHint({hardwareConcurrency:4}),'economy');
+  assert.equal(performanceHint({hardwareConcurrency:8,deviceMemory:8}),'balanced','hardware hints never assume high performance');
+  assert.equal(performanceHint({}),'balanced','missing RAM/core APIs are supported');
+  const serial=device({}, {width:1920,height:1080}), originalApply=serial.track.applyConstraints;
+  let releaseFirst,active=0,maxActive=0;
+  serial.track.applyConstraints=async c=>{active++;maxActive=Math.max(maxActive,active);if(!releaseFirst)await new Promise(resolve=>releaseFirst=resolve);await originalApply(c);active--;};
+  const configurator=new CameraConfigurator(serial.track);
+  const first=configurator.configure({height:1080,frameRate:30});
+  await new Promise(resolve=>setImmediate(resolve));
+  const skipped=configurator.configure({height:720,frameRate:20});
+  const last=configurator.configure({height:720,frameRate:24});
+  releaseFirst();await Promise.all([first,skipped,last]);
+  assert.equal(maxActive,1,'camera configuration never overlaps');
+  assert.equal(serial.configurations.length,2,'rapid changes coalesce to the latest selection');
+  assert.equal(serial.configurations.at(-1).frameRate.max,24);
+  const stopped=device(), stoppedConfigurator=new CameraConfigurator(stopped.track);
+  const queued=stoppedConfigurator.configure({height:720});stoppedConfigurator.close();
+  assert.equal(await queued,false);assert.equal(stopped.configurations.length,0,'stop discards queued configuration');
+  console.log('PASS: camera negotiation/cancellation, timed calibration, hysteresis, manual modes, UI load, liveness cadence, hardware hints and serialized configuration.');
 })().catch(error=>{console.error(error);process.exitCode=1;});

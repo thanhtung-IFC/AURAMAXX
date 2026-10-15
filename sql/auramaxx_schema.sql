@@ -72,6 +72,33 @@ CREATE TABLE auramaxx.ai_request_limits (
  created_at VARCHAR(40) NOT NULL
 );
 GO
+IF OBJECT_ID(N'auramaxx.ai_quota_settings', N'U') IS NULL
+CREATE TABLE auramaxx.ai_quota_settings (
+ id INT PRIMARY KEY CHECK(id=1), daily_limit INT CHECK(daily_limit>=0), monthly_limit INT CHECK(monthly_limit>=0),
+ per_minute INT NOT NULL CHECK(per_minute BETWEEN 1 AND 60),
+ global_daily_limit INT CHECK(global_daily_limit>=0), global_monthly_limit INT CHECK(global_monthly_limit>=0),
+ updated_at VARCHAR(40) NOT NULL
+);
+GO
+IF OBJECT_ID(N'auramaxx.ai_user_quotas', N'U') IS NULL
+CREATE TABLE auramaxx.ai_user_quotas (
+ user_id NVARCHAR(128) PRIMARY KEY REFERENCES auramaxx.users(id) ON DELETE CASCADE,
+ daily_limit INT CHECK(daily_limit>=0), monthly_limit INT CHECK(monthly_limit>=0),
+ per_minute INT NOT NULL CHECK(per_minute BETWEEN 1 AND 60), enabled INT NOT NULL CHECK(enabled IN (0,1)),
+ updated_at VARCHAR(40) NOT NULL
+);
+GO
+IF OBJECT_ID(N'auramaxx.ai_usage_events', N'U') IS NULL
+CREATE TABLE auramaxx.ai_usage_events (
+ id NVARCHAR(128) PRIMARY KEY, user_id NVARCHAR(128) REFERENCES auramaxx.users(id) ON DELETE SET NULL,
+ created_at VARCHAR(40) NOT NULL
+);
+GO
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE name='idx_ai_usage_user_time' AND object_id=OBJECT_ID('auramaxx.ai_usage_events'))
+ CREATE INDEX idx_ai_usage_user_time ON auramaxx.ai_usage_events(user_id,created_at);
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE name='idx_ai_usage_time' AND object_id=OBJECT_ID('auramaxx.ai_usage_events'))
+ CREATE INDEX idx_ai_usage_time ON auramaxx.ai_usage_events(created_at);
+GO
 IF OBJECT_ID(N'auramaxx.arena_profiles', N'U') IS NULL
 CREATE TABLE auramaxx.arena_profiles (
  user_id NVARCHAR(128) PRIMARY KEY REFERENCES auramaxx.users(id) ON DELETE CASCADE,

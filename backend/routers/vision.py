@@ -18,6 +18,7 @@ from backend.features import is_enabled
 from backend.identity import ensure_legacy_account, legacy_auth, login_legacy, login_limiter
 from backend.security import clear_session_cookies, create_session, get_current_user, require_csrf, require_consent, verify_password, hash_password
 from backend.settings import SESSION_COOKIE_NAME
+from backend.services.ai_quota import reserve_request
 from server import VisionFaceRequestHandler
 
 
@@ -178,6 +179,8 @@ async def dispatch(path: str, request: Request, user=Depends(get_current_user), 
     session = await run_in_threadpool(_session, request, connection, user)
     body = await _read_body(request)
     adapter = VisionAPIAdapter(request, path, body, session)
+    if path == "chat":
+        adapter.reserve_chat_usage = lambda: reserve_request(connection, user["id"])
     handler = {"GET": adapter._handle_get, "POST": adapter._handle_post, "DELETE": adapter._handle_delete}[request.method]
     await run_in_threadpool(adapter._dispatch, handler)
     return adapter.result()

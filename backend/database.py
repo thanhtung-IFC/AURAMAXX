@@ -345,6 +345,31 @@ def initialize_database(connection_factory=None) -> None:
             CREATE INDEX IF NOT EXISTS idx_ai_request_limits_user_time
                 ON ai_request_limits(user_id, created_at DESC);
 
+            CREATE TABLE IF NOT EXISTS ai_quota_settings (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                daily_limit INTEGER CHECK (daily_limit >= 0),
+                monthly_limit INTEGER CHECK (monthly_limit >= 0),
+                per_minute INTEGER NOT NULL CHECK (per_minute BETWEEN 1 AND 60),
+                global_daily_limit INTEGER CHECK (global_daily_limit >= 0),
+                global_monthly_limit INTEGER CHECK (global_monthly_limit >= 0),
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS ai_user_quotas (
+                user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+                daily_limit INTEGER CHECK (daily_limit >= 0),
+                monthly_limit INTEGER CHECK (monthly_limit >= 0),
+                per_minute INTEGER NOT NULL CHECK (per_minute BETWEEN 1 AND 60),
+                enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS ai_usage_events (
+                id TEXT PRIMARY KEY,
+                user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_ai_usage_user_time ON ai_usage_events(user_id, created_at);
+            CREATE INDEX IF NOT EXISTS idx_ai_usage_time ON ai_usage_events(created_at);
+
             INSERT OR IGNORE INTO schema_version (version) VALUES (4);
 
             CREATE TABLE IF NOT EXISTS arena_profiles (

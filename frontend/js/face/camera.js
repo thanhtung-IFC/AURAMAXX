@@ -24,14 +24,14 @@ async function requestCamera(mediaDevices, video, signal) {
   });
 }
 
-export async function openCamera({ mediaDevices = navigator.mediaDevices, deviceId = "", facingMode = "user", strictFacing = false, resolution = "auto", signal } = {}) {
+export async function openCamera({ mediaDevices = navigator.mediaDevices, deviceId = "", facingMode = "user", strictFacing = false, resolution = "auto", frameRate = 24, preferFullHD = true, signal } = {}) {
   let selection = deviceId ? { deviceId: { exact: deviceId } } : { facingMode: { [strictFacing ? "exact" : "ideal"]: facingMode } };
   const height = resolution === "auto" ? 720 : Number(resolution);
   const width = height === 480 ? 640 : Math.round(height * 16 / 9);
   let result, fallback = false;
   for (let attempt = 0; attempt < 3; attempt++) {
     const video = attempt === 2 ? selection : {
-      ...selection, width: { ideal: attempt ? 640 : width }, height: { ideal: attempt ? 480 : height }, frameRate: { ideal: 24, max: 30 },
+      ...selection, width: { ideal: attempt ? 640 : width }, height: { ideal: attempt ? 480 : height }, frameRate: { ideal: frameRate, max: 30 },
     };
     try { result = await requestCamera(mediaDevices, video, signal); break; }
     catch (error) {
@@ -49,7 +49,7 @@ export async function openCamera({ mediaDevices = navigator.mediaDevices, device
     if (!track) throw new Error("Camera chưa cung cấp hình ảnh.");
     const capabilities = cameraCapabilities(track), settings = cameraSettings(track);
     let applied = track.getConstraints?.() || { width: { ideal: settings.width || width }, height: { ideal: settings.height || height }, frameRate: { ideal: 24, max: 30 } };
-    if (resolution === "auto" && track.applyConstraints) {
+    if (resolution === "auto" && preferFullHD && track.applyConstraints) {
       const maxWidth = capabilities.width?.max || 0, maxHeight = capabilities.height?.max || 0;
       const portrait = (settings.width || 0) < (settings.height || 0);
       if (Math.max(maxWidth, maxHeight) >= 1920 && Math.min(maxWidth, maxHeight) >= 1080) {
@@ -75,23 +75,93 @@ export function fittedFrame(width, height, longestEdge) {
   return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
 }
 
-// Hysteresis avoids repeatedly changing processing size on a busy device.
+export const CAMERA_PROFILES = Object.freeze({
+  economy: Object.freeze({ longestEdge: 480, interval: 125, overlayInterval: 200, pixelRatio: 1, frameRate: 20, height: 720 }),
+  balanced: Object.freeze({ longestEdge: 640, interval: 90, overlayInterval: 100, pixelRatio: 1.5, frameRate: 24, height: 720 }),
+  quality: Object.freeze({ longestEdge: 960, interval: 66, overlayInterval: 66, pixelRatio: 2, frameRate: 30, height: 1080 }),
+});
+const TIERS = Object.keys(CAMERA_PROFILES);
+const percentile = (values, fraction) => {
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.max(0, Math.ceil(sorted.length * fraction) - 1)] || 0;
+};
+
+// Timed calibration and hysteresis use camera/UI measurements, never API latency.
 export class CameraWorkload {
-  constructor() { this.reset(); }
-  reset() { this.longestEdge = 960; this.interval = 66; this.average = 0; this.slow = 0; this.fast = 0; this.samples = 0; }
-  observe(milliseconds) {
-    if (!Number.isFinite(milliseconds) || milliseconds < 0) return;
-    this.average = this.samples++ ? .8 * this.average + .2 * milliseconds : milliseconds;
-    this.slow = this.average > 110 ? this.slow + 1 : 0;
-    this.fast = this.average < 45 ? this.fast + 1 : 0;
-    if (this.slow >= 6) {
-      this.longestEdge = this.longestEdge > 640 ? 640 : 480;
-      this.interval = this.longestEdge === 480 ? 125 : 90;
-      this.slow = 0; this.fast = 0;
-    } else if (this.fast >= 30 && this.longestEdge < 960) {
-      this.longestEdge = this.longestEdge < 640 ? 640 : 960;
-      this.interval = this.longestEdge === 960 ? 66 : 90;
-      this.fast = 0;
+  constructor(options) { this.reset(options); }
+  reset({ mode = "auto", hint = "balanced", now = performance.now() } = {}) {
+    this.mode = mode === "auto" || TIERS.includes(mode) ? mode : "auto";
+    this.tier = this.mode === "auto" ? (TIERS.includes(hint) ? hint : "balanced") : this.mode;
+    this.phase = this.mode === "auto" ? "warming" : "ready";
+    this.startedAt = now; this.changedAt = now; this.samples = []; this.warmup = 0;
+    this.slowAt = null; this.fastAt = null; this.liveness = false;
+  }
+  get profile() { return CAMERA_PROFILES[this.tier]; }
+  get longestEdge() { return this.liveness ? Math.max(640, this.profile.longestEdge) : this.profile.longestEdge; }
+  get interval() { return this.liveness ? Math.min(66, this.profile.interval) : this.profile.interval; }
+  setLiveness(active, now = performance.now()) {
+    if (this.liveness === active) return;
+    this.liveness = active; this.samples = []; this.slowAt = null; this.fastAt = null;
+    if (this.mode === "auto" && this.phase !== "ready") { this.startedAt = now; this.warmup = 0; }
+  }
+  observe(milliseconds, { now = performance.now(), uiDelay = 0 } = {}) {
+    if (!Number.isFinite(milliseconds) || milliseconds < 0 || !Number.isFinite(now)) return false;
+    if (this.mode !== "auto" || this.liveness) return false;
+    // Ignore initial WASM/shader warmup before comparing sustained costs.
+    if (this.warmup++ < 3) return false;
+    this.samples.push({ cost: milliseconds, ui: Number.isFinite(uiDelay) ? Math.max(0, uiDelay) : 0 });
+    if (this.samples.length > 24) this.samples.shift();
+    this.phase = this.phase === "warming" ? "calibrating" : this.phase;
+    const cost = percentile(this.samples.map(item => item.cost), .9), ui = percentile(this.samples.map(item => item.ui), .9);
+    const current = TIERS.indexOf(this.tier);
+    let target = current;
+    if (this.phase === "calibrating") {
+      if (now - this.startedAt < 3000 || this.samples.length < 12) return false;
+      target = cost > 110 || ui > 60 ? 0 : cost > 55 || ui > 30 ? 1 : 2;
+      this.phase = "ready";
+    } else {
+      const slow = cost > (current === 2 ? 95 : 140) || ui > 60;
+      const fast = cost < 40 && ui < 20;
+      this.slowAt = slow ? this.slowAt ?? now : null;
+      this.fastAt = fast ? this.fastAt ?? now : null;
+      if (this.samples.length >= 6 && this.slowAt !== null && now - this.slowAt >= 2000 && current > 0) target--;
+      else if (this.fastAt !== null && now - this.fastAt >= 10000 && now - this.changedAt >= 10000 && current < 2) target++;
     }
+    if (target === current) return false;
+    this.tier = TIERS[target]; this.changedAt = now; this.samples = []; this.slowAt = null; this.fastAt = null;
+    return true;
+  }
+}
+
+// Coalesce rapid changes and preserve unrelated camera constraints (focus, etc.).
+export class CameraConfigurator {
+  constructor(track) { this.track = track; this.revision = 0; this.pending = Promise.resolve(false); this.key = ""; this.closed = false; }
+  close() { this.closed = true; this.revision++; }
+  configure({ height = null, frameRate = 24 } = {}) {
+    const key = `${height}:${frameRate}`;
+    if (this.closed || key === this.key) return this.pending;
+    this.key = key;
+    const revision = ++this.revision;
+    this.pending = this.pending.catch(() => false).then(async () => {
+      const track = this.track;
+      if (this.closed || revision !== this.revision || track.readyState === "ended" || !track.applyConstraints) return false;
+      const settings = cameraSettings(track), caps = cameraCapabilities(track);
+      const base = { ...(settings.width ? { width: { ideal: settings.width } } : {}), ...(settings.height ? { height: { ideal: settings.height } } : {}), ...track.getConstraints?.() };
+      const rate = Math.max(caps.frameRate?.min || 1, Math.min(caps.frameRate?.max || 30, frameRate));
+      const next = { ...base, frameRate: { ideal: rate, max: rate } };
+      const portrait = settings.width < settings.height;
+      if (height && (height <= 720 || Math.max(caps.width?.max || 0, caps.height?.max || 0) >= 1920 && Math.min(caps.width?.max || 0, caps.height?.max || 0) >= 1080)) {
+        const width = Math.round(height * 16 / 9);
+        next.width = { ideal: portrait ? height : width, max: portrait ? height : width };
+        next.height = { ideal: portrait ? width : height, max: portrait ? width : height };
+      }
+      try { await track.applyConstraints(next); }
+      catch {
+        if (this.closed || revision !== this.revision || track.readyState === "ended") return false;
+        try { await track.applyConstraints({ ...base, frameRate: next.frameRate }); } catch { return false; }
+      }
+      return !this.closed && revision === this.revision;
+    });
+    return this.pending;
   }
 }

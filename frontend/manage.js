@@ -1,6 +1,7 @@
 import { api } from "./js/api.js";
 import { initTheme } from "./js/theme.js";
 import { showToast } from "./js/ui.js";
+import { initAIQuotaManagement, loadAIQuotaManagement, clearAIQuotaManagement, openAIQuota } from "./manage-ai.js";
 
 initTheme();
 const $ = selector => document.querySelector(selector);
@@ -30,6 +31,7 @@ function renderAccounts() {
       if (account.role !== "admin") actions.append(action("Xóa", async () => { if (!confirm(`Xóa tài khoản ${account.display_name} cùng hồ sơ và dữ liệu thuộc tài khoản?`)) return; await api.delete(`/api/manage/accounts/${account.id}`); await load(); }, true));
     }
     tools.append(actions);
+    if (account.role !== "admin" || central()) actions.append(action("Hạn mức AI", () => openAIQuota(account.id)));
     row.append(name, node("td", account.role === "admin" ? (account.is_central ? "Admin trung tâm" : "Admin phụ") : "Người dùng"), node("td", account.is_active ? "Hoạt động" : "Đã khóa"), node("td", account.people_count), tools); body.append(row);
   }
 }
@@ -97,7 +99,7 @@ async function load() {
     const [accountData, personData, audit, features] = await Promise.all([api.get("/api/manage/accounts"), api.get("/api/manage/people"), api.get("/api/manage/audit"), api.get("/api/manage/features")]);
     if (version !== loadVersion) return;
     accounts = accountData.accounts; people = personData.people; featureData = features.features;
-    renderAccounts(); renderPeople(); renderRecords($("#managed-audit"), audit.events); renderFeatures(); await loadData();
+    renderAccounts(); renderPeople(); renderRecords($("#managed-audit"), audit.events); renderFeatures(); await Promise.all([loadData(), loadAIQuotaManagement()]);
   } catch (error) {
     if (version !== loadVersion) return;
     clearManagement();
@@ -107,6 +109,7 @@ async function load() {
 }
 
 function clearManagement() {
+  clearAIQuotaManagement();
   accounts = []; people = []; featureData = []; currentUser = null; statusData = null;
   $("#manage-content").hidden = true; $("#admin-identity").hidden = true; $("#manage-logout").hidden = true;
   for (const id of ["managed-accounts", "managed-people", "managed-data", "managed-audit", "managed-features", "manage-metrics", "admin-identity"]) $("#" + id).replaceChildren();
@@ -152,4 +155,5 @@ $("#reveal-managed-password").addEventListener("click", () => { const input = $(
 $("#managed-data-kind").addEventListener("change", () => loadData().catch(error => showToast(error.message, "error")));
 document.querySelectorAll("[data-manage-tab]").forEach(button => button.addEventListener("click", () => { document.querySelectorAll("[data-manage-tab]").forEach(tab => tab.setAttribute("aria-pressed", String(tab === button))); document.querySelectorAll("[data-manage-panel]").forEach(panel => { panel.hidden = panel.dataset.managePanel !== button.dataset.manageTab; }); }));
 $("#create-backup").addEventListener("click", async event => { const button = event.currentTarget; button.disabled = true; try { const result = await api.post("/api/manage/backups", {}); const link = $("#backup-download"); link.href = result.download; link.hidden = false; showToast("Bản sao lưu đã được kiểm tra và lưu trên máy chủ.", "success"); } catch (error) { showToast(error.message, "error"); } finally { button.disabled = false; } });
+initAIQuotaManagement(load);
 void load();

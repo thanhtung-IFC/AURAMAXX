@@ -16,6 +16,7 @@ TABLE_KEYS = {
     "arena_achievements": "user_id", "arena_bot_profiles": "user_id", "arena_bot_matches": "id",
     "legacy_account_links": "user_id", "data_handoffs": "id", "admin_feature_flags": "feature_key",
     "health_routines": "user_id",
+    "ai_quota_settings": "id", "ai_user_quotas": "user_id", "ai_usage_events": "id",
 }
 
 

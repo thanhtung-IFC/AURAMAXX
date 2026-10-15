@@ -9,6 +9,8 @@
   ô nhập trên điện thoại dùng cỡ chữ 16px, chừa vùng an toàn của màn hình.
 - Khi bàn phím mở, dùng VisualViewport để dành chỗ cho ô chat và nút gửi,
   kể cả khi chiều cao bố cục giữ nguyên; thanh điều hướng hiện lại khi đóng bàn phím.
+- Chế độ hoạt động có trong My Aura → Giao diện và Cài đặt camera của Face Lab.
+  Tiết kiệm giảm hiệu ứng và tải vẽ điểm mốc; xem [PERFORMANCE.md](PERFORMANCE.md).
 
 ## Kiểm tra
 

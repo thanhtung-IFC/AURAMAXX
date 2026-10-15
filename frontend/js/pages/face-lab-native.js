@@ -4,7 +4,8 @@ import { createLandmarker } from "../face/landmarker.js";
 import { drawLandmarkOverlay, sampleFrameLight } from "../face/analysis.js";
 import { evaluateCapturePose } from "../face/capture-pose.js";
 import { CaptureStability } from "../face/capture-stability.js";
-import { openCamera, cameraSettings, fittedFrame, CameraWorkload } from "../face/camera.js";
+import { openCamera, cameraSettings, fittedFrame, CameraWorkload, CameraConfigurator } from "../face/camera.js";
+import { getPerformanceMode, setPerformanceTier, performanceHint } from "../performance.js";
 import { escapeText, renderReportDetails, reportToArenaGroups, setFaceReport } from "../face/report.js";
 import { getSelectedArenaBotProfile as getSelectedArenaBot } from "../arena/bot-selection.js";
 
@@ -13,6 +14,7 @@ const page = document.querySelector('[data-page="face-lab"]');
 let stream = null, detector = null, timer = 0, operation = 0, starting = false;
 let videoFrameHandle = 0, watchdog = 0, scanBusy = false, openController = null, formatEpoch = 0, lastFrameAt = 0;
 let mirrorChosen = false;
+let cameraConfigurator = null, lastPerformanceSync = 0, lastOverlayAt = 0, uiProbeHandle = 0, uiDelay = 0;
 let frame = null, front = null, profile = null, report = null;
 let autoCapture = false, autoTimeout = 0, lastServerAt = 0, serverBusy = false, analyzing = false;
 let facingMode = "user", selectedDevice = "", lastDetectionTime = 0, challengeActive = false, challengeVerified = false;
@@ -40,7 +42,7 @@ function renderPage() {
           <p class="face-live-message" id="face-live-message" role="status" aria-live="polite">Bật camera để bắt đầu. Bạn có thể dùng ảnh có sẵn để phân tích.</p>
           <div class="face-quality-checks" aria-label="Điều kiện ảnh chụp"><span id="face-quality-light" data-state="idle">Chờ kiểm tra ánh sáng</span><span id="face-quality-detail" data-state="idle">Chờ kiểm tra độ nét</span><span id="face-quality-pose" data-state="idle">Chờ căn góc chụp</span><span id="face-quality-motion" data-state="idle">Chờ khung hình ổn định</span></div>
           <div class="face-camera-actions"><button class="button button-primary" id="face-start-camera" type="button"><svg><use href="#i-camera"/></svg> Bật camera</button><button class="button button-outline" id="face-stop-camera" type="button" hidden>Dừng camera</button><button class="button button-outline" id="face-switch-camera" type="button" hidden>Đổi nhanh camera</button><button class="button button-outline" id="face-upload-button" type="button"><svg><use href="#i-upload"/></svg> Tải ảnh lên</button><input id="face-upload" type="file" accept="image/jpeg,image/png,image/webp" hidden></div>
-          <div class="face-camera-settings"><label>Thiết bị camera<select id="face-device" aria-label="Thiết bị camera"><option value="">Camera mặc định</option></select></label><label>Chất lượng camera<select id="face-resolution"><option value="auto">Tự động · ưu tiên ảnh rõ</option><option value="1080">Full HD · 1920 × 1080</option><option value="720">HD · 1280 × 720</option><option value="480">Tiết kiệm · 640 × 480</option></select></label><div class="face-camera-toggles"><label><input id="face-mirror" type="checkbox" checked> Lật gương</label><label><input id="face-show-mesh" type="checkbox" checked> Điểm mốc</label></div><p class="face-camera-info" id="face-camera-info" role="status">Camera sẽ tự chọn cấu hình phù hợp khi mở.</p><p class="face-camera-tip">Để đo nhất quán, tắt hiệu ứng làm đẹp hoặc tự căn khung. Trên Mac, kiểm tra Portrait, Studio Light và Center Stage nếu đang bật.</p></div>
+          <div class="face-camera-settings"><label>Thiết bị camera<select id="face-device" aria-label="Thiết bị camera"><option value="">Camera mặc định</option></select></label><label>Chất lượng camera<select id="face-resolution"><option value="auto">Tự động · theo chế độ hoạt động</option><option value="1080">Full HD · 1920 × 1080</option><option value="720">HD · 1280 × 720</option><option value="480">Tiết kiệm · 640 × 480</option></select></label><label class="face-performance-control">Chế độ hoạt động<select id="face-performance-mode" data-performance-mode-select><option value="auto">Tự động · phù hợp với máy</option><option value="economy">Tiết kiệm · ưu tiên nhẹ máy</option><option value="balanced">Cân bằng · mượt và rõ</option><option value="quality">Chất lượng cao · ưu tiên chi tiết</option></select></label><div class="face-camera-toggles"><label><input id="face-mirror" type="checkbox" checked> Lật gương</label><label><input id="face-show-mesh" type="checkbox" checked> Điểm mốc</label></div><p class="face-camera-info" id="face-camera-info" role="status">Camera sẽ tự chọn cấu hình phù hợp khi mở.</p><p class="face-performance-status" id="face-performance-status" role="status">Tự động chọn mức khi camera chạy ổn định.</p><p class="face-camera-tip">Để đo nhất quán, tắt hiệu ứng làm đẹp hoặc tự căn khung. Trên Mac, kiểm tra Portrait, Studio Light và Center Stage nếu đang bật.</p></div>
           <div class="face-privacy-note"><svg><use href="#i-shield"/></svg><p>Điểm mốc được gửi để nhận diện và xác thực. Ảnh được gửi khi bạn chọn phân tích; ảnh không tự lưu. Mô hình nhận diện tải từ CDN/Google.</p></div>
         </article>
         <section class="panel face-biometrics-panel"><div class="panel-heading"><div><span class="panel-overline">TÍN HIỆU TRỰC TIẾP</span><h2>Nhận diện & xác thực</h2></div><button class="button button-outline" id="face-challenge-start" type="button" disabled>Bắt đầu liveness</button></div><div class="face-biometric-grid"><div><span>Trạng thái mắt</span><b id="face-ear">—</b></div><div><span>Khẩu độ miệng</span><b id="face-mar">—</b></div><div><span>Góc quay đầu</span><b id="face-yaw">—</b></div><div><span>Đối chiếu hồ sơ</span><b id="face-match">Chưa nhận diện</b></div></div><p id="face-challenge-message" role="status">Chớp mắt, há miệng và quay đầu theo hướng dẫn khi bắt đầu.</p><progress id="face-challenge-progress" max="100" value="0" aria-label="Tiến độ xác thực"></progress></section>
@@ -168,6 +170,45 @@ function showCameraSettings() {
   updateCameraGuide();
 }
 
+function resetWorkload() {
+  workload.reset({ mode: getPerformanceMode(), hint: performanceHint() });
+  lastPerformanceSync = 0; lastOverlayAt = 0; uiDelay = 0;
+  $("#face-performance-mode").value = workload.mode;
+}
+
+function syncPerformance(force = false) {
+  const now = performance.now();
+  workload.setLiveness(challengeActive, now);
+  if (!force && now - lastPerformanceSync < 500) return;
+  lastPerformanceSync = now;
+  setPerformanceTier(workload.tier);
+  page.dataset.performanceTier = workload.tier;
+  page.dataset.performancePhase = workload.phase;
+  const names = { economy: "Tiết kiệm", balanced: "Cân bằng", quality: "Chất lượng cao" };
+  const label = workload.mode === "auto" ? `Tự động · ${stream && workload.phase !== "ready" ? "Đang kiểm tra độ mượt…" : names[workload.tier]}` : names[workload.tier];
+  setText("#face-performance-status", `${label}${challengeActive ? " · Ưu tiên xác thực liên tục" : !stream ? " · Áp dụng khi bật camera" : ""}`);
+  if (!stream || starting || !cameraConfigurator) return;
+  const profile = workload.profile, settings = cameraSettings(stream.getVideoTracks()[0]);
+  let height = $("#face-resolution").value === "auto" ? profile.height : null;
+  // First reduce inference/overlay cost; retain detailed capture for six seconds.
+  if (workload.mode === "auto" && height && Math.min(settings.width || 0, settings.height || 0) > height && now - workload.changedAt < 6000) height = null;
+  if (challengeActive) height = null;
+  const targetRate = challengeActive ? Math.max(24, profile.frameRate) : profile.frameRate;
+  const configurator = cameraConfigurator, id = operation;
+  void configurator.configure({ height, frameRate: targetRate }).then(applied => {
+    if (applied && id === operation && cameraConfigurator === configurator) showCameraSettings();
+  });
+}
+
+function probeUI(id) {
+  if (uiProbeHandle) return;
+  const start = performance.now();
+  uiProbeHandle = requestAnimationFrame(() => {
+    uiProbeHandle = 0;
+    if (id === operation && stream) uiDelay = Math.max(0, performance.now() - start - 32);
+  });
+}
+
 function cancelScan() {
   clearTimeout(timer); timer = 0;
   if (videoFrameHandle) $("#face-video").cancelVideoFrameCallback?.(videoFrameHandle);
@@ -190,20 +231,22 @@ function scheduleScan(delay = 0) {
 async function startCamera(deviceId = $("#face-device").value, mode = facingMode) {
   if (starting || analyzing || uploading) return;
   starting = true;
+  resetWorkload(); syncPerformance(true);
   const id = ++operation;
   const controller = new AbortController(); openController = controller;
   $("#face-start-camera").disabled = true;
   $("#face-stop-camera").hidden = false;
-  for (const selector of ["#face-device", "#face-resolution", "#face-switch-camera"]) $(selector).disabled = true;
+  for (const selector of ["#face-device", "#face-resolution", "#face-performance-mode", "#face-switch-camera"]) $(selector).disabled = true;
   try {
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) throw new Error("Mở web bằng localhost hoặc HTTPS để dùng camera.");
     if (!await hasConsent() || id !== operation) { if (id === operation) stopCamera(); return; }
     message("Đang mở camera…"); live("Đang mở", "loading");
-    const opened = await openCamera({ deviceId, facingMode: mode, strictFacing: !deviceId && mode !== facingMode, resolution: $("#face-resolution").value, signal: controller.signal });
+    const opened = await openCamera({ deviceId, facingMode: mode, strictFacing: !deviceId && mode !== facingMode, resolution: $("#face-resolution").value, frameRate: workload.profile.frameRate, preferFullHD: workload.mode === "quality", signal: controller.signal });
     const next = opened.stream;
     if (id !== operation) { next.getTracks().forEach(track => track.stop()); return; }
     stream = next; facingMode = opened.settings.facingMode || mode;
-    workload.reset(); lastFrameAt = performance.now();
+    cameraConfigurator = new CameraConfigurator(next.getVideoTracks()[0]);
+    lastFrameAt = performance.now();
     lastVideoTime = -1; lastServerAt = 0; networkRetryAt = 0;
     selectedDevice = next.getVideoTracks()[0]?.getSettings().deviceId || deviceId;
     const video = $("#face-video"); video.srcObject = next; video.hidden = false;
@@ -220,6 +263,7 @@ async function startCamera(deviceId = $("#face-device").value, mode = facingMode
     const nextDetector = detector || await createLandmarker();
     if (id !== operation) { if (nextDetector !== detector) nextDetector.close(); return; }
     detector = nextDetector;
+    resetWorkload(); lastFrameAt = performance.now();
     next.getVideoTracks()[0]?.addEventListener("ended", () => { if (id === operation) { stopCamera(); message("Camera đã ngắt kết nối. Hãy chọn lại thiết bị.", "error"); } }, { once: true });
     next.getVideoTracks()[0]?.addEventListener("mute", () => { if (id === operation) { resetStability(); message("Camera đang tạm dừng. Mở lại camera hoặc ứng dụng để tiếp tục."); } });
     watchdog = window.setInterval(() => {
@@ -229,12 +273,13 @@ async function startCamera(deviceId = $("#face-device").value, mode = facingMode
     live("Đang tìm khuôn mặt", "loading"); scheduleScan();
     if (mobileViewport.matches) $("#face-camera-stage").scrollIntoView({ block: "start", behavior: "instant" });
   } catch (error) { if (id === operation) { stopCamera(); message(cameraError(error), "error"); live("Camera chưa sẵn sàng", "error"); } }
-  finally { if (openController === controller) openController = null; if (id === operation) { starting = false; $("#face-start-camera").disabled = false; for (const selector of ["#face-device", "#face-resolution", "#face-switch-camera"]) $(selector).disabled = false; } }
+  finally { if (openController === controller) openController = null; if (id === operation) { starting = false; $("#face-start-camera").disabled = false; for (const selector of ["#face-device", "#face-resolution", "#face-performance-mode", "#face-switch-camera"]) $(selector).disabled = false; syncPerformance(true); } }
 }
 
 function stopCamera() {
   operation++; starting = false; openController?.abort(); openController = null; cancelScan(); clearInterval(watchdog); watchdog = 0; cancelAuto();
-  for (const selector of ["#face-device", "#face-resolution", "#face-switch-camera"]) $(selector).disabled = false;
+  cameraConfigurator?.close(); cameraConfigurator = null; cancelAnimationFrame(uiProbeHandle); uiProbeHandle = 0;
+  for (const selector of ["#face-device", "#face-resolution", "#face-performance-mode", "#face-switch-camera"]) $(selector).disabled = false;
   processController?.abort(); processController = null; serverBusy = false;
   analysisController?.abort(); analysisController = null;
   analyzing = false; uploading = false; $("#face-progress").hidden = true;
@@ -254,6 +299,7 @@ function stopCamera() {
   $("#face-overlay").getContext("2d")?.clearRect(0, 0, $("#face-overlay").width, $("#face-overlay").height);
   live("Camera đang tắt");
   updateMobileActions();
+  syncPerformance(true);
 }
 
 function mirrorCamera() {
@@ -262,21 +308,24 @@ function mirrorCamera() {
 }
 
 function drawOverlay(landmarks) {
+  if (!$("#face-show-mesh").checked) return;
+  const now = performance.now(), elapsed = now - lastOverlayAt;
+  if (elapsed < workload.profile.overlayInterval) return;
+  lastOverlayAt = now;
   // Smooth the display only. Capture and server requests always keep raw landmarks.
   if (!overlayPoints || overlayPoints.length !== landmarks.length) overlayPoints = landmarks.map(point => ({ ...point }));
   else {
     const motion = Math.hypot(landmarks[1].x - overlayPoints[1].x, landmarks[1].y - overlayPoints[1].y);
-    const alpha = motion > .025 ? .85 : .45;
+    const alpha = motion > .025 ? .85 : Math.min(.9, 1 - Math.exp(-elapsed / 120));
     for (let index = 0; index < landmarks.length; index++) {
       overlayPoints[index].x += alpha * (landmarks[index].x - overlayPoints[index].x);
       overlayPoints[index].y += alpha * (landmarks[index].y - overlayPoints[index].y);
     }
   }
   const canvas = $("#face-overlay"), video = $("#face-video"), rect = canvas.getBoundingClientRect();
-  const dpr = Math.min(devicePixelRatio || 1, 2), width = Math.max(1, Math.round(rect.width * dpr)), height = Math.max(1, Math.round(rect.height * dpr));
+  const dpr = Math.min(devicePixelRatio || 1, workload.profile.pixelRatio), width = Math.max(1, Math.round(rect.width * dpr)), height = Math.max(1, Math.round(rect.height * dpr));
   if (canvas.width !== width) canvas.width = width;
   if (canvas.height !== height) canvas.height = height;
-  if (!$("#face-show-mesh").checked) { canvas.getContext("2d").clearRect(0, 0, width, height); return; }
   const scale = Math.min(canvas.width / video.videoWidth, canvas.height / video.videoHeight);
   drawLandmarkOverlay(canvas.getContext("2d"), overlayPoints, video.videoWidth, video.videoHeight, { scale, offsetX: (canvas.width - video.videoWidth * scale) / 2, offsetY: (canvas.height - video.videoHeight * scale) / 2 });
 }
@@ -346,6 +395,7 @@ async function scanFrame() {
   if (scanBusy) { scheduleScan(workload.interval); return; }
   scanBusy = true;
   const id = operation;
+  workload.setLiveness(challengeActive);
   const started = performance.now(), format = formatEpoch;
   let processed = false;
   try {
@@ -353,6 +403,7 @@ async function scanFrame() {
     if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth && video.currentTime !== lastVideoTime) {
       lastVideoTime = video.currentTime;
       processed = true;
+      probeUI(id);
       lastFrameAt = performance.now();
       const { width, height } = fittedFrame(video.videoWidth, video.videoHeight, 1920);
       if (sourceCanvas.width !== width) sourceCanvas.width = width;
@@ -391,7 +442,8 @@ async function scanFrame() {
   } finally {
     scanBusy = false;
     if (id === operation && stream) {
-      if (processed) workload.observe(performance.now() - started);
+      if (processed) workload.observe(performance.now() - started, { uiDelay });
+      syncPerformance();
       scheduleScan(Math.max(0, workload.interval - (performance.now() - started)));
     }
   }
@@ -510,6 +562,7 @@ async function startChallenge() {
     const result = await api.post("/api/vision/challenge/start", {});
     if (id !== operation) return;
     challengeActive = true; challengeVerified = false;
+    syncPerformance(true);
     $("#face-challenge-message").textContent = result.state.status_message;
     $("#face-challenge-progress").value = result.state.progress_percentage || 0;
   } catch (error) { if (id === operation) message(error.message, "error"); }
@@ -599,6 +652,9 @@ function clearSensitiveView() {
 export function initFaceLab() {
   renderPage();
   initMobileCapture();
+  resetWorkload(); syncPerformance(true);
+  window.addEventListener("auramaxx:performance-mode", () => { resetWorkload(); resetStability(); syncPerformance(true); });
+  $("#face-show-mesh").addEventListener("change", () => { lastOverlayAt = 0; const canvas = $("#face-overlay"); canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height); });
   $("#face-start-camera").addEventListener("click", () => void startCamera());
   $("#face-stop-camera").addEventListener("click", () => { stopCamera(); message("Camera đã tắt."); });
   $("#face-device").addEventListener("change", event => { selectedDevice = event.target.value; if (stream) void changeCamera(selectedDevice); });
@@ -615,7 +671,7 @@ export function initFaceLab() {
     void changeCamera(next?.value || "");
   });
   $("#face-mirror").addEventListener("change", () => { mirrorChosen = true; mirrorCamera(); });
-  $("#face-video").addEventListener("resize", () => { formatEpoch++; lastVideoTime = -1; resetStability(); overlayPoints = null; showCameraSettings(); });
+  $("#face-video").addEventListener("resize", () => { formatEpoch++; lastVideoTime = -1; lastOverlayAt = 0; resetStability(); overlayPoints = null; showCameraSettings(); });
   if (typeof ResizeObserver === "function") new ResizeObserver(updateCameraGuide).observe($("#face-camera-stage"));
   else window.addEventListener("resize", updateCameraGuide, { passive: true });
   $("#face-capture").addEventListener("click", captureShot);

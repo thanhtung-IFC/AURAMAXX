@@ -50,6 +50,12 @@ try:
 except ValueError:
     AI_RATE_LIMIT_PER_MINUTE = 8
 
+# Gemini counts internal thinking against maxOutputTokens as well as visible text.
+try:
+    AI_GEMINI_MAX_OUTPUT_TOKENS = max(64, min(int(os.getenv("AI_GEMINI_MAX_OUTPUT_TOKENS", "8192")), 16_384))
+except ValueError:
+    AI_GEMINI_MAX_OUTPUT_TOKENS = 8192
+
 ALLOWED_ORIGINS = [
     origin.strip()
     for origin in os.getenv(

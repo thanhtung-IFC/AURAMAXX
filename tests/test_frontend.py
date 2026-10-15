@@ -81,15 +81,20 @@ class FrontendContractTests(unittest.TestCase):
 
     def test_sensitive_data_is_not_persisted_in_browser(self) -> None:
         theme_module = (FRONTEND / "js" / "theme.js").read_text(encoding="utf-8")
+        performance_module = (FRONTEND / "js" / "performance.js").read_text(encoding="utf-8")
         application_source = "\n".join(
             path.read_text(encoding="utf-8")
             for path in self.modules
-            if path != FRONTEND / "js" / "theme.js"
+            if path not in {FRONTEND / "js" / "theme.js", FRONTEND / "js" / "performance.js"}
         )
         for storage in ("localStorage", "sessionStorage", "indexedDB"):
             self.assertNotIn(storage, application_source)
         self.assertIn('const STORAGE_KEY = "auramaxx-theme"', theme_module)
         self.assertIn("localStorage.setItem(STORAGE_KEY, theme)", theme_module)
+        self.assertIn('const STORAGE_KEY = "auramaxx-performance-mode"', performance_module)
+        self.assertIn('const MODES = ["auto", "economy", "balanced", "quality"]', performance_module)
+        self.assertIn("localStorage.setItem(STORAGE_KEY, mode)", performance_module)
+        self.assertEqual(performance_module.count("localStorage.setItem("), 1)
         self.assertNotIn("AI_API_KEY", self.source)
 
     def test_native_face_lab_uses_original_server_engine(self) -> None:

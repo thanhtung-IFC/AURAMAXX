@@ -1,0 +1,18 @@
+/* Economy mode trims decorative work; loading indicators remain visible. */
+:root[data-performance-tier="economy"] .page-view,
+:root[data-performance-tier="economy"] .ai-halo,
+:root[data-performance-tier="economy"] .camera-orbit i { animation: none; }
+:root[data-performance-tier="economy"] .motion-reveal { opacity: 1; transform: none; transition: none; }
+:root[data-performance-tier="economy"] .topbar,
+:root[data-performance-tier="economy"] .mobile-nav { backdrop-filter: none; -webkit-backdrop-filter: none; }
+:root[data-performance-tier="economy"] .panel,
+:root[data-performance-tier="economy"] .hero-panel,
+:root[data-performance-tier="economy"] .feature-card { box-shadow: none; }
+:root[data-performance-tier="economy"] body::before { display: none; }
+.face-performance-control, .face-performance-status { grid-column: 1 / -1; }
+[data-page="face-lab"] .face-performance-status { margin: 0; font-size: 12px; color: var(--color-text-muted); line-height: 1.7; }
+.aura-performance-row select { flex: 0 0 220px; max-width: 220px; }
+@media (max-width: 760px) {
+  .aura-performance-row { flex-direction: column; align-items: stretch; }
+  .aura-performance-row select { flex: auto; max-width: none; width: 100%; }
+}

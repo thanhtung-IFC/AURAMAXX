@@ -15,7 +15,7 @@ async function until(fn, label) {
 }
 function installMocks() {
   const original = window.fetch.bind(window);
-  window.__aura = { mode: 'ok', consent: true, available: true, requests: [], conversations: [], messages: {} };
+  window.__aura = { mode: 'ok', consent: true, available: true, requests: [], conversations: [], messages: {}, blockHistory: false, accessOverlap: false };
   document.cookie = 'auramaxx_csrf=fixture-token; path=/';
   window.fetch = async (url, options = {}) => {
     const pathname = new URL(url, location.origin).pathname;
@@ -24,7 +24,11 @@ function installMocks() {
     const body = options.body ? JSON.parse(options.body) : {};
     state.requests.push({ pathname, body, csrf: new Headers(options.headers).get('X-CSRF-Token') });
     const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } });
-    if (pathname.endsWith('/status')) return json({ available: state.available, status: state.available ? 'ready' : 'missing_api_key', message: 'Dịch vụ chưa sẵn sàng.' });
+    if (pathname.endsWith('/status')) {
+      await new Promise(resolve => setTimeout(resolve, 25));
+      state.accessOverlap = state.requests.some(item => item.pathname === '/api/auth/me') && state.requests.some(item => item.pathname === '/api/consents');
+      return json({ available: state.available, status: state.available ? 'ready' : 'missing_api_key', message: 'Dịch vụ chưa sẵn sàng.' });
+    }
     if (pathname === '/api/auth/me') return json({ id: 'fixture-user' });
     if (pathname === '/api/consents') return json([{ purpose: 'ai_chat', granted: state.consent }]);
     if (pathname === '/api/aura/conversations') {
@@ -34,12 +38,28 @@ function installMocks() {
         state.messages[conversation.id] = [];
         return json(conversation, 201);
       }
+      if (state.blockHistory) return new Promise(resolve => { state.releaseHistory = () => resolve(json(state.conversations)); });
       return json(state.conversations);
     }
     if (pathname.endsWith('/messages')) return json(state.messages[pathname.split('/')[4]] || []);
     if (pathname === '/api/aura/chat') {
       if (state.mode === 'http-error') return json({ detail: 'Hạn mức tạm thời. Hãy thử lại.' }, 429);
       if (state.mode === 'pending') return new Promise((resolve, reject) => options.signal.addEventListener('abort', () => reject(new DOMException('Stopped', 'AbortError')), { once: true }));
+      if (state.mode === 'live') {
+        const encoder = new TextEncoder();
+        const frame = event => encoder.encode('data: ' + JSON.stringify(event) + '\n\n');
+        state.liveAnswer = Array.from({ length: 120 }, (_, index) => `Ý ${index + 1}: thử tiếng Việt.\n`).join('');
+        return new Response(new ReadableStream({ start(controller) {
+          for (const text of state.liveAnswer) controller.enqueue(frame({ type: 'delta', text }));
+          state.finishLive = () => {
+            state.messages[body.conversation_id].push({ role: 'user', content: body.message }, { role: 'assistant', content: state.liveAnswer });
+            const conversation = state.conversations.find(item => item.id === body.conversation_id);
+            controller.enqueue(frame({ type: 'done', conversation_id: body.conversation_id, title: conversation.title, updated_at: conversation.updated_at }));
+            controller.close();
+          };
+          options.signal.addEventListener('abort', () => controller.error(new DOMException('Stopped', 'AbortError')), { once: true });
+        } }), { headers: { 'Content-Type': 'text/event-stream' } });
+      }
       const answer = 'Xin chào! **Aura** cùng bạn.\n\n<img src=x onerror="window.injected=true">';
       const encoder = new TextEncoder();
       if (!body.conversation_id && state.mode !== 'interrupted') {
@@ -48,7 +68,8 @@ function installMocks() {
         state.messages[conversation.id] = [];
         body.conversation_id = conversation.id;
       }
-      const data = 'data: ' + JSON.stringify({ type: 'delta', text: answer }) + '\r\n\r\n' + (state.mode === 'interrupted' ? '' : 'data: ' + JSON.stringify({ type: 'done', conversation_id: body.conversation_id }));
+      const conversation = state.conversations.find(item => item.id === body.conversation_id);
+      const data = 'data: ' + JSON.stringify({ type: 'delta', text: answer }) + '\r\n\r\n' + (state.mode === 'interrupted' ? '' : 'data: ' + JSON.stringify({ type: 'done', conversation_id: body.conversation_id, title: conversation.title, updated_at: conversation.updated_at }));
       if (state.mode !== 'interrupted') state.messages[body.conversation_id].push({ role: 'user', content: body.message }, { role: 'assistant', content: answer });
       const bytes = encoder.encode(data);
       // Deliberately split every UTF-8 code point and SSE boundary across chunks.
@@ -111,11 +132,18 @@ const server = http.createServer((request, response) => {
     await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false });
     await send('Page.navigate', { url: 'http://127.0.0.1:' + server.address().port });
     await until(() => evaluate(`window.auraFixtureReady && !document.querySelector('#chat-input').disabled`), 'Aura initialized');
+    assert.equal(await evaluate(`__aura.accessOverlap`), true, 'service, account and consent checks overlap');
+    await evaluate(`__aura.blockHistory=true;document.querySelector('#chat-response-style').value='quick'`);
     await screenshot('aura-ai-desktop.png');
     await click('[data-chat-suggestion]');
     assert.ok((await evaluate(`document.querySelector('#chat-input').value`)).length > 20);
     assert.equal(await evaluate(`__aura.requests.filter(item=>item.pathname.endsWith('/chat')).length`), 0, 'suggestion waits for send');
     await ask('Chăm sóc da?');
+    assert.equal(await evaluate(`document.querySelector('#chat-input').disabled`), false, 'saved response immediately releases composer');
+    assert.equal(await evaluate(`!!__aura.releaseHistory`), false, 'done metadata avoids a second history fetch');
+    assert.equal(await evaluate(`document.querySelector('#chat-current-title').textContent`), 'Chăm sóc da?');
+    assert.equal(await evaluate(`__aura.requests.find(item=>item.pathname.endsWith('/chat')).body.response_style`), 'quick');
+    await evaluate(`__aura.blockHistory=false;document.querySelector('#chat-response-style').value='balanced'`);
     assert.equal(await evaluate(`document.querySelectorAll('.chat-message-assistant strong').length`), 1, 'Markdown rendered');
     assert.equal(await evaluate(`!!window.injected || !!document.querySelector('#chat-body img')`), false, 'HTML escaped');
     assert.equal(await evaluate(`__aura.requests.find(item=>item.pathname.endsWith('/chat')).csrf`), 'fixture-token');
@@ -148,6 +176,21 @@ const server = http.createServer((request, response) => {
     await click('#chat-new');
     await until(() => evaluate(`!document.querySelector('#chat-input').disabled`), 'new conversation');
     assert.equal(await evaluate(`document.querySelector('#chat-connection-state').dataset.state`), 'ready');
+    await evaluate(`
+      __aura.mode='live';window.liveUpdates=0;
+      window.liveObserver=new MutationObserver(records=>{window.liveUpdates+=records.filter(record=>record.type==='characterData').length});
+      liveObserver.observe(document.querySelector('#chat-body'),{subtree:true,characterData:true});
+      document.querySelector('#chat-response-style').value='thorough';document.querySelector('#chat-response-style').dispatchEvent(new Event('change'));
+      document.querySelector('#chat-input').value='Giải thích kỹ';document.querySelector('#chat-form').requestSubmit();
+    `);
+    await until(() => evaluate(`document.querySelector('.chat-message-assistant .chat-message-content').textContent===__aura.liveAnswer`), 'text visible while stream remains open');
+    assert.equal(await evaluate(`document.querySelector('#chat-stop').hidden`), false, 'stream is still active');
+    assert.ok(await evaluate(`liveUpdates<20`), 'thousands of small deltas are batched into animation frames');
+    assert.equal(await evaluate(`__aura.requests.filter(item=>item.pathname.endsWith('/chat')).at(-1).body.response_style`), 'thorough');
+    await evaluate(`__aura.finishLive()`);
+    await until(() => evaluate(`document.querySelector('#chat-stop').hidden`), 'live stream finished');
+    assert.equal(await evaluate(`document.querySelector('.chat-message-assistant .chat-message-content').textContent.includes('Ý 120: thử tiếng Việt.')`), true, 'final render keeps the last delta');
+    await evaluate(`liveObserver.disconnect();__aura.mode='ok'`);
     await send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
     await evaluate(`window.scrollTo(0,0)`); await pause(200);
     assert.equal(await evaluate(`document.documentElement.scrollWidth <= innerWidth + 1`), true, 'mobile overflow');
@@ -177,6 +220,13 @@ const server = http.createServer((request, response) => {
     await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false });
     await evaluate(`document.documentElement.dataset.theme='light'`); await pause(200);
     await screenshot('aura-ai-light.png');
+    await evaluate(`__aura.mode='live';document.querySelector('#chat-input').value='Dừng giữa chừng';document.querySelector('#chat-form').requestSubmit()`);
+    await until(() => evaluate(`document.querySelector('.chat-message-assistant:last-child .chat-message-content').textContent===__aura.liveAnswer`), 'partial live response before stop');
+    await click('#chat-stop');
+    await until(() => evaluate(`document.querySelector('#chat-stop').hidden`), 'abort active reader');
+    await pause(100);
+    assert.ok((await evaluate(`document.querySelector('.chat-message-error').textContent`)).includes('Đã dừng'), 'queued frame does not overwrite stopped response');
+    await evaluate(`__aura.mode='ok'`);
     await evaluate(`__aura.available=false`); await click('#chat-reconnect');
     await until(() => evaluate(`document.querySelector('#aura-status-badge').dataset.state==='offline'`), 'unconfigured');
     assert.equal(await evaluate(`document.querySelector('#chat-input').disabled`), true);
@@ -184,6 +234,6 @@ const server = http.createServer((request, response) => {
     await until(() => evaluate(`document.querySelector('#chat-access-notice').textContent.includes('đồng ý')`), 'consent revoked');
     assert.equal(await evaluate(`document.querySelectorAll('.chat-message').length`), 0, 'revocation clears visible messages');
     assert.deepEqual(errors, []);
-    console.log('PASS: Aura desktop/mobile/light, SSE UTF-8/CRLF/EOF, Markdown/XSS, CSRF, history/search, retry, stop, service status and consent.');
+    console.log('PASS: Aura desktop/mobile/light, live frame batching, immediate composer release, response styles, parallel readiness, SSE UTF-8/CRLF/EOF, Markdown/XSS, CSRF, history/search, retry, stop, service status and consent.');
   } finally { ws?.close(); edge?.kill(); await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

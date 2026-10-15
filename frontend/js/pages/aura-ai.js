@@ -14,6 +14,7 @@ let loadId = 0;
 let accessId = 0;
 let identityId = 0;
 let isLoading = false;
+let conversationListId = 0;
 
 const $ = (selector) => document.querySelector(selector);
 const body = () => $("#chat-body");
@@ -35,6 +36,7 @@ function setAvailability() {
   $("#chat-character-count").textContent = `${$("#chat-input").value.length.toLocaleString("vi-VN")} / 4.000`;
   document.querySelectorAll("[data-chat-suggestion]").forEach((button) => { button.disabled = !enabled; });
   $("#chat-attach-report").disabled = !getFaceReport() || !userReady || isBusy;
+  $("#chat-response-style").disabled = isBusy || isLoading;
   $("#chat-routine").disabled = false;
   document.querySelectorAll(".chat-conversation-item").forEach(button => { button.disabled = isBusy; });
   document.querySelectorAll(".chat-message-action").forEach(button => { button.disabled = isBusy || isLoading; });
@@ -97,7 +99,7 @@ function showWelcome(show) {
   $(".chat-welcome").hidden = !show;
 }
 
-function addMessage(role, content, { streaming = false, error = false } = {}) {
+function addMessage(role, content, { streaming = false, error = false, target = body(), scroll = true } = {}) {
   const item = document.createElement("article");
   item.className = `chat-message chat-message-${role}${error ? " chat-message-error" : ""}`;
   item.dataset.role = role;
@@ -119,8 +121,8 @@ function addMessage(role, content, { streaming = false, error = false } = {}) {
     else bubble.innerHTML = safeMarkdown(content);
   }
   item.append(label, bubble);
-  body().append(item);
-  scrollToLatest();
+  target.append(item);
+  if (scroll) scrollToLatest();
   return { item, bubble };
 }
 
@@ -141,10 +143,12 @@ function renderMessages(messages) {
   body().querySelectorAll(".chat-message").forEach((node) => node.remove());
   showWelcome(messages.length === 0);
   delete body().dataset.readingEarlier;
+  const fragment = document.createDocumentFragment();
   for (const message of messages) {
-    const rendered = addMessage(message.role, message.content);
+    const rendered = addMessage(message.role, message.content, { target: fragment, scroll: false });
     if (message.role === "assistant") addCopyAction(rendered, message.content);
   }
+  body().append(fragment);
   scrollToLatest();
 }
 
@@ -199,11 +203,19 @@ function renderConversationList() {
 async function refreshConversations({ selectLatest = false } = {}) {
   if (!userReady) return;
   const identity = identityId;
+  const requestId = ++conversationListId;
   const result = await api.get("/api/aura/conversations");
-  if (identity !== identityId) return;
+  if (identity !== identityId || requestId !== conversationListId) return;
   conversations = result;
   if (currentConversationId && !conversations.some((item) => item.id === currentConversationId)) currentConversationId = null;
   if (selectLatest && !currentConversationId && conversations.length) currentConversationId = conversations[0].id;
+  renderConversationList();
+}
+
+function rememberConversation(conversation) {
+  // Invalidate an older list fetch so it cannot overwrite a just-saved turn.
+  conversationListId++;
+  conversations = [conversation, ...conversations.filter(item => item.id !== conversation.id)].slice(0, 100);
   renderConversationList();
 }
 
@@ -249,7 +261,7 @@ async function createConversation() {
     $("#chat-input").value = "";
     $("#chat-history-search").value = "";
     renderMessages([]);
-    await refreshConversations();
+    rememberConversation(conversation);
     showNotice("");
     $("#chat-connection-state").innerHTML = "<i></i> Sẵn sàng nhận câu hỏi";
     $("#chat-connection-state").dataset.state = "ready";
@@ -269,12 +281,12 @@ async function loadAccess() {
   showNotice("");
   setServiceBadge("Đang kiểm tra dịch vụ…", "loading");
   $("#chat-connection-state").innerHTML = "<i></i> Đang kiểm tra dịch vụ";
-  let provider = null;
-  try {
-    provider = await api.get("/api/aura/status");
-  } catch {
-    provider = { available: false, status: "offline", message: "Không kết nối được backend Aura AI." };
-  }
+  // These independent checks run together; server-side permissions still gate every send.
+  const [providerResult, userResult, consentsResult] = await Promise.allSettled([
+    api.get("/api/aura/status"), api.get("/api/auth/me"), api.get("/api/consents"),
+  ]);
+  const provider = providerResult.status === "fulfilled" ? providerResult.value
+    : { available: false, status: "offline", message: "Không kết nối được backend Aura AI." };
   if (!isCurrent()) return;
   providerReady = Boolean(provider.available);
   setServiceBadge(providerReady ? "Dịch vụ đã cấu hình" : "AI chưa sẵn sàng", providerReady ? "ready" : "offline");
@@ -284,10 +296,11 @@ async function loadAccess() {
   userReady = false;
   consentGranted = false;
   try {
-    await api.get("/api/auth/me");
+    if (userResult.status === "rejected") throw userResult.reason;
     if (!isCurrent()) return;
     userReady = true;
-    const consents = await api.get("/api/consents");
+    if (consentsResult.status === "rejected") throw consentsResult.reason;
+    const consents = consentsResult.value;
     if (!isCurrent()) return;
     consentGranted = consents.some((item) => item.purpose === "ai_chat" && item.granted);
     if (consentGranted) await refreshConversations({ selectLatest: true });
@@ -344,6 +357,19 @@ async function sendMessage(event) {
   const liveText = document.createTextNode("");
   let responseText = "";
   let completed = false;
+  let receivedConversationMetadata = false;
+  let frame = 0;
+  let pendingText = "";
+  const flushText = () => {
+    if (frame) cancelAnimationFrame(frame);
+    frame = 0;
+    if (identity !== identityId || !pendingText) { pendingText = ""; return; }
+    if (!liveText.parentNode) assistant.bubble.replaceChildren(liveText);
+    liveText.appendData(pendingText);
+    pendingText = "";
+    assistant.bubble.classList.add("is-streaming");
+    scrollToLatest();
+  };
   abortController = new AbortController();
   const turnController = abortController;
   const timeout = window.setTimeout(() => turnController.abort(new DOMException("Aura phản hồi quá lâu. Hãy thử lại.", "TimeoutError")), 125000);
@@ -352,7 +378,7 @@ async function sendMessage(event) {
   $("#chat-connection-state").dataset.state = "loading";
   try {
     const analysis = $("#chat-attach-report").checked ? getFaceReport() : null;
-    const response = await api.stream("/api/aura/chat", { conversation_id: currentConversationId, message, ...(analysis ? { analysis } : {}) }, abortController.signal);
+    const response = await api.stream("/api/aura/chat", { conversation_id: currentConversationId, message, response_style: $("#chat-response-style").value, ...(analysis ? { analysis } : {}) }, abortController.signal);
     if (identity !== identityId) { await response.body?.cancel(); return; }
     if (!response.ok) {
       let detail = `Yêu cầu không thành công (${response.status}).`;
@@ -368,14 +394,20 @@ async function sendMessage(event) {
     await consumeSSE(response, (eventData) => {
       if (identity !== identityId) return;
       if (eventData.type === "delta") {
-        if (!responseText) assistant.bubble.replaceChildren(liveText);
-        responseText += eventData.text || "";
-        liveText.textContent = responseText;
-        assistant.bubble.classList.add("is-streaming");
-        scrollToLatest();
+        const delta = typeof eventData.text === "string" ? eventData.text : "";
+        responseText += delta;
+        pendingText += delta;
+        if (pendingText && !frame) frame = requestAnimationFrame(flushText);
       } else if (eventData.type === "done") {
+        if (!responseText.trim()) throw new Error("AI chưa tạo được câu trả lời. Hãy thử diễn đạt lại.");
+        flushText();
         completed = true;
         currentConversationId = eventData.conversation_id;
+        if (typeof eventData.title === "string" && typeof eventData.updated_at === "string") {
+          receivedConversationMetadata = true;
+          rememberConversation({ id: currentConversationId, title: eventData.title, updated_at: eventData.updated_at });
+          $("#chat-current-title").textContent = eventData.title;
+        }
         assistant.bubble.classList.remove("is-streaming");
         assistant.bubble.innerHTML = safeMarkdown(responseText);
         addCopyAction(assistant, responseText);
@@ -387,7 +419,14 @@ async function sendMessage(event) {
     });
     if (identity !== identityId) return;
     if (!completed || !responseText.trim()) throw new Error("Kết nối bị ngắt trước khi câu trả lời hoàn tất. Lượt chat chưa được lưu.");
-    try { await refreshConversations(); } catch { showToast("Câu trả lời đã lưu. Chưa tải lại được danh sách hội thoại."); }
+    // Older backends omit list metadata. Refresh in the background without blocking the composer.
+    if (!receivedConversationMetadata) {
+      void refreshConversations().then(() => {
+        if (identity !== identityId) return;
+        const selected = conversations.find(item => item.id === currentConversationId);
+        if (selected) $("#chat-current-title").textContent = selected.title;
+      }).catch(() => { if (identity === identityId) showToast("Câu trả lời đã lưu. Chưa tải lại được danh sách hội thoại."); });
+    }
     const title = conversations.find((item) => item.id === currentConversationId)?.title;
     if (title) $("#chat-current-title").textContent = title;
     $("#chat-connection-state").innerHTML = "<i></i> Sẵn sàng trò chuyện";
@@ -426,6 +465,8 @@ async function sendMessage(event) {
     assistant.item.append(retry);
   } finally {
     window.clearTimeout(timeout);
+    if (frame) cancelAnimationFrame(frame);
+    pendingText = "";
     if (identity !== identityId) return;
     abortController = null;
     setBusy(false);
@@ -484,6 +525,17 @@ function onComposerKeydown(event) {
 }
 
 export function initAuraAI() {
+  const responseOptions = document.createElement("label");
+  responseOptions.className = "chat-response-options";
+  responseOptions.innerHTML = 'Cách trả lời<select id="chat-response-style" aria-describedby="chat-response-hint"><option value="quick">Nhanh</option><option value="balanced" selected>Cân bằng</option><option value="thorough">Phân tích kỹ</option></select><small id="chat-response-hint">Trả lời rõ ý, đủ thông tin cần thiết.</small>';
+  $("#chat-form").prepend(responseOptions);
+  $("#chat-response-style").addEventListener("change", event => {
+    $("#chat-response-hint").textContent = {
+      quick: "Ưu tiên tốc độ và câu trả lời ngắn.",
+      balanced: "Trả lời rõ ý, đủ thông tin cần thiết.",
+      thorough: "Giải thích chi tiết hơn; có thể cần thêm thời gian.",
+    }[event.target.value];
+  });
   const attachment = document.createElement("div");
   attachment.className = "chat-report-attachment";
   attachment.innerHTML = '<label><input id="chat-attach-report" type="checkbox" disabled> Đính kèm số đo Face Lab</label><button class="text-link" id="chat-routine" type="button">Health Hub ↗</button><small id="chat-report-state">Chưa có báo cáo Face Lab trong phiên này.</small>';
@@ -540,6 +592,7 @@ export function initAuraAI() {
     identityId++;
     accessId++;
     loadId++;
+    conversationListId++;
     stopGeneration();
     abortController = null;
     isLoading = false;

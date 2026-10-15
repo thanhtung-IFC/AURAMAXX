@@ -10,8 +10,10 @@ import { initTheme } from "./js/theme.js";
 import { initMotion } from "./js/motion.js";
 import { initArena } from "./js/pages/arena.js";
 import { initMobileUI } from "./js/mobile.js";
+import { initPerformance } from "./js/performance.js";
 
 initTheme();
+initPerformance();
 initRouter();
 initMobileUI();
 initFaceLab();

@@ -88,6 +88,43 @@ class AdminAtomicAuditTests(unittest.TestCase):
         self.assertEqual(self.app_rows("SELECT * FROM admin_feature_flags WHERE feature_key = 'aura_ai'"), before)
         self.assertEqual(self.mutation_events(), [])
 
+    def test_ai_settings_and_user_quota_roll_back_with_failed_audit(self):
+        target = self.auth.create_account("quota_user", "Quota User", "password123")
+        with patch("backend.identity.legacy_auth", return_value=self.auth):
+            projected = manage.project_account(self.connection, target)
+        with patch.object(self.auth, "audit", side_effect=self.fail_after_audit_insert):
+            with self.assertRaises(sqlite3.OperationalError):
+                manage.update_ai_settings(manage.ai_quota.QuotaSettings(daily_limit=10), self.user, self.connection)
+            with self.assertRaises(sqlite3.OperationalError):
+                manage.update_ai_quota(target["id"], manage.ai_quota.QuotaPolicy(daily_limit=2), self.user, self.connection)
+        self.assertEqual(self.app_rows("SELECT * FROM ai_quota_settings"), [])
+        self.assertEqual(self.app_rows("SELECT * FROM ai_user_quotas"), [])
+        manage.update_ai_quota(target["id"], manage.ai_quota.QuotaPolicy(daily_limit=2), self.user, self.connection)
+        with patch.object(self.auth, "audit", side_effect=self.fail_after_audit_insert):
+            with self.assertRaises(sqlite3.OperationalError):
+                manage.default_ai_quota(target["id"], self.user, self.connection)
+        self.assertEqual(self.app_rows("SELECT daily_limit FROM ai_user_quotas WHERE user_id=?", (projected["id"],)), [(2,)])
+        with self.auth.faces._connect() as connection:
+            events = connection.execute("SELECT action FROM audit_logs WHERE action LIKE 'ai_quota.%'").fetchall()
+        self.assertEqual([row[0] for row in events], ["ai_quota.user_updated"])
+
+    def test_delegated_admin_cannot_edit_admin_ai_quota(self):
+        delegate = self.auth.create_account("quota_delegate", "Delegate", "password123", role="admin")
+        with self.assertRaises(HTTPException) as error:
+            manage.update_ai_quota(self.actor["id"], manage.ai_quota.QuotaPolicy(daily_limit=1000), {"account_id": delegate["id"]}, self.connection)
+        self.assertEqual(error.exception.status_code, 403)
+        self.assertEqual(self.app_rows("SELECT * FROM ai_user_quotas"), [])
+
+    def test_anonymous_usage_is_not_assigned_to_unprojected_accounts(self):
+        from datetime import datetime, timezone
+        target = self.auth.create_account("unprojected_user", "Not logged in yet", "password123")
+        self.connection.execute("INSERT INTO ai_usage_events VALUES ('anonymous', NULL, ?)", (datetime.now(timezone.utc).isoformat(),))
+        self.connection.commit()
+        dashboard = manage.ai_usage(self.user, self.connection)
+        account = next(item for item in dashboard["accounts"] if item["id"] == target["id"])
+        self.assertEqual(account["usage"], {"today": 0, "month": 0})
+        self.assertEqual(dashboard["usage"], {"today": 1, "month": 1})
+
     def test_new_feature_flag_rolls_back_when_audit_fails(self):
         self.connection.execute("DELETE FROM admin_feature_flags WHERE feature_key = 'aura_ai'")
         self.connection.commit()

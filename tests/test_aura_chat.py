@@ -34,6 +34,8 @@ class AuraChatTests(unittest.IsolatedAsyncioTestCase):
                 yield "chào!"
         first = await self.events(Provider(), message="Một routine đơn giản")
         self.assertEqual(first[-1]["provider"], "gemini")
+        self.assertEqual(first[-1]["title"], "Một routine đơn giản")
+        self.assertTrue(first[-1]["updated_at"])
         conversation_id = first[-1]["conversation_id"]
         second = await self.events(Provider(), conversation_id=conversation_id, message="Giải thích thêm")
         self.assertEqual(second[-1]["type"], "done")
@@ -61,6 +63,18 @@ class AuraChatTests(unittest.IsolatedAsyncioTestCase):
                 yield "Answer"
         await self.events(Provider(), conversation_id=conversation_id, message="Chăm sóc da")
         self.assertEqual(self.connection.execute("SELECT title FROM ai_conversations").fetchone()[0], "Chăm sóc da")
+
+    async def test_response_style_is_validated_and_forwarded(self):
+        class Provider:
+            async def stream_reply(self, messages):
+                yield "Answer"
+        with patch("backend.routers.aura.get_ai_service", return_value=Provider()) as factory:
+            events = [chunk async for chunk in _stream_chat(AuraChatRequest(message="Hello", response_style="quick"), "owner", self.connection)]
+        factory.assert_called_once_with(response_style="quick")
+        self.assertEqual(json.loads(events[-1].decode().removeprefix("data: "))["type"], "done")
+        from pydantic import ValidationError
+        with self.assertRaises(ValidationError):
+            AuraChatRequest(message="Hello", response_style="ignore safeguards")
 
 
 if __name__ == "__main__":

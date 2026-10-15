@@ -114,6 +114,8 @@ def export_data(user=Depends(get_current_user), connection=Depends(get_database)
         "habit_entries": "id, category, value, unit, note, recorded_at, created_at",
         "health_routines": "state_json, revision, updated_at",
         "ai_conversations": "id, title, created_at, updated_at",
+        "ai_user_quotas": "daily_limit, monthly_limit, per_minute, enabled, updated_at",
+        "ai_usage_events": "id, created_at",
         "arena_profiles": "display_name, leaderboard_public, elo, highest_elo, matches_played, wins, losses, draws, created_at, updated_at",
         "arena_bot_profiles": "elo, highest_elo, matches_played, wins, losses, draws, updated_at",
         "arena_bot_matches": "id, bot_id, result, player_score, bot_score, bot_elo, elo_before, elo_after, coverage, created_at",

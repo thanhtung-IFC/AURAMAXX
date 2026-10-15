@@ -15,6 +15,7 @@ from backend.identity import initialize_legacy
 from backend.security import get_current_user
 from auth_store import AuthError
 from backend.settings import ALLOWED_ORIGINS, APP_NAME, APP_VERSION, PROJECT_ROOT
+from backend.services.ai_service import ai_http_pool
 
 
 @asynccontextmanager
@@ -23,7 +24,8 @@ async def lifespan(_app: FastAPI):
     initialize_database()
     initialize_legacy()
     try:
-        yield
+        async with ai_http_pool():
+            yield
     finally:
         close_database_pool()
         from server import face_database

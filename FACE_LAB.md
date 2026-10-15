@@ -2,8 +2,8 @@
 
 ## Thay đổi
 
-- Camera có chế độ tự động: mở HD, đọc `getCapabilities()`, thử nâng tới Full HD
-  khi thiết bị quảng bá khả năng phù hợp, giữ luồng đang dùng nếu cấu hình thất bại.
+- Camera có chế độ tự động: mở HD, đo hiệu năng và đọc `getCapabilities()`, thử
+  nâng tới Full HD khi hiệu năng/thiết bị phù hợp, giữ luồng nếu cấu hình thất bại.
   `getSettings()` và kích thước video được dùng để hiển thị cấu hình nhận được.
   Không suy đoán chất lượng camera từ thương hiệu hay tên thiết bị.
 - Camera trước/sau trên thiết bị cảm ứng dùng `facingMode`; webcam tích hợp,
@@ -15,8 +15,8 @@
   tạm ngắt hoặc ngừng phát khung hình làm mất trạng thái sẵn sàng chụp.
 - Lấy nét, phơi sáng và cân bằng trắng liên tục chỉ được yêu cầu khi capability
   tương ứng có hỗ trợ; lỗi điều khiển tùy chọn không chặn mở camera.
-- Nhận diện dùng cạnh dài 960px, tự giảm tới 640/480px khi thời gian xử lý cao
-  kéo dài, phục hồi khi máy xử lý nhanh ổn định. Ảnh chụp giữ riêng tới cạnh dài
+- Nhận diện dùng cạnh dài 480/640/960px theo mức hoạt động, tự điều chỉnh theo
+  hiệu năng đo được khi chọn Tự động. Ảnh chụp giữ riêng tới cạnh dài
   1920px, đúng tỷ lệ nguồn, JPEG 0.92; không phóng lớn nguồn độ phân giải thấp.
   Landmark chuẩn hóa và ảnh chụp vẫn thuộc cùng khung hình đã xử lý.
 - Dùng `requestVideoFrameCallback()` nếu có, bộ hẹn giờ nếu thiếu; không nhận
@@ -89,3 +89,5 @@ Tài liệu đối chiếu: [MediaPipe Face Landmarker cho web](https://develope
 Các API camera: [capabilities](https://developer.mozilla.org/en-US/docs/Web/API/MediaStreamTrack/getCapabilities),
 [applyConstraints](https://developer.mozilla.org/en-US/docs/Web/API/MediaStreamTrack/applyConstraints),
 [requestVideoFrameCallback](https://developer.mozilla.org/en-US/docs/Web/API/HTMLVideoElement/requestVideoFrameCallback).
+
+Các mức hoạt động, đo hiệu năng và lưu lựa chọn: [PERFORMANCE.md](PERFORMANCE.md).

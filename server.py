@@ -356,6 +356,8 @@ class VisionFaceRequestHandler(SimpleHTTPRequestHandler):
             body = build_request(payload)
             chat_limiter.start(session["id"])
             try:
+                if hasattr(self, "reserve_chat_usage"):
+                    self.reserve_chat_usage()
                 reply = generate_reply(body)
             finally:
                 chat_limiter.finish(session["id"])

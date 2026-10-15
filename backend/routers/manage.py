@@ -14,6 +14,9 @@ from backend.identity import delete_user_account, ensure_legacy_account, legacy_
 from backend.security import get_current_user, require_csrf
 from backend.settings import AURAMAXX_DB_BACKEND, PROJECT_ROOT, SUPABASE_DATABASE_URL
 from backend.transactions import identity_transaction
+from backend.services import ai_quota
+from backend.services.ai_service import ai_configuration
+from datetime import datetime, timezone
 from database_config import load_settings
 
 
@@ -198,6 +201,83 @@ def update_account_role(account_id: str, payload: AccountRole, user=Depends(requ
 @router.get("/features")
 def features(connection=Depends(get_database)):
     return {"features": [{"key": key, "name": name, "enabled": is_enabled(connection, key)} for key, name in FEATURES.items()]}
+
+
+@router.get("/ai/usage")
+def ai_usage(user=Depends(require_admin), connection=Depends(get_database)):
+    window = ai_quota.periods()
+    defaults = ai_quota.settings(connection)
+    overrides = {row["user_id"]: dict(row) for row in connection.execute("SELECT * FROM ai_user_quotas").fetchall()}
+    counts = {row["user_id"]: {"today": row["today"], "month": row["month"]} for row in connection.execute(
+        """SELECT user_id, SUM(CASE WHEN created_at >= ? AND created_at < ? THEN 1 ELSE 0 END) AS today,
+        COUNT(*) AS month FROM ai_usage_events WHERE created_at >= ? AND created_at < ? GROUP BY user_id""",
+        (window["day_start"], window["day_end"], window["month_start"], window["month_end"]),
+    ).fetchall()}
+    is_central = user["account_id"] == legacy_auth().central_admin_id()
+    result = []
+    for account in accounts(connection)["accounts"]:
+        user_id = account.get("user_id")
+        override = overrides.get(user_id)
+        limits = ({key: override[key] for key in ("daily_limit", "monthly_limit", "per_minute")} | {"enabled": bool(override["enabled"])}) if override else (
+            {key: defaults[key] for key in ("daily_limit", "monthly_limit", "per_minute")} | {"enabled": True})
+        result.append({key: account.get(key) for key in ("id", "user_id", "username", "display_name", "role", "is_active")} | {
+            "policy": limits, "overridden": bool(override), "usage": counts.get(user_id, {"today": 0, "month": 0}) if user_id else {"today": 0, "month": 0},
+            "editable": is_central or account["role"] != "admin",
+        })
+    return {"settings": defaults, "usage": ai_quota.usage(connection, window), "accounts": result,
+            "period": window, "provider": ai_configuration(), "feature_enabled": is_enabled(connection, "aura_ai"),
+            "can_edit_defaults": is_central}
+
+
+@router.patch("/ai/settings", dependencies=[Depends(require_csrf)])
+def update_ai_settings(payload: ai_quota.QuotaSettings, user=Depends(require_central), connection=Depends(get_database)):
+    auth = legacy_auth()
+    with identity_transaction(connection, auth) as legacy:
+        connection.execute("DELETE FROM ai_quota_settings WHERE id = 1")
+        connection.execute(
+            "INSERT INTO ai_quota_settings (id, daily_limit, monthly_limit, per_minute, global_daily_limit, global_monthly_limit, updated_at) VALUES (1, ?, ?, ?, ?, ?, ?)",
+            (payload.daily_limit, payload.monthly_limit, payload.per_minute, payload.global_daily_limit, payload.global_monthly_limit, datetime.now(timezone.utc).isoformat()),
+        )
+        auth.audit(legacy, user["account_id"], "ai_quota.settings_updated", "aura_ai")
+    return {"success": True}
+
+
+def _quota_target(account_id, user):
+    auth = legacy_auth()
+    target = auth.account(account_id)
+    if not target:
+        raise HTTPException(404, "Không tìm thấy tài khoản.")
+    if target["role"] == "admin" and user["account_id"] != auth.central_admin_id():
+        raise HTTPException(403, "Chỉ admin trung tâm được điều chỉnh hạn mức của admin.")
+    return target
+
+
+@router.patch("/accounts/{account_id}/ai-quota", dependencies=[Depends(require_csrf)])
+def update_ai_quota(account_id: str, payload: ai_quota.QuotaPolicy, user=Depends(require_admin), connection=Depends(get_database)):
+    target = _quota_target(account_id, user)
+    link = connection.execute("SELECT user_id FROM legacy_account_links WHERE account_id = ?", (account_id,)).fetchone()
+    user_id = link["user_id"] if link else project_account(connection, target)["id"]
+    auth = legacy_auth()
+    with identity_transaction(connection, auth) as legacy:
+        _quota_target(account_id, user)
+        connection.execute("DELETE FROM ai_user_quotas WHERE user_id = ?", (user_id,))
+        connection.execute(
+            "INSERT INTO ai_user_quotas (user_id, daily_limit, monthly_limit, per_minute, enabled, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (user_id, payload.daily_limit, payload.monthly_limit, payload.per_minute, int(payload.enabled), datetime.now(timezone.utc).isoformat()),
+        )
+        auth.audit(legacy, user["account_id"], "ai_quota.user_updated", account_id)
+    return {"success": True}
+
+
+@router.delete("/accounts/{account_id}/ai-quota", dependencies=[Depends(require_csrf)])
+def default_ai_quota(account_id: str, user=Depends(require_admin), connection=Depends(get_database)):
+    _quota_target(account_id, user)
+    auth = legacy_auth()
+    with identity_transaction(connection, auth) as legacy:
+        _quota_target(account_id, user)
+        connection.execute("DELETE FROM ai_user_quotas WHERE user_id IN (SELECT user_id FROM legacy_account_links WHERE account_id = ?)", (account_id,))
+        auth.audit(legacy, user["account_id"], "ai_quota.user_defaulted", account_id)
+    return {"success": True}
 
 
 @router.patch("/features/{feature_key}", dependencies=[Depends(require_csrf)])

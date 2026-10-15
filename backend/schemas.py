@@ -124,6 +124,7 @@ class AuraChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
     conversation_id: UUID | None = None
     analysis: dict | None = None
+    response_style: Literal["quick", "balanced", "thorough"] = "balanced"
 
     @field_validator("analysis")
     @classmethod

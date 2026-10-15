@@ -473,6 +473,36 @@ class ApiIntegrationTests(unittest.TestCase):
         self.assertEqual(self.request("POST", "/api/auth/logout", {})[0], 204)
         self.assertEqual(self.request("GET", "/api/manage/status")[0], 401)
 
+    def test_ai_quota_admin_permissions_csrf_and_saved_settings(self):
+        self.assertEqual(self.request("GET", "/api/manage/ai/usage")[0], 401)
+        self.request("POST", "/api/auth/admin/login", {"email": "integration_admin", "password": "Integration admin password 123"})
+        code, dashboard, _ = self.request("GET", "/api/manage/ai/usage")
+        self.assertEqual(code, 200, dashboard)
+        self.assertTrue(dashboard["can_edit_defaults"])
+        self.assertNotIn("api_key", json.dumps(dashboard))
+        saved = dashboard["settings"]
+        settings = {"daily_limit": 15, "monthly_limit": 200, "per_minute": 6, "global_daily_limit": 1000, "global_monthly_limit": 10000}
+        no_csrf = urllib.request.Request(self.base_url + "/api/manage/ai/settings", data=json.dumps(settings).encode(), headers={"Content-Type": "application/json"}, method="PATCH")
+        with self.assertRaises(urllib.error.HTTPError) as error:
+            self.client.open(no_csrf)
+        self.assertEqual(error.exception.code, 403)
+        error.exception.close()
+        self.assertEqual(self.request("PATCH", "/api/manage/ai/settings", settings)[0], 200)
+        try:
+            self.assertEqual(self.request("GET", "/api/manage/ai/usage")[1]["settings"], settings)
+            self.assertEqual(self.request("GET", "/api/aura/quota")[1]["policy"]["daily_limit"], 15)
+            self.assertEqual(self.request("PATCH", "/api/manage/ai/settings", {"daily_limit": -1})[0], 422)
+            self.grant_ai_consent()
+            self.assertEqual(self.request("PATCH", "/api/manage/ai/settings", {"daily_limit": 0})[0], 200)
+            self.assertEqual(self.request("POST", "/api/vision/chat", {"message": "Do not contact a provider"})[0], 429)
+            self.assertEqual(self.request("GET", "/api/aura/quota")[1]["usage"]["today"], 0)
+        finally:
+            self.request("PATCH", "/api/manage/ai/settings", saved)
+        self.request("POST", "/api/auth/logout", {})
+        self.request("POST", "/api/auth/register", {"email": "quota_" + uuid4().hex + "@example.test", "password": "Quota member password 123"})
+        self.assertEqual(self.request("GET", "/api/manage/ai/usage")[0], 403)
+        self.assertEqual(self.request("PATCH", "/api/manage/ai/settings", settings)[0], 403)
+
     def test_admin_delegation_temporary_password_and_three_admin_limit(self):
         self.assertEqual(self.request("POST", "/api/auth/admin/login", {"email": "integration_admin", "password": "Integration admin password 123"})[0], 200)
         central_cookies, central_client = self.cookies, self.client
@@ -502,6 +532,8 @@ class ApiIntegrationTests(unittest.TestCase):
             self.assertFalse(self.request("GET", "/api/manage/status")[1]["is_central"])
             self.assertEqual(self.request("GET", "/api/manage/accounts")[0], 200)
             self.assertEqual(self.request("PATCH", "/api/manage/features/aura_ai", {"enabled": False})[0], 403)
+            self.assertEqual(self.request("PATCH", "/api/manage/ai/settings", {"daily_limit": 1000})[0], 403)
+            self.assertFalse(self.request("GET", "/api/manage/ai/usage")[1]["can_edit_defaults"])
             self.assertEqual(self.request("POST", "/api/manage/accounts", {"username": "forbidden_admin", "display_name": "Forbidden", "role": "admin"})[0], 403)
         finally:
             self.cookies, self.client = central_cookies, central_client

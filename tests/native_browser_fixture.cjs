@@ -55,12 +55,12 @@ exports.injection = `(() => {
     };
     paint(); const interval = setInterval(paint,50);
     const stream=canvas.captureStream(20), track=stream.getVideoTracks()[0];
-    const settings=track.getSettings.bind(track), stop=track.stop.bind(track);let stopped=false;
+    const settings=track.getSettings.bind(track), stop=track.stop.bind(track);let stopped=false,currentConstraints=constraints.video;
     window.__activeCameras++;window.__cameraCreated++;
-    track.getSettings=()=>({...settings(),width:canvas.width,height:canvas.height,frameRate:20,deviceId:chosen,facingMode:chosen==='fixture-rear'?'environment':'user'});
+    track.getSettings=()=>({...settings(),width:canvas.width,height:canvas.height,frameRate:currentConstraints.frameRate?.ideal||20,deviceId:chosen,facingMode:chosen==='fixture-rear'?'environment':'user'});
     track.getCapabilities=()=>({width:{min:640,max:1920},height:{min:480,max:1080},frameRate:{min:10,max:30},focusMode:['continuous']});
-    track.getConstraints=()=>constraints.video;
-    track.applyConstraints=async config=>{window.__cameraConfigurations.push(config);canvas.width=config.width?.ideal||canvas.width;canvas.height=config.height?.ideal||canvas.height;paint();};
+    track.getConstraints=()=>currentConstraints;
+    track.applyConstraints=async config=>{window.__cameraConfigurations.push(config);currentConstraints=config;canvas.width=config.width?.ideal||canvas.width;canvas.height=config.height?.ideal||canvas.height;paint();};
     track.stop=()=>{if(stopped)return;stopped=true;window.__activeCameras--;window.__cameraStops++;clearInterval(interval);stop();};
     return stream;
   };
