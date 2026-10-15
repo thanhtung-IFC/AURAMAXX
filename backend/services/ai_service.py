@@ -1,8 +1,9 @@
-"""Provider abstraction and the server-side OpenAI Responses API adapter."""
+"""Server-side OpenAI and Gemini adapters for the shared Aura AI chat API."""
 
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from typing import AsyncIterator, Sequence
 
@@ -57,20 +58,27 @@ def _bounded_context(messages: Sequence[dict[str, str]]) -> list[dict[str, str]]
         bounded.append({"role": role, "content": content})
         size += len(content)
     bounded.reverse()
+    # A truncated history can start with an orphaned answer. Gemini expects a user turn.
+    while bounded and bounded[0]["role"] == "assistant":
+        bounded.pop(0)
     return bounded
 
 
 def _provider_message(status_code: int) -> AIServiceUnavailable:
     if status_code in {401, 403}:
-        return AIServiceUnavailable("Khóa AI_API_KEY chưa hợp lệ hoặc chưa có quyền dùng model. Hãy kiểm tra cấu hình phía backend.", kind="invalid_key", status_code=503)
+        return AIServiceUnavailable("Kết nối AI chưa được cấp quyền. Vui lòng liên hệ quản trị viên hoặc thử lại sau.", kind="invalid_key", status_code=503)
     if status_code == 429:
         return AIServiceUnavailable("Nhà cung cấp AI đang giới hạn lượt dùng. Hãy đợi một chút rồi thử lại.", kind="rate_limited", status_code=429)
+    if status_code == 404:
+        return AIServiceUnavailable("Model AI chưa tồn tại hoặc tài khoản chưa có quyền sử dụng. Hãy kiểm tra cấu hình máy chủ.", kind="invalid_model", status_code=503)
     if status_code >= 500:
         return AIServiceUnavailable("Nhà cung cấp AI đang gặp sự cố. Hãy thử lại sau.", kind="provider_unavailable", status_code=502)
     return AIServiceUnavailable("Nhà cung cấp AI từ chối yêu cầu. Hãy kiểm tra model và cấu hình.", kind="provider_error", status_code=502)
 
 
 class AIService:
+    provider = "unknown"
+    model = "unknown"
     async def stream_reply(self, messages: Sequence[dict[str, str]]) -> AsyncIterator[str]:
         # Keep this method an async generator so callers can always use ``async for``.
         if False:
@@ -79,11 +87,38 @@ class AIService:
 
     async def reply(self, messages: Sequence[dict[str, str]]) -> AIReply:
         chunks = [chunk async for chunk in self.stream_reply(messages)]
-        return AIReply("".join(chunks), provider="unknown", model="unknown")
+        return AIReply("".join(chunks), provider=self.provider, model=self.model)
+
+
+async def _sse_events(response: httpx.Response) -> AsyncIterator[dict]:
+    """Parse SSE frames, including multi-line data and an EOF without a blank line."""
+    data: list[str] = []
+    async for line in response.aiter_lines():
+        if line.startswith("data:"):
+            data.append(line[5:].lstrip())
+        elif not line and data:
+            raw = "\n".join(data)
+            data.clear()
+            if raw != "[DONE]":
+                yield _decode_event(raw)
+    if data and "\n".join(data) != "[DONE]":
+        yield _decode_event("\n".join(data))
+
+
+def _decode_event(raw: str) -> dict:
+    try:
+        event = json.loads(raw)
+        if isinstance(event, dict):
+            return event
+    except (ValueError, TypeError):
+        pass
+    raise AIServiceUnavailable("Dịch vụ AI trả về dữ liệu không hợp lệ. Hãy thử lại.", kind="invalid_response", status_code=502)
 
 
 class OpenAIResponsesService(AIService):
     """OpenAI adapter using the Responses API, with streamed text and bounded context."""
+
+    provider = "openai"
 
     def __init__(self, api_key: str, model: str, *, timeout: float = AI_TIMEOUT_SECONDS, max_output_tokens: int = AI_MAX_OUTPUT_TOKENS, transport: httpx.AsyncBaseTransport | None = None):
         self._api_key = api_key
@@ -105,6 +140,8 @@ class OpenAIResponsesService(AIService):
             "store": False,
         }
         timeout = httpx.Timeout(self.timeout, connect=min(10.0, self.timeout))
+        completed = False
+        size = 0
         try:
             async with httpx.AsyncClient(timeout=timeout, transport=self._transport) as client:
                 async with client.stream(
@@ -114,31 +151,34 @@ class OpenAIResponsesService(AIService):
                 ) as response:
                     if response.status_code != 200:
                         raise _provider_message(response.status_code)
-                    async for line in response.aiter_lines():
-                        if not line.startswith("data:"):
-                            continue
-                        raw = line[5:].strip()
-                        if not raw or raw == "[DONE]":
-                            continue
-                        try:
-                            event = json.loads(raw)
-                        except json.JSONDecodeError:
-                            continue
+                    async for event in _sse_events(response):
                         event_type = event.get("type")
                         if event_type == "response.output_text.delta":
                             delta = event.get("delta", "")
                             if isinstance(delta, str) and delta:
+                                size += len(delta)
+                                if size > MAX_OUTPUT_CHARS:
+                                    raise AIServiceUnavailable("Câu trả lời quá dài. Hãy thu hẹp câu hỏi rồi thử lại.", kind="output_too_long")
                                 yield delta
+                        elif event_type == "response.completed":
+                            completed = True
+                            break
+                        elif event_type == "response.incomplete":
+                            raise AIServiceUnavailable("Câu trả lời chưa hoàn tất. Hãy thu hẹp câu hỏi rồi thử lại.", kind="incomplete_response")
                         elif event_type in {"error", "response.failed"}:
-                            event_error = event.get("error")
+                            event_error = event.get("error") or (event.get("response") or {}).get("error")
                             code = event.get("status_code") or (event_error.get("status") if isinstance(event_error, dict) else None)
-                            if code == 429:
+                            if code == 429 or isinstance(event_error, dict) and event_error.get("code") in {"rate_limit_exceeded", "insufficient_quota"}:
                                 raise _provider_message(429)
                             raise AIServiceUnavailable("Nhà cung cấp AI không thể hoàn tất câu trả lời.", kind="provider_error", status_code=502)
+                    if not completed:
+                        raise AIServiceUnavailable("Kết nối AI bị ngắt trước khi trả lời xong. Hãy thử lại.", kind="interrupted_stream")
         except httpx.TimeoutException as error:
             raise AIServiceUnavailable("Aura AI phản hồi quá lâu. Hãy thử lại.", kind="timeout", status_code=504) from error
         except httpx.RequestError as error:
             raise AIServiceUnavailable("Không kết nối được tới nhà cung cấp AI. Kiểm tra mạng máy chủ rồi thử lại.", kind="network_error", status_code=502) from error
+        except (AttributeError, TypeError, ValueError, IndexError) as error:
+            raise AIServiceUnavailable("Dịch vụ AI trả về dữ liệu không hợp lệ. Hãy thử lại.", kind="invalid_response") from error
 
     async def reply(self, messages: Sequence[dict[str, str]]) -> AIReply:
         chunks: list[str] = []
@@ -149,21 +189,84 @@ class OpenAIResponsesService(AIService):
         text = "".join(chunks).strip()
         if not text:
             raise AIServiceUnavailable("AI chưa tạo được câu trả lời. Hãy thử diễn đạt lại.", kind="empty_response", status_code=502)
-        return AIReply(text=text, provider="openai", model=self.model)
+        return AIReply(text=text, provider=self.provider, model=self.model)
+
+
+class GeminiService(OpenAIResponsesService):
+    """Bridge the existing Gemini chatbot configuration into Aura's streaming API."""
+
+    provider = "gemini"
+
+    async def stream_reply(self, messages: Sequence[dict[str, str]]) -> AsyncIterator[str]:
+        context = _bounded_context(messages)
+        if not context or context[-1]["role"] != "user":
+            raise AIServiceUnavailable("Tin nhắn chưa hợp lệ. Hãy gửi lại câu hỏi.", kind="invalid_input", status_code=422)
+        if not re.fullmatch(r"gemini-[a-zA-Z0-9.-]+", self.model):
+            raise AIServiceUnavailable("Model Gemini chưa hợp lệ. Hãy kiểm tra cấu hình máy chủ.", kind="invalid_model", status_code=503)
+        request_body = {
+            "systemInstruction": {"parts": [{"text": AURA_INSTRUCTIONS}]},
+            "contents": [{"role": "model" if item["role"] == "assistant" else "user", "parts": [{"text": item["content"]}]} for item in context],
+            "generationConfig": {"maxOutputTokens": self.max_output_tokens},
+        }
+        completed = False
+        size = 0
+        timeout = httpx.Timeout(self.timeout, connect=min(10.0, self.timeout))
+        try:
+            async with httpx.AsyncClient(timeout=timeout, transport=self._transport) as client:
+                async with client.stream(
+                    "POST", f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:streamGenerateContent?alt=sse",
+                    headers={"x-goog-api-key": self._api_key, "Content-Type": "application/json"}, json=request_body,
+                ) as response:
+                    if response.status_code != 200:
+                        raise _provider_message(response.status_code)
+                    async for event in _sse_events(response):
+                        if event.get("error"):
+                            error = event["error"]
+                            raise _provider_message(error.get("code", 502) if isinstance(error, dict) else 502)
+                        if (event.get("promptFeedback") or {}).get("blockReason"):
+                            raise AIServiceUnavailable("Aura chưa thể trả lời câu hỏi này. Bạn hãy diễn đạt lại.", kind="blocked_response", status_code=422)
+                        candidates = event.get("candidates") or []
+                        if not candidates:
+                            continue
+                        candidate = candidates[0]
+                        reason = candidate.get("finishReason")
+                        if reason and reason != "STOP":
+                            raise AIServiceUnavailable("Câu trả lời chưa hoàn tất. Hãy diễn đạt ngắn hơn hoặc đổi câu hỏi.", kind="incomplete_response", status_code=422)
+                        for part in (candidate.get("content") or {}).get("parts", []):
+                            delta = part.get("text")
+                            if isinstance(delta, str) and delta and not part.get("thought"):
+                                size += len(delta)
+                                if size > MAX_OUTPUT_CHARS:
+                                    raise AIServiceUnavailable("Câu trả lời quá dài. Hãy thu hẹp câu hỏi rồi thử lại.", kind="output_too_long")
+                                yield delta
+                        if reason == "STOP":
+                            completed = True
+                            break
+                    if not completed:
+                        raise AIServiceUnavailable("Kết nối AI bị ngắt trước khi trả lời xong. Hãy thử lại.", kind="interrupted_stream")
+        except httpx.TimeoutException as error:
+            raise AIServiceUnavailable("Aura AI phản hồi quá lâu. Hãy thử lại.", kind="timeout", status_code=504) from error
+        except httpx.RequestError as error:
+            raise AIServiceUnavailable("Không kết nối được tới dịch vụ AI. Hãy thử lại.", kind="network_error") from error
+        except (AttributeError, TypeError, ValueError, IndexError) as error:
+            raise AIServiceUnavailable("Dịch vụ AI trả về dữ liệu không hợp lệ. Hãy thử lại.", kind="invalid_response") from error
 
 
 def ai_configuration() -> dict[str, str | bool]:
-    if AI_PROVIDER != "openai":
-        return {"available": False, "status": "not_configured", "provider": AI_PROVIDER or "none", "model": "", "message": "Aura AI chưa được cấu hình. Hãy đặt AI_PROVIDER=openai trong .env phía backend."}
+    if AI_PROVIDER not in {"openai", "gemini"}:
+        return {"available": False, "status": "not_configured", "provider": AI_PROVIDER or "none", "model": "", "message": "Aura AI chưa được cấu hình trên máy chủ. Vui lòng thử lại sau."}
     if not AI_API_KEY:
-        return {"available": False, "status": "missing_api_key", "provider": "openai", "model": AI_MODEL or "", "message": "Chưa có AI_API_KEY. Hãy cấu hình khóa trong .env phía backend rồi khởi động lại FastAPI."}
+        return {"available": False, "status": "missing_api_key", "provider": AI_PROVIDER, "model": AI_MODEL or "", "message": "Aura AI chưa được kết nối trên máy chủ. Vui lòng thử lại sau."}
     if not AI_MODEL:
-        return {"available": False, "status": "missing_model", "provider": "openai", "model": "", "message": "Chưa có AI_MODEL trong .env phía backend."}
-    return {"available": True, "status": "ready", "provider": "openai", "model": AI_MODEL, "message": "Aura AI đã sẵn sàng."}
+        return {"available": False, "status": "missing_model", "provider": AI_PROVIDER, "model": "", "message": "Aura AI chưa hoàn tất cấu hình. Vui lòng thử lại sau."}
+    if AI_PROVIDER == "gemini" and not re.fullmatch(r"gemini-[a-zA-Z0-9.-]+", AI_MODEL):
+        return {"available": False, "status": "invalid_model", "provider": AI_PROVIDER, "model": "", "message": "Cấu hình dịch vụ AI chưa hợp lệ. Vui lòng thử lại sau."}
+    return {"available": True, "status": "ready", "provider": AI_PROVIDER, "model": AI_MODEL, "message": "Aura AI đã được cấu hình. Kết nối được xác nhận khi gửi tin nhắn."}
 
 
 def get_ai_service() -> AIService:
     config = ai_configuration()
     if not config["available"]:
         raise AIServiceUnavailable(str(config["message"]), kind=str(config["status"]), status_code=503)
-    return OpenAIResponsesService(AI_API_KEY, AI_MODEL)
+    service = GeminiService if AI_PROVIDER == "gemini" else OpenAIResponsesService
+    return service(AI_API_KEY, AI_MODEL)

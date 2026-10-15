@@ -23,7 +23,7 @@ from backend.services.ai_service import (
     ai_configuration,
     get_ai_service,
 )
-from backend.settings import AI_MODEL, AI_RATE_LIMIT_PER_MINUTE
+from backend.settings import AI_MODEL, AI_PROVIDER, AI_RATE_LIMIT_PER_MINUTE
 
 
 router = APIRouter(prefix="/api/aura", tags=["Aura AI"], dependencies=[Depends(require_feature("aura_ai"))])
@@ -85,7 +85,7 @@ def _reject_secret_like(message: str) -> None:
         )
 
 
-def _event(event_type: str, **payload: str) -> bytes:
+def _event(event_type: str, **payload: str | int) -> bytes:
     data = json.dumps({"type": event_type, **payload}, ensure_ascii=False)
     return f"data: {data}\n\n".encode("utf-8")
 
@@ -116,6 +116,7 @@ def create_conversation(
     connection: sqlite3.Connection = Depends(get_database),
 ) -> dict[str, str]:
     _require_ai_consent(connection, user["id"])
+    _reject_secret_like(payload.title)
     conversation_id = str(uuid.uuid4())
     now = _now()
     connection.execute(
@@ -204,9 +205,10 @@ async def _stream_chat(payload: AuraChatRequest, user_id: str, connection: sqlit
                 (conversation_id, user_id, title, now, now),
             )
         else:
+            title = re.sub(r"\s+", " ", payload.message).strip()[:72] if len(history) == 1 and conversation["title"] == "Cuộc trò chuyện mới" else conversation["title"]
             cursor = connection.execute(
-                "UPDATE ai_conversations SET updated_at = ? WHERE id = ? AND user_id = ?",
-                (now, conversation_id, user_id),
+                "UPDATE ai_conversations SET title = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+                (title, now, conversation_id, user_id),
             )
             if cursor.rowcount != 1:
                 raise HTTPException(status_code=404, detail="Cuộc trò chuyện đã bị xóa.")
@@ -218,14 +220,14 @@ async def _stream_chat(payload: AuraChatRequest, user_id: str, connection: sqlit
             ],
         )
         connection.commit()
-        yield _event("done", conversation_id=conversation_id, provider="openai", model=AI_MODEL)
+        yield _event("done", conversation_id=conversation_id, provider=getattr(service, "provider", AI_PROVIDER), model=getattr(service, "model", AI_MODEL))
     except asyncio.CancelledError:
         # A client stop/close cancels provider streaming; uncommitted turns are not saved.
         connection.rollback()
         raise
     except AIServiceUnavailable as error:
         connection.rollback()
-        yield _event("error", message=str(error), kind=error.kind)
+        yield _event("error", message=str(error), kind=error.kind, status=error.status_code)
     except HTTPException as error:
         connection.rollback()
         yield _event("error", message=str(error.detail), kind="conversation_error")

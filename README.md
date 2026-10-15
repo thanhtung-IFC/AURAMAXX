@@ -1,5 +1,8 @@
 # AURAMAXX + VisionFace — website hợp nhất
 
+Chatbot **AURA AI** hỗ trợ OpenAI/Gemini. Xem [AURA_AI.md](AURA_AI.md) để cấu hình
+API, kiểm tra kết nối và sử dụng lịch sử hội thoại theo tài khoản.
+
 Giao diện AURAMAXX là trang chính, kết hợp Face Lab, Face Arena/ELO, Health Hub,
 Aura AI, tiến trình và tài khoản. **Face Lab tích hợp trực tiếp VisionFace**:
 camera USB, nhận diện, liveness, hồ sơ, tải ảnh và phân tích chính diện/góc nghiêng

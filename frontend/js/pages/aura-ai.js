@@ -1,6 +1,7 @@
 import { api } from "../api.js";
 import { showToast } from "../ui.js";
 import { getFaceReport } from "../face/report.js";
+import { consumeSSE } from "../chat-stream.js";
 
 let conversations = [];
 let currentConversationId = null;
@@ -10,6 +11,9 @@ let userReady = false;
 let consentGranted = false;
 let providerReady = false;
 let loadId = 0;
+let accessId = 0;
+let identityId = 0;
+let isLoading = false;
 
 const $ = (selector) => document.querySelector(selector);
 const body = () => $("#chat-body");
@@ -21,15 +25,19 @@ function setServiceBadge(label, state) {
 }
 
 function setAvailability() {
-  const enabled = providerReady && userReady && consentGranted && !isBusy;
+  const enabled = providerReady && userReady && consentGranted && !isBusy && !isLoading;
   $("#chat-input").disabled = !enabled;
   $("#chat-send").disabled = !enabled || !$("#chat-input").value.trim();
-  $("#chat-new").disabled = !providerReady || !userReady || !consentGranted || isBusy;
-  $("#chat-clear-history").disabled = !userReady || conversations.length === 0 || isBusy;
-  $("#chat-delete-current").disabled = !currentConversationId || isBusy;
+  $("#chat-new").disabled = !providerReady || !userReady || !consentGranted || isBusy || isLoading;
+  $("#chat-clear-history").disabled = !userReady || conversations.length === 0 || isBusy || isLoading;
+  $("#chat-delete-current").disabled = !currentConversationId || isBusy || isLoading;
+  $("#chat-reconnect").disabled = isBusy || isLoading;
+  $("#chat-character-count").textContent = `${$("#chat-input").value.length.toLocaleString("vi-VN")} / 4.000`;
   document.querySelectorAll("[data-chat-suggestion]").forEach((button) => { button.disabled = !enabled; });
   $("#chat-attach-report").disabled = !getFaceReport() || !userReady || isBusy;
   $("#chat-routine").disabled = false;
+  document.querySelectorAll(".chat-conversation-item").forEach(button => { button.disabled = isBusy; });
+  document.querySelectorAll(".chat-message-action").forEach(button => { button.disabled = isBusy || isLoading; });
 }
 
 function showNotice(message, actionLabel = "", action = "") {
@@ -82,7 +90,7 @@ function safeMarkdown(source) {
 
 function scrollToLatest() {
   const container = body();
-  container.scrollTop = container.scrollHeight;
+  if (!container.dataset.readingEarlier) container.scrollTop = container.scrollHeight;
 }
 
 function showWelcome(show) {
@@ -107,7 +115,8 @@ function addMessage(role, content, { streaming = false, error = false } = {}) {
   } else if (error) {
     bubble.textContent = content;
   } else {
-    bubble.innerHTML = safeMarkdown(content);
+    if (role === "user") bubble.textContent = content;
+    else bubble.innerHTML = safeMarkdown(content);
   }
   item.append(label, bubble);
   body().append(item);
@@ -115,10 +124,27 @@ function addMessage(role, content, { streaming = false, error = false } = {}) {
   return { item, bubble };
 }
 
+function addCopyAction(message, content) {
+  const action = document.createElement("button");
+  action.type = "button";
+  action.className = "chat-message-action";
+  action.textContent = "Sao chép";
+  action.setAttribute("aria-label", "Sao chép câu trả lời của Aura");
+  action.addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(content); showToast("Đã sao chép câu trả lời.", "success"); }
+    catch { showToast("Bạn có thể chọn nội dung để sao chép thủ công."); }
+  });
+  message.item.append(action);
+}
+
 function renderMessages(messages) {
   body().querySelectorAll(".chat-message").forEach((node) => node.remove());
   showWelcome(messages.length === 0);
-  for (const message of messages) addMessage(message.role, message.content);
+  delete body().dataset.readingEarlier;
+  for (const message of messages) {
+    const rendered = addMessage(message.role, message.content);
+    if (message.role === "assistant") addCopyAction(rendered, message.content);
+  }
   scrollToLatest();
 }
 
@@ -144,11 +170,21 @@ function renderConversationList() {
     empty.textContent = "Chưa có hội thoại được lưu.";
     list.append(empty);
   }
-  for (const conversation of conversations) {
+  const query = $("#chat-history-search").value.trim().toLocaleLowerCase("vi");
+  const filtered = conversations.filter(item => item.title.toLocaleLowerCase("vi").includes(query));
+  if (query && !filtered.length && conversations.length) {
+    const empty = document.createElement("p");
+    empty.className = "chat-list-empty";
+    empty.textContent = "Không tìm thấy hội thoại phù hợp.";
+    list.append(empty);
+  }
+  for (const conversation of filtered) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "chat-conversation-item";
     button.classList.toggle("active", conversation.id === currentConversationId);
+    button.setAttribute("aria-current", String(conversation.id === currentConversationId));
+    button.disabled = isBusy;
     const title = document.createElement("b");
     title.textContent = conversation.title;
     const updated = document.createElement("span");
@@ -162,7 +198,10 @@ function renderConversationList() {
 
 async function refreshConversations({ selectLatest = false } = {}) {
   if (!userReady) return;
-  conversations = await api.get("/api/aura/conversations");
+  const identity = identityId;
+  const result = await api.get("/api/aura/conversations");
+  if (identity !== identityId) return;
+  conversations = result;
   if (currentConversationId && !conversations.some((item) => item.id === currentConversationId)) currentConversationId = null;
   if (selectLatest && !currentConversationId && conversations.length) currentConversationId = conversations[0].id;
   renderConversationList();
@@ -176,29 +215,57 @@ async function openConversation(id) {
   const selected = conversations.find((item) => item.id === id);
   $("#chat-current-title").textContent = selected?.title || "Aura AI";
   renderMessages([]);
+  isLoading = true;
+  showWelcome(false);
+  setAvailability();
   try {
     const messages = await api.get(`/api/aura/conversations/${encodeURIComponent(id)}/messages`);
-    if (requestId === loadId && currentConversationId === id) renderMessages(messages);
+    if (requestId === loadId && currentConversationId === id) {
+      renderMessages(messages);
+      $("#chat-connection-state").innerHTML = "<i></i> Sẵn sàng trò chuyện";
+      $("#chat-connection-state").dataset.state = "ready";
+    }
   } catch (error) {
     if (requestId === loadId) {
       currentConversationId = null;
       await refreshConversations();
       showNotice(error.message);
     }
+  } finally {
+    if (requestId === loadId) { isLoading = false; setAvailability(); }
   }
 }
 
 async function createConversation() {
-  const conversation = await api.post("/api/aura/conversations", { title: "Cuộc trò chuyện mới" });
-  currentConversationId = conversation.id;
-  $("#chat-current-title").textContent = conversation.title;
-  renderMessages([]);
-  await refreshConversations();
+  if (isBusy || isLoading) return;
+  isLoading = true;
+  const identity = identityId;
+  setAvailability();
+  try {
+    const conversation = await api.post("/api/aura/conversations", { title: "Cuộc trò chuyện mới" });
+    if (identity !== identityId) return;
+    currentConversationId = conversation.id;
+    $("#chat-current-title").textContent = conversation.title;
+    $("#chat-input").value = "";
+    $("#chat-history-search").value = "";
+    renderMessages([]);
+    await refreshConversations();
+    showNotice("");
+    $("#chat-connection-state").innerHTML = "<i></i> Sẵn sàng nhận câu hỏi";
+    $("#chat-connection-state").dataset.state = "ready";
+  } finally { if (identity === identityId) { isLoading = false; setAvailability(); } }
   $("#chat-input").focus();
 }
 
 async function loadAccess() {
-  const run = ++loadId;
+  if (isBusy) return;
+  const run = ++accessId;
+  const previousConversation = currentConversationId;
+  const isCurrent = () => run === accessId;
+  isLoading = true;
+  userReady = false;
+  consentGranted = false;
+  setAvailability();
   showNotice("");
   setServiceBadge("Đang kiểm tra dịch vụ…", "loading");
   $("#chat-connection-state").innerHTML = "<i></i> Đang kiểm tra dịch vụ";
@@ -208,21 +275,32 @@ async function loadAccess() {
   } catch {
     provider = { available: false, status: "offline", message: "Không kết nối được backend Aura AI." };
   }
-  if (run !== loadId) return;
+  if (!isCurrent()) return;
   providerReady = Boolean(provider.available);
-  setServiceBadge(providerReady ? "AI đã kết nối" : "AI chưa sẵn sàng", providerReady ? "ready" : "offline");
-  $("#chat-connection-state").innerHTML = providerReady ? "<i></i> Kết nối an toàn qua backend" : "<i></i> Dịch vụ chưa sẵn sàng";
+  setServiceBadge(providerReady ? "Dịch vụ đã cấu hình" : "AI chưa sẵn sàng", providerReady ? "ready" : "offline");
+  $("#chat-connection-state").innerHTML = providerReady ? "<i></i> Sẵn sàng nhận câu hỏi" : "<i></i> Dịch vụ chưa sẵn sàng";
+  $("#chat-connection-state").dataset.state = providerReady ? "ready" : "offline";
 
   userReady = false;
   consentGranted = false;
   try {
     await api.get("/api/auth/me");
+    if (!isCurrent()) return;
     userReady = true;
     const consents = await api.get("/api/consents");
+    if (!isCurrent()) return;
     consentGranted = consents.some((item) => item.purpose === "ai_chat" && item.granted);
-    await refreshConversations({ selectLatest: true });
-    if (currentConversationId) await openConversation(currentConversationId);
+    if (consentGranted) await refreshConversations({ selectLatest: true });
+    else {
+      conversations = [];
+      currentConversationId = null;
+      renderMessages([]);
+      renderConversationList();
+    }
+    if (!isCurrent()) return;
+    if (currentConversationId && (currentConversationId !== previousConversation || !body().querySelector(".chat-message"))) await openConversation(currentConversationId);
   } catch (error) {
+    if (!isCurrent()) return;
     if (error.status !== 401) showNotice(error.message);
     else {
       currentConversationId = null;
@@ -231,38 +309,19 @@ async function loadAccess() {
       renderConversationList();
     }
   }
-  if (!providerReady) showNotice(provider.message || "Aura AI chưa sẵn sàng. Kiểm tra cấu hình AI phía backend.");
+  if (!isCurrent()) return;
+  isLoading = false;
+  if (!providerReady) showNotice(provider.message || "Aura AI chưa sẵn sàng. Vui lòng thử kết nối lại sau.");
   else if (!userReady) showNotice("Đăng nhập để chat riêng tư và lưu lịch sử vào tài khoản.", "Mở My Aura", "my-aura");
   else if (!consentGranted) showNotice("Để gửi tin nhắn và lưu lịch sử, hãy bật đồng ý AURA AI trong My Aura.", "Cài đặt đồng ý", "my-aura");
   setAvailability();
-}
-
-async function consumeSSE(response, onEvent) {
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  while (true) {
-    const { value, done } = await reader.read();
-    buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
-    let boundary;
-    while ((boundary = buffer.indexOf("\n\n")) >= 0) {
-      const block = buffer.slice(0, boundary);
-      buffer = buffer.slice(boundary + 2);
-      const data = block.split("\n").filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trim()).join("\n");
-      if (data) {
-        let parsed;
-        try { parsed = JSON.parse(data); } catch { continue; }
-        onEvent(parsed);
-      }
-    }
-    if (done) break;
-  }
 }
 
 function setBusy(value) {
   isBusy = value;
   $("#chat-stop").hidden = !value;
   $("#chat-send").hidden = value;
+  body().setAttribute("aria-busy", String(value));
   setAvailability();
 }
 
@@ -270,36 +329,46 @@ async function sendMessage(event) {
   event?.preventDefault();
   const input = $("#chat-input");
   const message = input.value.trim();
-  if (!message || !providerReady || !userReady || !consentGranted || isBusy) return;
+  if (!message || message.length > 4000 || !providerReady || !userReady || !consentGranted || isBusy || isLoading) return;
+  const identity = identityId;
+  setBusy(true);
   input.value = "";
   input.style.height = "auto";
-  if (!currentConversationId) {
-    try { await createConversation(); }
-    catch (error) { showNotice(error.message); input.value = message; setAvailability(); return; }
-  }
+  // A first conversation is created by /chat only after the provider completes.
+  // This also keeps rejected questions out of conversation titles.
+  body().querySelectorAll("[data-unsaved]").forEach(node => node.remove());
+  delete body().dataset.readingEarlier;
   showWelcome(false);
-  addMessage("user", message);
+  const userMessage = addMessage("user", message);
   const assistant = addMessage("assistant", "", { streaming: true });
   const liveText = document.createTextNode("");
-  assistant.bubble.replaceChildren(liveText);
   let responseText = "";
   let completed = false;
   abortController = new AbortController();
-  setBusy(true);
+  const turnController = abortController;
+  const timeout = window.setTimeout(() => turnController.abort(new DOMException("Aura phản hồi quá lâu. Hãy thử lại.", "TimeoutError")), 125000);
   showNotice("");
   $("#chat-connection-state").innerHTML = "<i></i> Aura đang phản hồi";
+  $("#chat-connection-state").dataset.state = "loading";
   try {
     const analysis = $("#chat-attach-report").checked ? getFaceReport() : null;
     const response = await api.stream("/api/aura/chat", { conversation_id: currentConversationId, message, ...(analysis ? { analysis } : {}) }, abortController.signal);
+    if (identity !== identityId) { await response.body?.cancel(); return; }
     if (!response.ok) {
       let detail = `Yêu cầu không thành công (${response.status}).`;
-      try { detail = (await response.json()).detail || detail; } catch { /* Keep generic message. */ }
+      try {
+        const payload = await response.json();
+        const value = payload.detail || payload.message;
+        detail = Array.isArray(value) ? value.map(item => item.msg).join(" ") : value || detail;
+      } catch { /* Keep generic message. */ }
       const error = new Error(detail);
       error.status = response.status;
       throw error;
     }
     await consumeSSE(response, (eventData) => {
+      if (identity !== identityId) return;
       if (eventData.type === "delta") {
+        if (!responseText) assistant.bubble.replaceChildren(liveText);
         responseText += eventData.text || "";
         liveText.textContent = responseText;
         assistant.bubble.classList.add("is-streaming");
@@ -309,16 +378,27 @@ async function sendMessage(event) {
         currentConversationId = eventData.conversation_id;
         assistant.bubble.classList.remove("is-streaming");
         assistant.bubble.innerHTML = safeMarkdown(responseText);
+        addCopyAction(assistant, responseText);
       } else if (eventData.type === "error") {
-        throw new Error(eventData.message || "Aura AI chưa thể trả lời.");
+        const error = new Error(eventData.message || "Aura AI chưa thể trả lời.");
+        error.status = eventData.status;
+        throw error;
       }
     });
-    if (!completed) throw new Error("Kết nối bị ngắt trước khi câu trả lời hoàn tất. Lượt chat chưa được lưu.");
-    await refreshConversations();
+    if (identity !== identityId) return;
+    if (!completed || !responseText.trim()) throw new Error("Kết nối bị ngắt trước khi câu trả lời hoàn tất. Lượt chat chưa được lưu.");
+    try { await refreshConversations(); } catch { showToast("Câu trả lời đã lưu. Chưa tải lại được danh sách hội thoại."); }
     const title = conversations.find((item) => item.id === currentConversationId)?.title;
     if (title) $("#chat-current-title").textContent = title;
     $("#chat-connection-state").innerHTML = "<i></i> Sẵn sàng trò chuyện";
+    $("#chat-connection-state").dataset.state = "ready";
+    setServiceBadge("AI đã kết nối", "ready");
   } catch (error) {
+    if (identity !== identityId) return;
+    if (error instanceof TypeError) error = new Error("Không kết nối được tới Aura. Hãy kiểm tra mạng rồi thử lại.");
+    userMessage.item.dataset.unsaved = "true";
+    assistant.item.dataset.unsaved = "true";
+    input.value = message;
     assistant.bubble.classList.remove("is-streaming");
     if (error.name === "AbortError") {
       assistant.bubble.textContent = responseText ? `${responseText}\n\n[Đã dừng · lượt chat chưa được lưu]` : "Đã dừng trước khi có câu trả lời. Lượt chat chưa được lưu.";
@@ -337,11 +417,21 @@ async function sendMessage(event) {
       } else if (error.status === 429) showToast(error.message, "error");
       else showToast(error.message, "error");
     }
+    $("#chat-connection-state").dataset.state = "offline";
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.className = "chat-message-action";
+    retry.textContent = "Thử gửi lại";
+    retry.addEventListener("click", () => { if (!isBusy) { input.value = message; void sendMessage(); } });
+    assistant.item.append(retry);
   } finally {
+    window.clearTimeout(timeout);
+    if (identity !== identityId) return;
     abortController = null;
     setBusy(false);
     setAvailability();
     scrollToLatest();
+    input.focus({ preventScroll: true });
   }
 }
 
@@ -350,30 +440,40 @@ function stopGeneration() {
 }
 
 async function deleteCurrentConversation() {
-  if (!currentConversationId || isBusy) return;
+  if (!currentConversationId || isBusy || isLoading) return;
   const id = currentConversationId;
+  const identity = identityId;
+  isLoading = true;
+  setAvailability();
   try {
     await api.delete(`/api/aura/conversations/${encodeURIComponent(id)}`);
+    if (identity !== identityId) return;
     currentConversationId = null;
     $("#chat-current-title").textContent = "Aura AI";
     renderMessages([]);
     await refreshConversations({ selectLatest: true });
     if (currentConversationId) await openConversation(currentConversationId);
     showToast("Đã xóa hội thoại và tin nhắn của nó.", "success");
-  } catch (error) { showToast(error.message, "error"); }
+  } catch (error) { if (identity === identityId) showToast(error.message, "error"); }
+  finally { if (identity === identityId) { isLoading = false; setAvailability(); } }
 }
 
 async function clearHistory() {
-  if (!conversations.length || isBusy || !window.confirm("Xóa toàn bộ lịch sử Aura AI của tài khoản này? Hành động này không thể hoàn tác.")) return;
+  if (!conversations.length || isBusy || isLoading || !window.confirm("Xóa toàn bộ lịch sử Aura AI của tài khoản này? Hành động này không thể hoàn tác.")) return;
+  const identity = identityId;
+  isLoading = true;
+  setAvailability();
   try {
     await api.delete("/api/aura/conversations");
+    if (identity !== identityId) return;
     currentConversationId = null;
     conversations = [];
     $("#chat-current-title").textContent = "Aura AI";
     renderMessages([]);
     renderConversationList();
     showToast("Đã xóa toàn bộ lịch sử Aura AI.", "success");
-  } catch (error) { showToast(error.message, "error"); }
+  } catch (error) { if (identity === identityId) showToast(error.message, "error"); }
+  finally { if (identity === identityId) { isLoading = false; setAvailability(); } }
 }
 
 function onComposerKeydown(event) {
@@ -386,12 +486,12 @@ function onComposerKeydown(event) {
 export function initAuraAI() {
   const attachment = document.createElement("div");
   attachment.className = "chat-report-attachment";
-  attachment.innerHTML = '<label><input id="chat-attach-report" type="checkbox" disabled> Đính kèm số đo VisionFace</label><button class="text-link" id="chat-routine" type="button">Mở routine trong Health Hub</button><small id="chat-report-state">Phân tích trong Face Lab để đính kèm kết quả. Ảnh không được gửi cho AI.</small>';
+  attachment.innerHTML = '<label><input id="chat-attach-report" type="checkbox" disabled> Đính kèm số đo Face Lab</label><button class="text-link" id="chat-routine" type="button">Health Hub ↗</button><small id="chat-report-state">Chưa có báo cáo Face Lab trong phiên này.</small>';
   $("#chat-form").prepend(attachment);
   const updateReport = () => {
     const available = Boolean(getFaceReport());
     if (!available) $("#chat-attach-report").checked = false;
-    $("#chat-report-state").textContent = available ? "Có báo cáo từ Face Lab trong phiên này. Chỉ số đo được đính kèm khi bạn chọn và gửi tin nhắn." : "Phân tích trong Face Lab để đính kèm kết quả. Ảnh không được gửi cho AI.";
+    $("#chat-report-state").textContent = available ? "Báo cáo sẵn sàng. Chọn đính kèm để gửi số đo; ảnh không được gửi." : "Phân tích trong Face Lab để đính kèm số đo. Ảnh không được gửi.";
     setAvailability();
   };
   const preparePrompt = (message, attach = false) => {
@@ -401,6 +501,20 @@ export function initAuraAI() {
     $("#chat-input").focus();
   };
   $("#chat-routine").addEventListener("click", () => { window.location.hash = "health-hub"; });
+  $("#chat-reconnect").addEventListener("click", () => void loadAccess());
+  $("#chat-history-search").addEventListener("input", renderConversationList);
+  $("#chat-history-toggle").addEventListener("click", () => {
+    const layout = $(".chat-layout");
+    const open = layout.dataset.historyOpen !== "true";
+    layout.dataset.historyOpen = String(open);
+    $("#chat-history-toggle").setAttribute("aria-expanded", String(open));
+    if (open) $("#chat-history-search").focus();
+  });
+  body().addEventListener("scroll", () => {
+    const container = body();
+    if (container.scrollHeight - container.scrollTop - container.clientHeight > 100) container.dataset.readingEarlier = "true";
+    else delete container.dataset.readingEarlier;
+  }, { passive: true });
   window.addEventListener("auramaxx:ai-request", event => preparePrompt(event.detail.message, event.detail.attach));
   window.addEventListener("auramaxx:face-report-changed", updateReport);
   $("#chat-form").addEventListener("submit", (event) => void sendMessage(event));
@@ -421,20 +535,30 @@ export function initAuraAI() {
   }));
   window.addEventListener("hashchange", () => {
     if (window.location.hash === "#aura-ai") void loadAccess();
-    else if (isBusy) stopGeneration();
-    else {
-      loadId++;
-      currentConversationId = null;
-      renderMessages([]);
-    }
   });
+  const resetAccount = () => {
+    identityId++;
+    accessId++;
+    loadId++;
+    stopGeneration();
+    abortController = null;
+    isLoading = false;
+    userReady = false;
+    consentGranted = false;
+    conversations = [];
+    currentConversationId = null;
+    $("#chat-input").value = "";
+    $("#chat-attach-report").checked = false;
+    $("#chat-history-search").value = "";
+    $("#chat-current-title").textContent = "Aura AI";
+    renderMessages([]);
+    renderConversationList();
+    setBusy(false);
+  };
   window.addEventListener("auramaxx:consent-changed", (event) => {
     if (event.detail?.purpose === "ai_chat") {
       if (!event.detail.granted) {
-        stopGeneration();
-        conversations = [];
-        currentConversationId = null;
-        renderMessages([]);
+        resetAccount();
       }
       if (window.location.hash === "#aura-ai") void loadAccess();
     }
@@ -443,11 +567,7 @@ export function initAuraAI() {
     if (window.location.hash === "#aura-ai") showNotice("Đăng nhập để chat riêng tư và xem lịch sử của bạn.", "Mở My Aura", "my-aura");
   });
   window.addEventListener("auramaxx:auth-changed", () => {
-    stopGeneration();
-    conversations = [];
-    currentConversationId = null;
-    renderMessages([]);
-    renderConversationList();
+    resetAccount();
     void loadAccess();
   });
   renderConversationList();

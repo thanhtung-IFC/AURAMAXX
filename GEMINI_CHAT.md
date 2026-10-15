@@ -1,5 +1,9 @@
 # Chatbot tư vấn Gemini
 
+> Website hợp nhất hiện dùng **AURA AI** tại `/#aura-ai`, hỗ trợ cả Gemini và
+> OpenAI. Xem [AURA_AI.md](AURA_AI.md) để cấu hình, kiểm tra kết nối và sử dụng
+> lịch sử theo tài khoản. Hướng dẫn bên dưới mô tả khung chat VisionFace cũ.
+
 Khung **Tư vấn AI** xuất hiện ở góc dưới bên phải trên hai trang phân tích.
 Người dùng cần đăng nhập. Sau khi phân tích, chatbot có thể đính kèm báo cáo
 gần nhất để giải thích các chỉ số và gợi ý cách tạo kiểu. Có thể bỏ chọn đính kèm.

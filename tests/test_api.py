@@ -715,6 +715,9 @@ class ApiIntegrationTests(unittest.TestCase):
     def test_aura_unconfigured_chat_and_secret_filter_do_not_store_message(self) -> None:
         self.register()
         self.grant_ai_consent()
+        code, data, _ = self.request("POST", "/api/aura/conversations", {"title": "password=supersecret"})
+        self.assertEqual(code, 422)
+        self.assertNotIn("supersecret", data["detail"])
         code, conversation, _ = self.request("POST", "/api/aura/conversations", {})
         self.assertEqual(code, 201)
         conversation_id = conversation["id"]
@@ -722,7 +725,8 @@ class ApiIntegrationTests(unittest.TestCase):
             "POST", "/api/aura/chat", {"conversation_id": conversation_id, "message": "Hello Aura"}
         )
         self.assertEqual(code, 503)
-        self.assertIn("AI_PROVIDER=openai", data["detail"])
+        self.assertIn("chưa được cấu hình", data["detail"])
+        self.assertNotIn("AI_PROVIDER", data["detail"])
         code, data, _ = self.request(
             "POST", "/api/aura/chat", {"conversation_id": conversation_id, "message": "password=supersecret"}
         )

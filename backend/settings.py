@@ -33,9 +33,12 @@ SESSION_MAX_AGE_SECONDS = 7 * 24 * 60 * 60
 SESSION_COOKIE_NAME = "auramaxx_session"
 CSRF_COOKIE_NAME = "auramaxx_csrf"
 
-AI_PROVIDER = os.getenv("AI_PROVIDER", "none").strip().lower()
-AI_API_KEY = os.getenv("AI_API_KEY", "").strip()
-AI_MODEL = os.getenv("AI_MODEL", "gpt-6-astra").strip()
+AI_PROVIDER = os.getenv("AI_PROVIDER", "gemini" if os.getenv("GEMINI_API_KEY") else "none").strip().lower()
+# Reuse provider-specific keys from existing deployments without exposing them to clients.
+AI_API_KEY = os.getenv("AI_API_KEY", "").strip() or os.getenv(
+    "GEMINI_API_KEY" if AI_PROVIDER == "gemini" else "OPENAI_API_KEY", ""
+).strip()
+AI_MODEL = os.getenv("AI_MODEL", os.getenv("GEMINI_MODEL", "gemini-3.8-flash") if AI_PROVIDER == "gemini" else "gpt-6-astra").strip()
 try:
     AI_TIMEOUT_SECONDS = max(5.0, min(float(os.getenv("AI_TIMEOUT_SECONDS", "45")), 120.0))
     AI_MAX_OUTPUT_TOKENS = max(64, min(int(os.getenv("AI_MAX_OUTPUT_TOKENS", "1200")), 2048))
