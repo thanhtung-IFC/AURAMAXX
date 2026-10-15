@@ -70,11 +70,11 @@ def calculate_match_score(round_scores: Mapping[str, float]) -> float:
     return round(total, 2)
 
 
-def determine_match_outcome(player_score: float, bot_score: float) -> float:
+def determine_match_outcome(player_score: float, bot_score: float, draw_margin: float = 0) -> float:
     """Trả về 1.0 win, 0.5 draw hoặc 0.0 loss sau khi so sánh số."""
-    if not isfinite(player_score) or not isfinite(bot_score):
+    if not all(isfinite(value) and 0 <= value <= 100 for value in (player_score, bot_score, draw_margin)):
         raise ValueError("Scores used for comparison must be numeric and finite.")
-    if player_score == bot_score:
+    if abs(player_score - bot_score) <= draw_margin + 1e-9:
         return 0.5
     return 1.0 if player_score > bot_score else 0.0
 
@@ -85,6 +85,8 @@ def calculate_elo(
     result_a: float,
     matches_a: int = NEW_PLAYER_MATCH_LIMIT,
     matches_b: int = NEW_PLAYER_MATCH_LIMIT,
+    *,
+    rating_factor: float = 1,
 ) -> tuple[int, int]:
     if elo_a < 0 or elo_b < 0:
         raise ValueError("Elo cannot be negative.")
@@ -92,15 +94,25 @@ def calculate_elo(
         raise ValueError("Match counts cannot be negative.")
     if result_a not in (0, 0.5, 1):
         raise ValueError("A match result must be a win, draw, or loss.")
-    expected_a = 1 / (1 + 10 ** ((elo_b - elo_a) / 400))
+    if not isfinite(rating_factor) or not 0 < rating_factor <= 1:
+        raise ValueError("Rating factor must be greater than zero and at most one.")
+    expected_a = expected_match_score(elo_a, elo_b)
     expected_b = 1 - expected_a
     k_a = ELO_K_NEW_PLAYER if matches_a < NEW_PLAYER_MATCH_LIMIT else ELO_K_STANDARD
     k_b = ELO_K_NEW_PLAYER if matches_b < NEW_PLAYER_MATCH_LIMIT else ELO_K_STANDARD
     result_b = 1 - result_a
     return (
-        max(0, round(elo_a + k_a * (result_a - expected_a))),
-        max(0, round(elo_b + k_b * (result_b - expected_b))),
+        max(0, round(elo_a + k_a * rating_factor * (result_a - expected_a))),
+        max(0, round(elo_b + k_b * rating_factor * (result_b - expected_b))),
     )
+
+
+def expected_match_score(elo_a: int, elo_b: int) -> float:
+    """Stable Elo expectation even when historical ratings are far apart."""
+    if elo_a < 0 or elo_b < 0:
+        raise ValueError("Elo cannot be negative.")
+    exponent = max(-10, min(10, (elo_b - elo_a) / 400))
+    return 1 / (1 + 10 ** exponent)
 
 
 RANKS = (

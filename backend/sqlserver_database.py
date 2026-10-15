@@ -17,6 +17,7 @@ TABLE_KEYS = {
     "legacy_account_links": "user_id", "data_handoffs": "id", "admin_feature_flags": "feature_key",
     "health_routines": "user_id",
     "ai_quota_settings": "id", "ai_user_quotas": "user_id", "ai_usage_events": "id",
+    "arena_bot_match_details": "match_id",
 }
 
 

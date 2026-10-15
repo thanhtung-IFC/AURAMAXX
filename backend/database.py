@@ -457,6 +457,11 @@ def initialize_database(connection_factory=None) -> None:
             );
             CREATE INDEX IF NOT EXISTS idx_arena_bot_matches_user_time
                 ON arena_bot_matches(user_id, created_at DESC);
+            CREATE TABLE IF NOT EXISTS arena_bot_match_details (
+                match_id TEXT PRIMARY KEY REFERENCES arena_bot_matches(id) ON DELETE CASCADE,
+                request_fingerprint TEXT NOT NULL,
+                details_json TEXT NOT NULL
+            );
             INSERT OR IGNORE INTO schema_version (version) VALUES (6);
             """
         )

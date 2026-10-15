@@ -4,7 +4,7 @@ const PAGES = {
   "health-hub": "Health Hub",
   "aura-ai": "Aura AI",
   progress: "Tiến trình",
-  arena: "AURA FACE ARENA",
+  arena: "Face Arena",
   "my-aura": "My Aura",
 };
 let currentRoute = null;

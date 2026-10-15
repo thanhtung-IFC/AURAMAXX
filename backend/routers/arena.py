@@ -2,6 +2,8 @@
 
 import sqlite3
 import uuid
+import json
+from hashlib import sha256
 from datetime import datetime, timezone
 from typing import Literal
 
@@ -11,13 +13,15 @@ from backend.database import get_database
 from backend.features import require_feature
 from backend.schemas import ArenaBotMatchRequest, ArenaProfileUpdate
 from backend.security import get_current_user, require_consent, require_csrf
-from backend.services.arena_bots import get_bot, public_bot_profiles, score_submitted_groups
+from backend.services.arena_bots import get_bot, public_bot_profiles, bot_scoring_rules, evaluate_bot_match
+from backend.routines import lock_routine
 from backend.services.arena_rating import (
     ELO_INITIAL,
     calculate_elo,
-    calculate_match_score,
-    calculate_weighted_score,
-    determine_match_outcome,
+    ELO_K_NEW_PLAYER,
+    ELO_K_STANDARD,
+    NEW_PLAYER_MATCH_LIMIT,
+    expected_match_score,
     rank_for_elo,
 )
 
@@ -76,8 +80,8 @@ def arena_status() -> dict[str, bool | str]:
         "profile_available": True,
         "leaderboard_available": True,
         "ranked_matches_available": False,
-        "analysis_mode": "client_side_only",
-        "message": "Ranked matches require server-verified face measurements. Face Lab currently runs locally in the browser.",
+        "analysis_mode": "practice_submitted_measurements",
+        "message": "BOT practice is available. Ranked PvP needs an authenticated match verification flow.",
     }
 
 
@@ -220,13 +224,14 @@ def _bot_match_payload(row: sqlite3.Row) -> dict:
         "elo_delta": row["elo_after"] - row["elo_before"],
         "coverage": row["coverage"],
         "created_at": row["created_at"],
+        "scoring": json.loads(row["details_json"]) if "details_json" in row.keys() and row["details_json"] else None,
     }
 
 
 @router.get("/bots")
 def list_arena_bots() -> dict:
     """Trả cấu hình BOT tĩnh; điểm và ảnh hồ sơ đều được đánh dấu mô phỏng."""
-    return {"bots": public_bot_profiles(), "simulated": True}
+    return {"bots": public_bot_profiles(), "simulated": True, "rules": bot_scoring_rules()}
 
 
 @router.get("/bot-matches/summary")
@@ -237,9 +242,19 @@ def get_bot_match_summary(
     row = connection.execute(
         "SELECT * FROM arena_bot_profiles WHERE user_id = ?", (user["id"],)
     ).fetchone()
-    if row is None:
-        return {"elo": ELO_INITIAL, "highest_elo": ELO_INITIAL, "matches_played": 0, "wins": 0, "losses": 0, "draws": 0}
-    return {key: int(row[key]) for key in ("elo", "highest_elo", "matches_played", "wins", "losses", "draws")}
+    summary = {key: int(row[key]) if row is not None else ELO_INITIAL if key in {"elo", "highest_elo"} else 0
+               for key in ("elo", "highest_elo", "matches_played", "wins", "losses", "draws")}
+    recent = connection.execute(
+        "SELECT result, elo_before, elo_after, player_score FROM arena_bot_matches WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 20",
+        (user["id"],),
+    ).fetchall()
+    summary["rank"] = rank_for_elo(summary["elo"])
+    summary["win_rate"] = round(summary["wins"] * 100 / summary["matches_played"], 1) if summary["matches_played"] else 0
+    summary["recent_form"] = [item["result"] for item in reversed(recent[:10])]
+    summary["elo_trend"] = ([recent[-1]["elo_before"]] + [item["elo_after"] for item in reversed(recent)]) if recent else [ELO_INITIAL]
+    summary["recent_elo_delta"] = summary["elo"] - recent[-1]["elo_before"] if recent else 0
+    summary["recommended_bot_id"] = min(public_bot_profiles(), key=lambda bot: abs(bot["elo"] - summary["elo"]))["id"]
+    return summary
 
 
 @router.get("/bot-matches/history")
@@ -248,7 +263,7 @@ def get_bot_match_history(
     connection: sqlite3.Connection = Depends(get_database),
 ) -> list[dict]:
     rows = connection.execute(
-        "SELECT * FROM arena_bot_matches WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT 50",
+        "SELECT m.*, d.details_json FROM arena_bot_matches m LEFT JOIN arena_bot_match_details d ON d.match_id = m.id WHERE m.user_id = ? ORDER BY m.created_at DESC, m.id DESC LIMIT 50",
         (user["id"],),
     ).fetchall()
     return [_bot_match_payload(row) for row in rows]
@@ -261,22 +276,28 @@ def create_bot_match(
     user: sqlite3.Row = Depends(get_current_user),
     connection: sqlite3.Connection = Depends(get_database),
 ) -> dict:
-    require_consent(connection, user["id"], "face_analysis")
     bot = get_bot(payload.bot_id)
     try:
-        player_score, coverage = score_submitted_groups([group.model_dump() for group in payload.groups])
+        scoring = evaluate_bot_match(bot, [group.model_dump() for group in payload.groups], payload.round_scores)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
-    # Scores come from local Face Lab and are not independently verified by this API.
+    # Submitted scores are practice inputs, not an authenticated PvP result.
     # BOT ratings/history are isolated from arena_profiles and the PvP leaderboard.
-    connection.execute("BEGIN IMMEDIATE")
+    canonical = payload.model_dump(mode="json", exclude={"request_id"})
+    canonical["groups"] = sorted(canonical["groups"], key=lambda group: group["id"])
+    fingerprint = sha256(json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    lock_routine(connection, user["id"])
     try:
+        # Share the consent lock, then check again before any Arena write.
+        require_consent(connection, user["id"], "face_analysis")
         existing = connection.execute(
-            "SELECT * FROM arena_bot_matches WHERE user_id = ? AND request_id = ?",
+            "SELECT m.*, d.details_json, d.request_fingerprint FROM arena_bot_matches m LEFT JOIN arena_bot_match_details d ON d.match_id = m.id WHERE m.user_id = ? AND m.request_id = ?",
             (user["id"], str(payload.request_id)),
         ).fetchone()
         if existing is not None:
+            if existing["bot_id"] != bot["id"] or (existing["request_fingerprint"] and existing["request_fingerprint"] != fingerprint):
+                raise HTTPException(409, "Mã trận này đã được dùng cho một kết quả khác. Hãy tạo trận mới.")
             connection.commit()
             return {**_bot_match_payload(existing), "replayed": True}
 
@@ -286,23 +307,15 @@ def create_bot_match(
         profile = connection.execute(
             "SELECT * FROM arena_bot_profiles WHERE user_id = ?", (user["id"],)
         ).fetchone()
-        bot_score = calculate_weighted_score(bot["scores"])
-        if payload.round_scores is not None:
-            round_map = {
-                "front_view": payload.round_scores[0],
-                "left_profile": payload.round_scores[1],
-                "right_profile": payload.round_scores[2],
-            }
-            bot_round_score = calculate_match_score(bot["round_scores"])
-            player_round_score = calculate_match_score(round_map)
-            result = determine_match_outcome(player_round_score, bot_round_score)
-        else:
-            result = determine_match_outcome(player_score, bot_score)
-        result_name = "win" if result == 1 else "loss" if result == 0 else "draw"
+        result_name = scoring["result"]
         elo_after, _ = calculate_elo(
-            int(profile["elo"]), int(bot["elo"]), result,
+            int(profile["elo"]), int(bot["elo"]), scoring["outcome"],
             int(profile["matches_played"]), 10,
+            rating_factor=scoring["rating_factor"],
         )
+        scoring["expected_score"] = round(expected_match_score(int(profile["elo"]), int(bot["elo"])), 4)
+        base_k = ELO_K_NEW_PLAYER if profile["matches_played"] < NEW_PLAYER_MATCH_LIMIT else ELO_K_STANDARD
+        scoring["effective_k"] = round(base_k * scoring["rating_factor"], 2)
         now = datetime.now(timezone.utc).isoformat()
         match_id = str(uuid.uuid4())
         connection.execute(
@@ -311,8 +324,12 @@ def create_bot_match(
                 elo_before, elo_after, coverage, created_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (match_id, str(payload.request_id), user["id"], bot["id"], result_name,
-             player_score, bot_score, bot["elo"], profile["elo"],
-             elo_after, coverage, now),
+             scoring["player_score"], scoring["bot_score"], bot["elo"], profile["elo"],
+             elo_after, scoring["coverage"], now),
+        )
+        connection.execute(
+            "INSERT INTO arena_bot_match_details (match_id, request_fingerprint, details_json) VALUES (?, ?, ?)",
+            (match_id, fingerprint, json.dumps(scoring, ensure_ascii=False, allow_nan=False)),
         )
         stats_column = {"win": "wins", "loss": "losses", "draw": "draws"}[result_name]
         connection.execute(
@@ -326,8 +343,10 @@ def create_bot_match(
         connection.rollback()
         raise
 
-    row = connection.execute("SELECT * FROM arena_bot_matches WHERE id = ?", (match_id,)).fetchone()
+    row = connection.execute("SELECT m.*, d.details_json FROM arena_bot_matches m LEFT JOIN arena_bot_match_details d ON d.match_id = m.id WHERE m.id = ?", (match_id,)).fetchone()
     return {**_bot_match_payload(row), "replayed": False}
+
+
 @router.post("/matches", status_code=status.HTTP_503_SERVICE_UNAVAILABLE)
 def create_ranked_match(
     _csrf: None = Depends(require_csrf),

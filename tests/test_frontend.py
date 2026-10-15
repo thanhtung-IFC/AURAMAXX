@@ -109,7 +109,9 @@ class FrontendContractTests(unittest.TestCase):
         for capability in ("detectForVideo", 'createLandmarker("IMAGE")', "stream.getTracks()", "NotReadableError", "faces.length > 1", "front.poseYaw".replace(".", "?.", 1)):
             self.assertIn(capability, face)
         self.assertIn("URL.revokeObjectURL", face)
-        self.assertIn("reportToArenaGroups(report)", face)
+        self.assertIn("submitArenaBattle()", face)
+        battle = (FRONTEND / "js/arena/battle.js").read_text(encoding="utf-8")
+        self.assertIn("reportToArenaGroups(report)", battle)
         pose = (FRONTEND / "js/face/capture-pose.js").read_text(encoding="utf-8")
         original = (PROJECT_ROOT / "assets/app.js").read_text(encoding="utf-8")
         for name in ("calcDistance", "calculateHeadPose", "evaluateCapturePose"):

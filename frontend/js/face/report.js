@@ -16,12 +16,17 @@ export function setFaceReport(report) {
 export function getFaceReport() { return latestReport; }
 
 export function reportToArenaGroups(report) {
+  const pose = report.measurement_quality?.front_pose;
+  const unreliable = pose && (Math.abs(pose.yaw_deg) > 10 || Math.abs(pose.roll_deg) > 8 || pose.clipped || pose.face_height_fraction < .25 || Math.min(pose.image_width, pose.image_height) < 320);
   const values = {
     proportions: report.proportions?.rule_of_thirds?.harmony_score,
     eyesBrows: null, nose: report.nose?.nose_aesthetic_score, lips: null,
     jawChin: report.jawline?.jawline_sharpness_score, skin: report.skin?.smoothness_score, fullness: null,
   };
-  return Object.entries(values).map(([id, score]) => ({ id, score: Number.isFinite(score) ? score : null, status: Number.isFinite(score) ? "complete" : "missing" }));
+  return Object.entries(values).map(([id, score]) => {
+    const measured = Number.isFinite(score) && score >= 0 && score <= 100;
+    return { id, score: measured && !unreliable ? score : null, status: unreliable ? "unreliable" : measured ? "complete" : "missing" };
+  });
 }
 
 export function escapeText(value) {

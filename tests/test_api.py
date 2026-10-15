@@ -2,6 +2,7 @@
 
 import http.cookiejar
 import gzip
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 import json
 import os
@@ -932,6 +933,54 @@ class ApiIntegrationTests(unittest.TestCase):
         code, summary, _ = self.request("GET", "/api/arena/bot-matches/summary")
         self.assertEqual(code, 200)
         self.assertEqual(summary["matches_played"], 0)
+
+    def test_bot_match_v2_details_replay_and_coverage(self) -> None:
+        self.register()
+        self.grant_face_consent()
+        _, catalog, _ = self.request("GET", "/api/arena/bots")
+        rookie = catalog["bots"][0]
+        measured = {"proportions", "nose", "jawChin", "skin"}
+        groups = [{"id": key, "score": value if key in measured else None,
+                   "status": "complete" if key in measured else "missing"}
+                  for key, value in rookie["scores"].items()]
+        payload = {"request_id": str(uuid4()), "bot_id": "rookie", "groups": groups}
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            responses = list(executor.map(lambda _: self.request("POST", "/api/arena/bot-matches", payload), range(2)))
+        self.assertEqual([response[0] for response in responses], [200, 200])
+        self.assertEqual(responses[0][1]["id"], responses[1][1]["id"])
+        self.assertEqual(sorted(response[1]["replayed"] for response in responses), [False, True])
+        code, match, _ = responses[0]
+        self.assertEqual(code, 200)
+        self.assertEqual(match["result"], "draw")
+        self.assertEqual(match["player_score"], match["bot_score"])
+        self.assertEqual(match["coverage"], 64)
+        self.assertEqual(match["scoring"]["effective_k"], 25.6)
+        self.assertEqual(match["scoring"]["version"], "arena-practice-v2")
+        code, replay, _ = self.request("POST", "/api/arena/bot-matches", {**payload, "groups": list(reversed(groups))})
+        self.assertEqual(code, 200)
+        self.assertEqual(replay["id"], match["id"])
+        self.assertEqual(replay["scoring"], match["scoring"])
+        changed = [dict(group) for group in groups]
+        changed[0]["score"] += 2
+        code, _, _ = self.request("POST", "/api/arena/bot-matches", {**payload, "groups": changed})
+        self.assertEqual(code, 409)
+        code, _, _ = self.request("POST", "/api/arena/bot-matches", {**payload, "bot_id": "casual"})
+        self.assertEqual(code, 409)
+        code, rounds, _ = self.request("POST", "/api/arena/bot-matches", {**payload, "request_id": str(uuid4()), "round_scores": [10, 10, 10]})
+        self.assertEqual(code, 200)
+        self.assertEqual(rounds["result"], "loss")
+        self.assertEqual(rounds["player_score"], 10)
+        self.assertEqual(rounds["bot_score"], 60.17)
+        _, stored, _ = self.request("GET", "/api/arena/bot-matches/history")
+        self.assertEqual(len(stored), 2)
+        self.assertEqual(stored[0]["scoring"], rounds["scoring"])
+        _, summary, _ = self.request("GET", "/api/arena/bot-matches/summary")
+        self.assertEqual(summary["matches_played"], 2)
+        self.assertEqual(len(summary["elo_trend"]), 3)
+        self.assertEqual(summary["elo_trend"][-1], summary["elo"])
+        self.assertIn(summary["recommended_bot_id"], [bot["id"] for bot in catalog["bots"]])
+        self.request("POST", "/api/consents", {"purpose": "face_analysis", "granted": False})
+        self.assertEqual(self.request("GET", "/api/arena/bot-matches/history")[1], [])
 
 if __name__ == "__main__":
     unittest.main()

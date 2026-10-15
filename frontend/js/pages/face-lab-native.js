@@ -6,8 +6,9 @@ import { evaluateCapturePose } from "../face/capture-pose.js";
 import { CaptureStability } from "../face/capture-stability.js";
 import { openCamera, cameraSettings, fittedFrame, CameraWorkload, CameraConfigurator } from "../face/camera.js";
 import { getPerformanceMode, setPerformanceTier, performanceHint } from "../performance.js";
-import { escapeText, renderReportDetails, reportToArenaGroups, setFaceReport } from "../face/report.js";
+import { escapeText, renderReportDetails, setFaceReport } from "../face/report.js";
 import { getSelectedArenaBotProfile as getSelectedArenaBot } from "../arena/bot-selection.js";
+import { submitArenaBattle } from "../arena/battle.js";
 
 const $ = selector => document.querySelector(selector);
 const page = document.querySelector('[data-page="face-lab"]');
@@ -18,7 +19,7 @@ let cameraConfigurator = null, lastPerformanceSync = 0, lastOverlayAt = 0, uiPro
 let frame = null, front = null, profile = null, report = null;
 let autoCapture = false, autoTimeout = 0, lastServerAt = 0, serverBusy = false, analyzing = false;
 let facingMode = "user", selectedDevice = "", lastDetectionTime = 0, challengeActive = false, challengeVerified = false;
-let botRequestId = null, knownPeople = [], uploading = false, peopleRequest = 0;
+let knownPeople = [], uploading = false, peopleRequest = 0;
 let lastVideoTime = -1, processController = null, analysisController = null, networkRetryAt = 0;
 let trackingEpoch = 0, overlayPoints = null;
 const stability = new CaptureStability();
@@ -529,12 +530,13 @@ function askAI(prompt) {
 
 async function submitBotBattle(button) {
   const bot = getSelectedArenaBot(); if (!bot || !report) return;
-  button.disabled = true; botRequestId ||= crypto.randomUUID();
+  const before = operation;
+  button.disabled = true;
   try {
-    const match = await api.post("/api/arena/bot-matches", { request_id: botRequestId, bot_id: bot.id, groups: reportToArenaGroups(report) });
-    $("#face-bot-battle-outcome").textContent = `${match.result === "win" ? "Thắng" : match.result === "draw" ? "Hòa" : "Thua"} · ${match.elo_after} ELO luyện tập`;
-    window.dispatchEvent(new CustomEvent("auramaxx:arena-refresh"));
-  } catch (error) { $("#face-bot-battle-outcome").textContent = error.message; button.disabled = false; }
+    const match = await submitArenaBattle();
+    if (before !== operation || !button.isConnected || getSelectedArenaBot()?.id !== bot.id) return;
+    $("#face-bot-battle-outcome").innerHTML = `<b>${match.result === "win" ? "Thắng" : match.result === "draw" ? "Hòa" : "Thua"}</b> · Bạn ${Number(match.player_score).toFixed(1)} / BOT ${Number(match.bot_score).toFixed(1)} · ${match.elo_after} ELO luyện tập (${match.elo_delta >= 0 ? "+" : ""}${match.elo_delta}) · <a class="text-link" href="#arena">Xem chi tiết trong Arena ↗</a>`;
+  } catch (error) { if (before === operation && button.isConnected) { $("#face-bot-battle-outcome").textContent = error.message; button.disabled = false; } }
 }
 
 function downloadReport() {
@@ -544,7 +546,7 @@ function downloadReport() {
 }
 
 function invalidateReport() {
-  report = null; botRequestId = null; setFaceReport(null);
+  report = null; setFaceReport(null);
   $("#face-result-content").replaceChildren(); $("#face-result-content").hidden = true; $("#face-result-empty").hidden = false;
 }
 
@@ -694,7 +696,7 @@ export function initFaceLab() {
   window.addEventListener("auramaxx:bot-selected", () => {
     const button = page.querySelector('[data-face-action="bot"]');
     if (!button) return;
-    const bot = getSelectedArenaBot(); botRequestId = null;
+    const bot = getSelectedArenaBot();
     button.disabled = !bot;
     page.querySelector(".face-native-bot p").textContent = bot ? `Đối thủ đã chọn: ${bot.name}` : "Chọn đối thủ trong Arena để dùng kết quả này.";
     $("#face-bot-battle-outcome").textContent = "";

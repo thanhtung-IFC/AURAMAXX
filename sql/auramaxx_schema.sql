@@ -164,6 +164,13 @@ CREATE TABLE auramaxx.arena_bot_matches (
  created_at VARCHAR(40) NOT NULL DEFAULT(CONVERT(VARCHAR(33),SYSUTCDATETIME(),126)+'+00:00'), UNIQUE(user_id,request_id)
 );
 GO
+IF OBJECT_ID(N'auramaxx.arena_bot_match_details', N'U') IS NULL
+CREATE TABLE auramaxx.arena_bot_match_details (
+ match_id NVARCHAR(128) PRIMARY KEY REFERENCES auramaxx.arena_bot_matches(id) ON DELETE CASCADE,
+ request_fingerprint VARCHAR(64) NOT NULL,
+ details_json NVARCHAR(MAX) NOT NULL
+);
+GO
 IF OBJECT_ID(N'auramaxx.health_routines', N'U') IS NULL
 CREATE TABLE auramaxx.health_routines (
  user_id NVARCHAR(128) PRIMARY KEY REFERENCES auramaxx.users(id) ON DELETE CASCADE,

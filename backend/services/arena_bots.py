@@ -4,6 +4,11 @@ from backend.services.arena_rating import (
     SCORE_WEIGHTS,
     calculate_partial_weighted_score as _calculate_partial_weighted_score,
     calculate_weighted_score,
+    calculate_match_score,
+    determine_match_outcome,
+    ELO_K_NEW_PLAYER,
+    ELO_K_STANDARD,
+    NEW_PLAYER_MATCH_LIMIT,
 )
 
 
@@ -42,6 +47,44 @@ _BOT_DATA = (
 
 BOT_PROFILES = {bot["id"]: bot for bot in _BOT_DATA}
 UNAVAILABLE_CATEGORIES = ("symmetry", "overall_harmony", "jawline")
+BOT_SCORING_VERSION = "arena-practice-v2"
+BOT_DRAW_MARGIN = 1.0
+BOT_MIN_COVERAGE = 50
+
+
+def bot_scoring_rules() -> dict:
+    return {"version": BOT_SCORING_VERSION, "draw_margin": BOT_DRAW_MARGIN,
+            "min_coverage": BOT_MIN_COVERAGE, "weights": dict(SCORE_WEIGHTS),
+            "new_player_k": ELO_K_NEW_PLAYER, "standard_k": ELO_K_STANDARD, "placement_matches": NEW_PLAYER_MATCH_LIMIT}
+
+
+def evaluate_bot_match(bot: dict, groups: list[dict], round_scores: list[float] | None = None) -> dict:
+    """Compare both sides over exactly the same measured categories or views."""
+    player_score, coverage = score_submitted_groups(groups)
+    measured = {group["id"]: group for group in groups if group["status"] in {"complete", "partial"}}
+    if round_scores is not None:
+        keys = ("front_view", "left_profile", "right_profile")
+        if len(round_scores) != len(keys):
+            raise ValueError("All three views are required.")
+        player_rounds = dict(zip(keys, round_scores))
+        player_score = calculate_match_score(player_rounds)
+        bot_score = calculate_match_score(bot["round_scores"])
+        comparison = [{"id": key, "player_score": player_rounds[key], "bot_score": bot["round_scores"][key],
+                       "weight_percent": round(100 / 3, 2), "delta": round(player_rounds[key] - bot["round_scores"][key], 2)} for key in keys]
+        mode = "three_views"
+    else:
+        bot_score, _ = _calculate_partial_weighted_score({key: bot["scores"][key] for key in measured})
+        weight = sum(SCORE_WEIGHTS[key] for key in measured)
+        comparison = [{"id": key, "player_score": measured[key]["score"], "bot_score": bot["scores"][key],
+                       "weight_percent": round(SCORE_WEIGHTS[key] / weight * 100, 2),
+                       "delta": round(measured[key]["score"] - bot["scores"][key], 2)} for key in SCORE_WEIGHTS if key in measured]
+        mode = "shared_categories"
+    outcome = determine_match_outcome(player_score, bot_score, BOT_DRAW_MARGIN)
+    return {"player_score": player_score, "bot_score": bot_score, "coverage": coverage,
+            "result": "win" if outcome == 1 else "loss" if outcome == 0 else "draw",
+            "outcome": outcome, "version": BOT_SCORING_VERSION, "mode": mode,
+            "draw_margin": BOT_DRAW_MARGIN, "comparison": comparison,
+            "rating_factor": coverage / 100}
 
 
 def get_bot(bot_id: str) -> dict:
@@ -92,6 +135,6 @@ def score_submitted_groups(groups: list[dict]) -> tuple[float, int]:
             raise ValueError("Unknown Face Lab category status.")
 
     score, coverage = _calculate_partial_weighted_score(valid_scores)
-    if coverage < 50:
+    if coverage < BOT_MIN_COVERAGE:
         raise ValueError("Face Lab coverage must be at least 50% to enter a BOT match.")
     return score, coverage
