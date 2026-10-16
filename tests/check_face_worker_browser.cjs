@@ -24,6 +24,7 @@ const server=http.createServer((request,response)=>{
   response.end(`<!doctype html><body><script type="module">
   import {createWorkerLandmarker} from '/js/face/landmarker-worker-client.js';
   import {sampleFrameLight} from '/js/face/analysis.js';
+  import {FaceAcquisition} from '/js/face/face-acquisition.js';
   const check=(condition,label)=>{if(!condition)throw new Error(label)};
   try {
     const lit=document.createElement('canvas');lit.width=100;lit.height=100;
@@ -52,7 +53,34 @@ const server=http.createServer((request,response)=>{
     const imageModel=await createWorkerLandmarker('IMAGE');
     const imageResult=await imageModel.detect(canvas);
     check(${realModel} ? imageResult.faceLandmarks.length===0 : imageResult.faceLandmarks[0][0].x===.5,'IMAGE mode works');
+    if(${realModel}){
+      const response=await fetch('https://storage.googleapis.com/mediapipe-assets/portrait.jpg');
+      check(response.ok,'official portrait fixture downloads');
+      const bitmap=await createImageBitmap(await response.blob());
+      const portrait=document.createElement('canvas');portrait.width=bitmap.width;portrait.height=bitmap.height;
+      portrait.getContext('2d').drawImage(bitmap,0,0);bitmap.close();
+      const acquisition=new FaceAcquisition();
+      check((await acquisition.detectImage(imageModel,portrait)).faceLandmarks.length===1,'real face passes anatomical validation');
+      const dimPortrait=document.createElement('canvas');dimPortrait.width=portrait.width;dimPortrait.height=portrait.height;
+      const context=dimPortrait.getContext('2d');context.drawImage(portrait,0,0);context.fillStyle='rgba(0,0,0,.8)';context.fillRect(0,0,portrait.width,portrait.height);
+      check((await acquisition.detectImage(imageModel,dimPortrait)).faceLandmarks.length===1,'real face is detected with simulated low light');
+      acquisition.release();
+    }
     imageModel.close();
+    const dim=document.createElement('canvas');dim.width=128;dim.height=128;
+    const dimContext=dim.getContext('2d'),gradient=dimContext.createLinearGradient(0,0,128,128);
+    gradient.addColorStop(0,'#111');gradient.addColorStop(1,'#444');dimContext.fillStyle=gradient;dimContext.fillRect(0,0,128,128);
+    const mesh=Array.from({length:478},()=>({x:.5,y:.5,z:0}));
+    for(const [i,x,y] of [[10,.5,.2],[152,.5,.8],[234,.3,.5],[454,.7,.5],[33,.38,.4],[263,.62,.4],[61,.44,.66],[291,.56,.66]])mesh[i]={x,y,z:0};
+    const intensity=input=>input.getContext('2d').getImageData(64,64,1,1).data[0];
+    const before=intensity(dim),times=[];
+    const recovery=new FaceAcquisition();
+    const dimDetector={detectForVideo:async(input,time)=>{times.push(time);return {faceLandmarks:intensity(input)>70?[mesh]:[]};}};
+    const recovered=await recovery.detectForVideo(dimDetector,dim,10,640);
+    check(recovered.faceLandmarks.length===1&&times.length===2&&times[1]>times[0],'real canvas exposure recovery and increasing timestamps');
+    check(intensity(dim)===before,'recovery preserves original capture pixels');
+    check((await recovery.detectForVideo(dimDetector,dim,110,640)).faceLandmarks.length===1&&times.length===3,'low-light recovery persists without extra passes');
+    recovery.release();
     document.body.dataset.result='PASS';document.body.textContent='Worker bridge passed';
   }catch(error){document.body.dataset.result='FAIL: '+error.message;}
   await fetch('/result?value='+encodeURIComponent(document.body.dataset.result));
@@ -72,6 +100,6 @@ const server=http.createServer((request,response)=>{
       while(!testResult&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,40));
       assert.equal(testResult,'PASS',(testResult||'Worker browser timed out: '+diagnostics.slice(-500))+' '+modelDiagnostic);
     }finally{edge.kill();}
-    console.log(realModel?'PASS: real MediaPipe VIDEO/IMAGE in Web Worker, bitmap transfer, recovery, cancellation and face light sampling.':'PASS: actual Web Worker, bitmap transfer, UI responsiveness, single inference, recovery, cancellation and face light sampling.');
+    console.log(realModel?'PASS: real MediaPipe VIDEO/IMAGE in Web Worker, official portrait and dimmed portrait, geometry validation, exposure recovery and cancellation.':'PASS: actual Web Worker, bitmap transfer, UI responsiveness, single inference, recovery, cancellation and face light sampling.');
   }finally{await new Promise(resolve=>server.close(resolve));}
 })().catch(error=>{console.error(error);process.exitCode=1;});

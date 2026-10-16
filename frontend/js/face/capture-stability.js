@@ -8,7 +8,8 @@ export class CaptureStability {
   reset() { this.samples = []; }
   update(landmarks, yaw, now, ready) {
     if (!ready || !Number.isFinite(yaw) || !Number.isFinite(now)) { this.reset(); return { stable: false, progress: 0 }; }
-    const nose = landmarks[1], left = landmarks[234], right = landmarks[454];
+    const nose = landmarks?.[1], left = landmarks?.[234], right = landmarks?.[454];
+    if (!nose || !left || !right) { this.reset(); return { stable: false, progress: 0 }; }
     const width = Math.abs(right.x - left.x);
     if (![nose.x, nose.y, width].every(Number.isFinite) || width < .01) { this.reset(); return { stable: false, progress: 0 }; }
     const sample = { x: nose.x, y: nose.y, width, yaw, time: now };

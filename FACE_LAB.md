@@ -19,6 +19,18 @@
   hiệu năng đo được khi chọn Tự động. Ảnh chụp giữ riêng tới cạnh dài
   1920px, đúng tỷ lệ nguồn, JPEG 0.92; không phóng lớn nguồn độ phân giải thấp.
   Landmark chuẩn hóa và ảnh chụp vẫn thuộc cùng khung hình đã xử lý.
+- Bắt mặt dùng ngưỡng detection 0.45, presence/tracking 0.5. Nếu không thấy mặt,
+  thử lại toàn bộ cùng khung hình ở cạnh dài tối thiểu 960px (không phóng lớn
+  nguồn), tối đa một lượt bổ sung mỗi 500 ms. Giữ độ phân giải tìm lại trong
+  1.5 giây (kèm chỉnh sáng nếu cần) để đủ thời gian ổn định khi chụp, sau đó
+  quay về mức hoạt động đã chọn.
+- Lượt tìm lại có chỉnh gamma/tương phản giới hạn khi thiếu sáng, dư sáng hoặc
+  ít tương phản; bỏ qua ảnh gần như trống và lượt suy luận trùng cấu hình.
+  Ảnh tải lên cũng có lượt sửa sáng khi cần. Chỉ ảnh đưa vào model được chỉnh;
+  ảnh chụp và kiểm tra sáng/nét vẫn dùng ảnh gốc.
+- Kiểm tra landmark hữu hạn và quan hệ mắt–mũi–miệng–cằm trước khi gửi nhận diện
+  hoặc cho chụp. Không lấy landmark cũ khi mất mặt và không loại riêng một mặt
+  khỏi kết quả nhiều người để cho ảnh nhóm vượt qua điều kiện chụp.
 - Dùng `requestVideoFrameCallback()` nếu có, bộ hẹn giờ nếu thiếu; không nhận
   diện trùng frame hoặc chạy chồng phiên khi đổi camera. Khi video đổi kích thước
   (ví dụ xoay điện thoại), bỏ kết quả cũ và yêu cầu giữ yên lại. Khung căn mặt
@@ -55,9 +67,15 @@ $env:FACE_DATABASE_PATH="$PWD/.test-output/face-algorithm-import.sqlite3"
 $env:AURAMAXX_DB_BACKEND='sqlite'
 .\.venv\Scripts\python.exe -B -m unittest tests.test_face_measurements tests.test_algorithm_pipeline tests.test_frontend tests.test_api tests.test_health_hub tests.test_vision_context
 node tests/test_capture_stability.cjs
+node tests/test_face_acquisition.cjs
 node tests/test_camera.cjs
 node tests/check_face_worker_browser.cjs
 node tests/browser_unified_smoke.cjs
+
+# Chỉ chạy phần Face Lab của kiểm thử website hợp nhất.
+$env:FACE_TEST_CAPTURE_ONLY='1'
+node tests/browser_unified_smoke.cjs
+Remove-Item Env:FACE_TEST_CAPTURE_ONLY
 
 # Kiểm tra model MediaPipe thật, dùng ảnh trống; cần kết nối CDN/Google.
 $env:FACE_TEST_REAL_MODEL='1'
@@ -67,8 +85,10 @@ Remove-Item Env:FACE_TEST_REAL_MODEL
 
 Các bài hình học dùng dữ liệu tổng hợp để kiểm tra bất biến theo độ phân giải,
 xoay trong mặt phẳng và vị trí đồng tử. Kiểm thử trình duyệt dùng camera/landmark
-giả lập; phép kiểm tra model thật xác nhận khởi tạo, truyền ảnh, VIDEO/IMAGE và
-hủy tác vụ, không đo độ chính xác nhận diện trên khuôn mặt thật.
+giả lập. Phép kiểm tra model thật xác nhận khởi tạo, truyền ảnh, VIDEO/IMAGE,
+hủy tác vụ, nhận diện ảnh chân dung mẫu chính thức của MediaPipe và bản giả lập
+thiếu sáng của ảnh đó. Đây là kiểm tra tích hợp, chưa phải đánh giá độ chính xác
+trên một tập ảnh đại diện cho người dùng.
 
 Chưa có tập ảnh gắn nhãn và số đo chuẩn để công bố phần trăm chính xác tăng thêm.
 Điểm tổng hợp vẫn là chỉ số theo quy tắc, không phải phép đo chuẩn lâm sàng.

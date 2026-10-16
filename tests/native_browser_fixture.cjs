@@ -69,8 +69,9 @@ exports.injection = `(() => {
 
 exports.model = `export async function createLandmarker(mode='VIDEO') {
   if(mode==='IMAGE' && window.__fixtureImageDelay) await new Promise(resolve=>setTimeout(resolve,window.__fixtureImageDelay));
-  const detect = source => ({faceLandmarks:Array.from({length:window.__fixtureFaceCount},()=>{
+  const detect = source => ({faceLandmarks:Array.from({length:source.width < (window.__fixtureMinInputWidth || 0) ? 0 : window.__fixtureFaceCount},()=>{
     const points=window.__fixtureFace();
+    if(window.__fixtureInvalidFace)points[200].x=NaN;
     if(window.__fixtureMarker)points[477].z=source.getContext('2d').getImageData(8,8,1,1).data[0]/255;
     return points;
   })});

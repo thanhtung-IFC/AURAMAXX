@@ -4,6 +4,7 @@ import { createLandmarker } from "../face/landmarker.js";
 import { drawLandmarkOverlay, sampleFrameLight } from "../face/analysis.js";
 import { evaluateCapturePose } from "../face/capture-pose.js";
 import { CaptureStability } from "../face/capture-stability.js";
+import { FaceAcquisition } from "../face/face-acquisition.js";
 import { openCamera, cameraSettings, fittedFrame, CameraWorkload, CameraConfigurator } from "../face/camera.js";
 import { getPerformanceMode, setPerformanceTier, performanceHint } from "../performance.js";
 import { escapeText, renderReportDetails, setFaceReport } from "../face/report.js";
@@ -27,6 +28,7 @@ const sourceCanvas = document.createElement("canvas");
 const captureCanvas = document.createElement("canvas");
 const lightCanvas = document.createElement("canvas");
 const inferenceCanvas = document.createElement("canvas");
+const acquisition = new FaceAcquisition({ inferenceCanvas });
 const workload = new CameraWorkload();
 const mobileViewport = window.matchMedia("(max-width: 760px)");
 let mobileActionBar = null;
@@ -288,7 +290,7 @@ function stopCamera() {
   $("#face-challenge-message").textContent = "Bật camera và bắt đầu liveness để xác thực.";
   if (stream) stream.getTracks().forEach(track => track.stop());
   stream = null; resetStability();
-  overlayPoints = null;
+  overlayPoints = null; acquisition.reset();
   setText("#face-capture-hint", front ? "Ảnh đã chụp được giữ lại. Bật camera để chụp thêm." : "Bật camera và giữ yên trong giây lát.");
   for (const id of ["face-quality-light", "face-quality-detail", "face-quality-pose", "face-quality-motion"]) { $(`#${id}`).dataset.state = "idle"; }
   setText("#face-quality-light", "Chờ kiểm tra ánh sáng"); setText("#face-quality-detail", "Chờ kiểm tra độ nét"); setText("#face-quality-pose", "Chờ căn góc chụp"); setText("#face-quality-motion", "Chờ khung hình ổn định");
@@ -410,12 +412,8 @@ async function scanFrame() {
       if (sourceCanvas.width !== width) sourceCanvas.width = width;
       if (sourceCanvas.height !== height) sourceCanvas.height = height;
       sourceCanvas.getContext("2d").drawImage(video, 0, 0, sourceCanvas.width, sourceCanvas.height);
-      const input = fittedFrame(width, height, workload.longestEdge);
-      if (inferenceCanvas.width !== input.width) inferenceCanvas.width = input.width;
-      if (inferenceCanvas.height !== input.height) inferenceCanvas.height = input.height;
-      inferenceCanvas.getContext("2d").drawImage(sourceCanvas, 0, 0, input.width, input.height);
       const now = Math.max(performance.now(), lastDetectionTime + 1); lastDetectionTime = now;
-      const faces = (await detector.detectForVideo(inferenceCanvas, now)).faceLandmarks || [];
+      const faces = (await acquisition.detectForVideo(detector, sourceCanvas, now, workload.longestEdge)).faceLandmarks;
       if (id !== operation || !stream || format !== formatEpoch) return;
       if (faces.length !== 1) {
         trackingEpoch++; overlayPoints = null; processController?.abort();
@@ -624,7 +622,10 @@ async function uploadImage(event) {
     canvas.width = Math.round(bitmap.width * scale); canvas.height = Math.round(bitmap.height * scale); canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height); bitmap.close();
     imageDetector = await createLandmarker("IMAGE");
     if (id !== operation) return;
-    const faces = (await imageDetector.detect(canvas)).faceLandmarks || [];
+    const imageAcquisition = new FaceAcquisition();
+    let faces;
+    try { faces = (await imageAcquisition.detectImage(imageDetector, canvas)).faceLandmarks; }
+    finally { imageAcquisition.release(); }
     if (id !== operation) return;
     if (faces.length !== 1) throw new Error(faces.length ? "Ảnh có nhiều khuôn mặt. Chọn ảnh chỉ có một người." : "Không tìm thấy khuôn mặt trong ảnh. Chọn ảnh chính diện rõ hơn.");
     const pose = evaluateCapturePose(faces[0], 1, 0, canvas.width / canvas.height);
@@ -648,6 +649,7 @@ function clearSensitiveView() {
   $("#face-challenge-progress").value = 0; $("#face-match").textContent = "Chưa nhận diện";
   for (const id of ["face-ear", "face-mar", "face-yaw"]) $(`#${id}`).textContent = "—";
   detector?.close(); detector = null;
+  acquisition.release();
   for (const canvas of [sourceCanvas, captureCanvas, lightCanvas, inferenceCanvas]) { canvas.width = 1; canvas.height = 1; }
 }
 
@@ -673,7 +675,7 @@ export function initFaceLab() {
     void changeCamera(next?.value || "");
   });
   $("#face-mirror").addEventListener("change", () => { mirrorChosen = true; mirrorCamera(); });
-  $("#face-video").addEventListener("resize", () => { formatEpoch++; lastVideoTime = -1; lastOverlayAt = 0; resetStability(); overlayPoints = null; showCameraSettings(); });
+  $("#face-video").addEventListener("resize", () => { formatEpoch++; lastVideoTime = -1; lastOverlayAt = 0; acquisition.reset(); resetStability(); overlayPoints = null; showCameraSettings(); });
   if (typeof ResizeObserver === "function") new ResizeObserver(updateCameraGuide).observe($("#face-camera-stage"));
   else window.addEventListener("resize", updateCameraGuide, { passive: true });
   $("#face-capture").addEventListener("click", captureShot);

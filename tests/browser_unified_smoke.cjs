@@ -171,6 +171,17 @@ function cdp(ws, exceptions) {
     assert.equal(await evaluate(`document.querySelector('#face-capture').disabled`),true);
     await evaluate(`window.__fixtureFaceCount=1`);
     await until(() => evaluate(`!document.querySelector('#face-capture').disabled`),'stable frontal capture');
+    await evaluate(`window.__fixtureMinInputWidth=900;document.querySelector('#face-performance-mode').value='economy';document.querySelector('#face-performance-mode').dispatchEvent(new Event('change'))`);
+    await until(() => evaluate(`window.__fixtureLastInput.width>=960 && !document.querySelector('#face-capture').disabled`),'missed small face recovers at higher resolution and settles');
+    assert.equal(await evaluate(`window.__fixtureMaxInFlight`),1,'recovery never overlaps inference');
+    await evaluate(`window.__fixtureMinInputWidth=0;window.__fixtureInvalidFace=true`);
+    await until(() => evaluate(`document.querySelector('#face-live-state').textContent.includes('Chưa thấy') && document.querySelector('#face-capture').disabled`),'invalid mesh blocks capture');
+    const invalidRequests=await evaluate(`window.__visionRequests.filter(item=>item.url.endsWith('/process')).length`);
+    await pause(650);
+    assert.equal(await evaluate(`window.__visionRequests.filter(item=>item.url.endsWith('/process')).length`),invalidRequests,'invalid landmarks never reach identity matching');
+    await evaluate(`window.__fixtureInvalidFace=false;window.__fixtureFaceCount=0`);
+    await until(() => evaluate(`document.querySelector('#face-capture').disabled && document.querySelector('#face-match').textContent==='Chưa nhận diện'`),'lost face cannot keep capture or identity readiness');
+    await evaluate(`window.__fixtureFaceCount=1;document.querySelector('#face-performance-mode').value='auto';document.querySelector('#face-performance-mode').dispatchEvent(new Event('change'))`);
     await until(() => evaluate(`document.querySelector('[data-page="face-lab"]').dataset.performancePhase==='ready' && document.documentElement.dataset.performanceTier==='quality' && document.querySelector('#face-video').videoWidth===1920 && !document.querySelector('#face-capture').disabled`),'automatic calibration selects Full HD on a responsive device');
     assert.equal(await evaluate(`document.querySelector('#face-video').videoWidth===1920 && document.querySelector('#face-camera-info').textContent.includes('1920 × 1080')`),true,'Full HD auto mode and actual camera settings');
     assert.equal(await evaluate(`window.__fixtureLastInput.width===960 && window.__fixtureMaxInFlight===1`),true,'small serialized inference with full-resolution camera');
@@ -334,6 +345,11 @@ function cdp(ws, exceptions) {
     await pause(500);
     assert.equal(await evaluate(`document.documentElement.scrollWidth <= innerWidth+1`),true);
     fs.writeFileSync(path.join(outputRoot,'native-face-mobile.png'),Buffer.from((await send('Page.captureScreenshot',{format:'png'})).data,'base64'));
+    if (process.env.FACE_TEST_CAPTURE_ONLY === '1') {
+      assert.deepEqual(exceptions, [], 'uncaught browser errors during Face Lab capture');
+      console.log('PASS: native Face Lab camera, bounded face recovery, invalid/multiple/lost faces, blur rejection, full-resolution frame pairing, profiles, liveness, reports and image uploads. Devices/landmarks use test fixtures.');
+      return;
+    }
     await route('health-hub');
     await until(() => evaluate(`document.querySelectorAll('#routine-task-list .routine-task').length === 4`),'routine retained after route change');
     await evaluate(`window.scrollTo({top:0,behavior:'instant'})`);

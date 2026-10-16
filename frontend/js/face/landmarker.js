@@ -24,9 +24,9 @@ export async function createDirectLandmarker(runningMode = "VIDEO") {
   const options = {
     runningMode,
     numFaces: 2,
-    minFaceDetectionConfidence: 0.55,
-    minFacePresenceConfidence: 0.55,
-    minTrackingConfidence: 0.55,
+    minFaceDetectionConfidence: 0.45,
+    minFacePresenceConfidence: 0.5,
+    minTrackingConfidence: 0.5,
   };
 
   try {
