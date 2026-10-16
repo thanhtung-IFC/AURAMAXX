@@ -15,6 +15,7 @@ let accessId = 0;
 let identityId = 0;
 let isLoading = false;
 let conversationListId = 0;
+let scrollFrame = 0, composerFrame = 0, lastChatScrollTop = 0;
 
 const $ = (selector) => document.querySelector(selector);
 const body = () => $("#chat-body");
@@ -92,7 +93,14 @@ function safeMarkdown(source) {
 
 function scrollToLatest() {
   const container = body();
-  if (!container.dataset.readingEarlier) container.scrollTop = container.scrollHeight;
+  if (scrollFrame || container.dataset.readingEarlier || container.closest("[hidden]") || document.hidden || window.location.hash !== "#aura-ai") return;
+  scrollFrame = requestAnimationFrame(() => {
+    scrollFrame = 0;
+    if (!container.dataset.readingEarlier && !container.closest("[hidden]") && !document.hidden) {
+      container.scrollTop = container.scrollHeight;
+      lastChatScrollTop = container.scrollTop;
+    }
+  });
 }
 
 function showWelcome(show) {
@@ -143,6 +151,7 @@ function renderMessages(messages) {
   body().querySelectorAll(".chat-message").forEach((node) => node.remove());
   showWelcome(messages.length === 0);
   delete body().dataset.readingEarlier;
+  lastChatScrollTop = 0;
   const fragment = document.createDocumentFragment();
   for (const message of messages) {
     const rendered = addMessage(message.role, message.content, { target: fragment, scroll: false });
@@ -351,6 +360,7 @@ async function sendMessage(event) {
   // This also keeps rejected questions out of conversation titles.
   body().querySelectorAll("[data-unsaved]").forEach(node => node.remove());
   delete body().dataset.readingEarlier;
+  lastChatScrollTop = 0;
   showWelcome(false);
   const userMessage = addMessage("user", message);
   const assistant = addMessage("assistant", "", { streaming: true });
@@ -565,8 +575,13 @@ export function initAuraAI() {
   });
   body().addEventListener("scroll", () => {
     const container = body();
-    if (container.scrollHeight - container.scrollTop - container.clientHeight > 100) container.dataset.readingEarlier = "true";
-    else delete container.dataset.readingEarlier;
+    if (container.closest("[hidden]") || document.hidden) return;
+    const top = container.scrollTop, distance = container.scrollHeight - top - container.clientHeight;
+    // Scroll anchoring and delayed events from a previous render are not an
+    // instruction to stop following. An upward scroll preserves reading position.
+    if (distance <= 100) delete container.dataset.readingEarlier;
+    else if (top < lastChatScrollTop - 1 || container.dataset.readingEarlier) container.dataset.readingEarlier = "true";
+    lastChatScrollTop = top;
   }, { passive: true });
   window.addEventListener("auramaxx:face-report-changed", updateReport);
   $("#chat-form").addEventListener("submit", (event) => void sendMessage(event));
@@ -575,8 +590,13 @@ export function initAuraAI() {
   $("#chat-delete-current").addEventListener("click", () => void deleteCurrentConversation());
   $("#chat-clear-history").addEventListener("click", () => void clearHistory());
   $("#chat-input").addEventListener("input", (event) => {
-    event.currentTarget.style.height = "auto";
-    event.currentTarget.style.height = `${Math.min(event.currentTarget.scrollHeight, 150)}px`;
+    const input = event.currentTarget;
+    if (!composerFrame) composerFrame = requestAnimationFrame(() => {
+      composerFrame = 0;
+      if (input.closest("[hidden]")) return;
+      input.style.height = "auto";
+      input.style.height = `${Math.min(input.scrollHeight, 150)}px`;
+    });
     setAvailability();
   });
   $("#chat-input").addEventListener("keydown", onComposerKeydown);

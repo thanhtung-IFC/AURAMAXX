@@ -32,7 +32,9 @@ function renderRoute() {
 
   document.querySelector("#page-breadcrumb").textContent = PAGES[selected];
   document.title = `${PAGES[selected]} · AURAMAXX`;
-  window.scrollTo({ top: 0, behavior: document.documentElement.dataset.reducedMotion === "true" ? "auto" : "smooth" });
+  // Reset before painting the new page; animating a scroll across different
+  // page heights competes with its entrance and can show the wrong section.
+  window.scrollTo({ top: 0, behavior: "instant" });
   document.dispatchEvent(new CustomEvent("auramaxx:routechange", { detail: { route: selected } }));
 }
 

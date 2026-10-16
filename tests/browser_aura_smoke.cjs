@@ -51,6 +51,7 @@ function installMocks() {
         state.liveAnswer = Array.from({ length: 120 }, (_, index) => `Ý ${index + 1}: thử tiếng Việt.\n`).join('');
         return new Response(new ReadableStream({ start(controller) {
           for (const text of state.liveAnswer) controller.enqueue(frame({ type: 'delta', text }));
+          state.pushLive = text => { state.liveAnswer += text; controller.enqueue(frame({ type: 'delta', text })); };
           state.finishLive = () => {
             state.messages[body.conversation_id].push({ role: 'user', content: body.message }, { role: 'assistant', content: state.liveAnswer });
             const conversation = state.conversations.find(item => item.id === body.conversation_id);
@@ -187,6 +188,19 @@ const server = http.createServer((request, response) => {
     assert.equal(await evaluate(`document.querySelector('#chat-stop').hidden`), false, 'stream is still active');
     assert.ok(await evaluate(`liveUpdates<20`), 'thousands of small deltas are batched into animation frames');
     assert.equal(await evaluate(`__aura.requests.filter(item=>item.pathname.endsWith('/chat')).at(-1).body.response_style`), 'thorough');
+    await until(() => evaluate(`(()=>{const chat=document.querySelector('#chat-body');return chat.scrollHeight-chat.scrollTop-chat.clientHeight<2;})()`),'stream follows the latest text after the frame update').catch(async error=>{
+      const state=await evaluate(`(()=>{const chat=document.querySelector('#chat-body');return {top:chat.scrollTop,height:chat.scrollHeight,client:chat.clientHeight,readingEarlier:chat.dataset.readingEarlier,hidden:!!chat.closest('[hidden]'),overflow:getComputedStyle(chat).overflowY};})()`);
+      throw new Error(error.message+': '+JSON.stringify(state));
+    });
+    await evaluate(`document.querySelector('#chat-body').scrollTop=0`);
+    await until(() => evaluate(`document.querySelector('#chat-body').dataset.readingEarlier==='true'`),'scrolling up pauses automatic following');
+    await evaluate(`__aura.pushLive(' Thêm nội dung trong lúc đang đọc phía trên.')`);
+    await until(() => evaluate(`document.querySelector('.chat-message-assistant .chat-message-content').textContent===__aura.liveAnswer`),'new text renders while reading earlier messages');
+    assert.equal(await evaluate(`document.querySelector('#chat-body').scrollTop`),0,'new streamed text does not pull the reader back down');
+    await evaluate(`document.querySelector('#chat-body').scrollTop=document.querySelector('#chat-body').scrollHeight`);
+    await until(() => evaluate(`!document.querySelector('#chat-body').dataset.readingEarlier`),'returning to the bottom resumes following');
+    await evaluate(`__aura.pushLive(' Nội dung mới nhất.')`);
+    await until(() => evaluate(`(()=>{const chat=document.querySelector('#chat-body');return document.querySelector('.chat-message-assistant .chat-message-content').textContent===__aura.liveAnswer&&chat.scrollHeight-chat.scrollTop-chat.clientHeight<2;})()`),'following resumes for later streamed text');
     await evaluate(`__aura.finishLive()`);
     await until(() => evaluate(`document.querySelector('#chat-stop').hidden`), 'live stream finished');
     assert.equal(await evaluate(`document.querySelector('.chat-message-assistant .chat-message-content').textContent.includes('Ý 120: thử tiếng Việt.')`), true, 'final render keeps the last delta');
@@ -234,6 +248,6 @@ const server = http.createServer((request, response) => {
     await until(() => evaluate(`document.querySelector('#chat-access-notice').textContent.includes('đồng ý')`), 'consent revoked');
     assert.equal(await evaluate(`document.querySelectorAll('.chat-message').length`), 0, 'revocation clears visible messages');
     assert.deepEqual(errors, []);
-    console.log('PASS: Aura desktop/mobile/light, live frame batching, immediate composer release, response styles, parallel readiness, SSE UTF-8/CRLF/EOF, Markdown/XSS, CSRF, history/search, retry, stop, service status and consent.');
+    console.log('PASS: Aura desktop/mobile/light, live frame batching, reader scroll position and resumed following, immediate composer release, response styles, parallel readiness, SSE UTF-8/CRLF/EOF, Markdown/XSS, CSRF, history/search, retry, stop, service status and consent.');
   } finally { ws?.close(); edge?.kill(); await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

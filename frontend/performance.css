@@ -10,6 +10,24 @@
 :root[data-performance-tier="economy"] .hero-panel,
 :root[data-performance-tier="economy"] .feature-card { box-shadow: none; }
 :root[data-performance-tier="economy"] body::before { display: none; }
+:root[data-performance-tier="economy"] .chat-message,
+:root[data-performance-tier="economy"] .modal[open],
+:root[data-performance-tier="economy"] .toast,
+:root[data-performance-tier="economy"] .face-camera-stage::after { animation: none; }
+:root[data-performance-tier="economy"] .face-score-track i { transition: none; }
+:root[data-document-hidden="true"] *,
+:root[data-document-hidden="true"] *::before,
+:root[data-document-hidden="true"] *::after { animation-play-state: paused !important; }
+:root[data-reduced-motion="true"] { scroll-behavior: auto; }
+:root[data-reduced-motion="true"] *,
+:root[data-reduced-motion="true"] *::before,
+:root[data-reduced-motion="true"] *::after {
+  animation-duration: .01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: .01ms !important;
+  transition-delay: 0s !important;
+  scroll-behavior: auto !important;
+}
 .face-performance-control, .face-performance-status { grid-column: 1 / -1; }
 [data-page="face-lab"] .face-performance-status { margin: 0; font-size: 12px; color: var(--color-text-muted); line-height: 1.7; }
 .aura-performance-row select { flex: 0 0 220px; max-width: 220px; }

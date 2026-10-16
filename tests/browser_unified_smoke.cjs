@@ -296,6 +296,11 @@ function cdp(ws, exceptions) {
     await route('face-lab');
     await click('[data-face-action="bot"]');
     await until(() => evaluate(`document.querySelector('#face-bot-battle-outcome').textContent.includes('ELO')`),'BOT uses original report measurements');
+    if (process.env.FACE_TEST_CAPTURE_ONLY === '1') {
+      assert.deepEqual(exceptions, [], 'uncaught browser errors during Face Lab capture');
+      console.log('PASS: native Face Lab camera, bounded face recovery, invalid/multiple/lost faces, blur rejection, full-resolution frame pairing, profiles, liveness and multi-view reports. Devices/landmarks use test fixtures.');
+      return;
+    }
     await click('[data-face-action="routine"]');
     await until(() => evaluate(`location.hash === '#health-hub' && !document.querySelector('#routine-use-report').disabled`),'routine is integrated into Health Hub');
     assert.equal(await evaluate(`document.querySelectorAll('#routine-task-list .routine-task').length`),0,'report does not save without explicit choice');
@@ -345,11 +350,6 @@ function cdp(ws, exceptions) {
     await pause(500);
     assert.equal(await evaluate(`document.documentElement.scrollWidth <= innerWidth+1`),true);
     fs.writeFileSync(path.join(outputRoot,'native-face-mobile.png'),Buffer.from((await send('Page.captureScreenshot',{format:'png'})).data,'base64'));
-    if (process.env.FACE_TEST_CAPTURE_ONLY === '1') {
-      assert.deepEqual(exceptions, [], 'uncaught browser errors during Face Lab capture');
-      console.log('PASS: native Face Lab camera, bounded face recovery, invalid/multiple/lost faces, blur rejection, full-resolution frame pairing, profiles, liveness, reports and image uploads. Devices/landmarks use test fixtures.');
-      return;
-    }
     await route('health-hub');
     await until(() => evaluate(`document.querySelectorAll('#routine-task-list .routine-task').length === 4`),'routine retained after route change');
     await evaluate(`window.scrollTo({top:0,behavior:'instant'})`);

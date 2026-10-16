@@ -51,6 +51,7 @@ node tests/test_camera.cjs
 .\.venv\Scripts\python.exe -X utf8 -B -m unittest tests.test_frontend
 node tests/browser_unified_smoke.cjs
 node tests/browser_aura_smoke.cjs
+node tests/browser_performance_smoke.cjs
 ```
 
 Các bài kiểm tra bao gồm làm nóng, phân hạng ban đầu, áp lực UI, hạ/nâng có thời
@@ -63,6 +64,34 @@ API đối chiếu: [applyConstraints](https://developer.mozilla.org/en-US/docs/
 [performance.now](https://developer.mozilla.org/en-US/docs/Web/API/Performance/now),
 [hardwareConcurrency](https://developer.mozilla.org/en-US/docs/Web/API/Navigator/hardwareConcurrency),
 [deviceMemory](https://developer.mozilla.org/en-US/docs/Web/API/Navigator/deviceMemory).
+
+## Chuyển động giao diện
+
+- Hiệu ứng xuất hiện chỉ theo dõi trang đang mở. Các thay đổi DOM được gộp vào
+  một lượt mỗi frame; cây con đã nằm trong một vùng cập nhật không bị quét lại.
+  Chuyển trang giải phóng observer cũ và theo dõi lại nội dung chưa xuất hiện
+  khi quay về. Nội dung sắp đi vào màn hình được chuẩn bị trước 72px.
+- Chuyển trang đặt vị trí cuộn về đầu ngay và dùng hiệu ứng opacity 220ms;
+  không chạy cuộn dài đồng thời với hiệu ứng vào trang. Hiệu ứng thẻ dùng
+  opacity/transform trong 260ms, bỏ `will-change` thường trực. Kết thúc hiệu ứng
+  trả transform về `none` để nút cố định trên điện thoại bám đúng viewport.
+- Thanh điểm dùng scale thay cho hoạt ảnh chiều rộng. Chế độ Tiết kiệm không
+  chạy observer xuất hiện hoặc các hiệu ứng trang, tin nhắn, hộp thoại và toast.
+  Chỉ báo đang tải vẫn hoạt động.
+- Lựa chọn Giảm chuyển động của ứng dụng và hệ điều hành áp dụng ngay, có thể
+  bật lại trong cùng phiên. Khi tab bị ẩn, dừng hiệu ứng CSS và giải phóng observer;
+  khi quay lại, tiếp tục theo dõi trang đang mở.
+- Cuộn theo tin nhắn AI và tự đổi chiều cao ô nhập được gộp theo frame. Khi đang
+  đọc tin nhắn phía trên hoặc đã rời trang chat, nội dung mới không kéo vị trí cuộn.
+  Sự kiện cuộn đến muộn do thay nội dung không bị nhầm với thao tác cuộn lên;
+  quay xuống cuối hội thoại sẽ tiếp tục theo dõi câu trả lời đang phát.
+
+Kiểm tra trình duyệt bao gồm các tình huống trên, chuyển trang trong khi tải
+module và luồng chat với nhiều mảnh phản hồi. Đây là kiểm tra hành vi bằng Edge
+headless, chưa phải phép đo FPS trên mọi máy và điện thoại thật.
+
+Nguyên tắc hoạt ảnh đối chiếu: [hướng dẫn của Chrome/web.dev](https://web.dev/articles/animations-guide),
+[Intersection Observer](https://developer.mozilla.org/en-US/docs/Web/API/Intersection_Observer_API).
 
 ## Rà soát mã nguồn ngày 15/10/2026
 

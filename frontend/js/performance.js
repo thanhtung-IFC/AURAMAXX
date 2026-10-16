@@ -10,7 +10,10 @@ export function getPerformanceMode() { return mode; }
 export function setPerformanceTier(value) {
   if (!["economy", "balanced", "quality"].includes(value)) return;
   tier = value;
-  if (document.documentElement.dataset.performanceTier !== tier) document.documentElement.dataset.performanceTier = tier;
+  if (document.documentElement.dataset.performanceTier !== tier) {
+    document.documentElement.dataset.performanceTier = tier;
+    window.dispatchEvent(new CustomEvent("auramaxx:performance-tier", { detail: { tier } }));
+  }
 }
 function applyMode() {
   document.documentElement.dataset.performanceMode = mode;
@@ -28,6 +31,9 @@ export function setPerformanceMode(value) {
 export function initPerformance() {
   try { const saved = localStorage.getItem(STORAGE_KEY); if (MODES.includes(saved)) mode = saved; } catch { /* Defaults work without storage. */ }
   applyMode();
+  const visibility = () => { document.documentElement.dataset.documentHidden = String(document.hidden); };
+  document.addEventListener("visibilitychange", visibility);
+  visibility();
   document.addEventListener("change", event => {
     if (event.target.matches?.("[data-performance-mode-select]")) setPerformanceMode(event.target.value);
   });

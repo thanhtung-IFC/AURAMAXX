@@ -79,6 +79,14 @@ async function until(fn, label) {
     await send('Runtime.enable');
     await send('Page.addScriptToEvaluateOnNewDocument', { source: `(() => {
       window.__requests = []; window.__pendingRequests = 0; window.__lastRequest = 0;
+      window.__motionTargets = new Set();
+      const NativeObserver = window.IntersectionObserver;
+      window.IntersectionObserver = class extends NativeObserver {
+        constructor(...args) { super(...args); this.targets = new Set(); }
+        observe(target) { this.targets.add(target); window.__motionTargets.add(target); super.observe(target); }
+        unobserve(target) { this.targets.delete(target); window.__motionTargets.delete(target); super.unobserve(target); }
+        disconnect() { for (const target of this.targets) window.__motionTargets.delete(target); this.targets.clear(); super.disconnect(); }
+      };
       const original = window.fetch.bind(window);
       window.fetch = async (...args) => {
         const url = new URL(String(args[0]), location.href).pathname;
@@ -198,8 +206,59 @@ async function until(fn, label) {
     await until(() => evaluate(`document.querySelectorAll('.habit-record').length === 0`), 'habit deleted');
     await settled();
     assert.equal(await evaluate(`window.__requests.filter(url => url === '/api/habits').length`), 1, 'one GET after deleting');
+
+    // Exercise the actual reveal controller, CSS, preferences and scroll lifecycle.
+    await route('home');
+    await evaluate(`(async()=>{const {setPerformanceMode}=await import('/js/performance.js');setPerformanceMode('balanced');})()`);
+    await until(() => evaluate(`document.documentElement.classList.contains('motion-ready')`), 'motion enabled');
+    assert.equal(await evaluate(`[...window.__motionTargets].every(node=>node.closest('[data-page]').dataset.page==='home')`),true,'only the active page has intersection targets');
+    await evaluate(`(()=>{
+      const hidden=document.createElement('article');hidden.id='motion-hidden-fixture';hidden.className='feature-card';
+      document.querySelector('[data-page="arena"]').append(hidden);
+      const spacer=document.createElement('div');spacer.style.height='1800px';
+      const card=document.createElement('article');card.id='motion-return-fixture';card.className='face-camera-panel';card.textContent='Motion fixture';card.style.minHeight='100px';
+      document.querySelector('[data-page="home"]').append(spacer,card);
+    })()`);
+    await until(() => evaluate(`window.__motionTargets.has(document.querySelector('#motion-return-fixture'))`),'offscreen element queued for reveal');
+    assert.equal(await evaluate(`document.querySelector('#motion-hidden-fixture').classList.contains('motion-reveal')`),false,'hidden page DOM changes do not trigger reveal work');
+    assert.equal(await evaluate(`getComputedStyle(document.querySelector('#motion-return-fixture')).willChange`),'auto','offscreen cards do not retain GPU layer hints');
+    await route('arena');
+    assert.equal(await evaluate(`window.__motionTargets.has(document.querySelector('#motion-return-fixture'))`),false,'leaving a page disconnects pending reveals');
+    await route('home');
+    await until(() => evaluate(`window.__motionTargets.has(document.querySelector('#motion-return-fixture'))`),'unseen content is observed again after returning');
+    await evaluate(`document.querySelector('#motion-return-fixture').scrollIntoView({behavior:'instant',block:'center'})`);
+    await until(() => evaluate(`document.querySelector('#motion-return-fixture').classList.contains('is-visible')`),'returned content reveals on scroll');
+
+    await evaluate(`(async()=>{const {setReducedMotion}=await import('/js/theme.js');setReducedMotion(true);})()`);
+    assert.equal(await evaluate(`!document.documentElement.classList.contains('motion-ready') && window.__motionTargets.size===0`),true,'manual reduced motion disconnects decorative work');
+    assert.ok(await evaluate(`parseFloat(getComputedStyle(document.querySelector('[data-page="home"]')).animationDuration)<.01`),'manual reduced motion also disables CSS page animations');
+    await evaluate(`(async()=>{const {setReducedMotion}=await import('/js/theme.js');setReducedMotion(false);})()`);
+    assert.equal(await evaluate(`document.documentElement.classList.contains('motion-ready')`),true,'motion can be enabled again without reloading');
+    await evaluate(`(async()=>{const {setPerformanceMode}=await import('/js/performance.js');setPerformanceMode('economy');})()`);
+    assert.equal(await evaluate(`!document.documentElement.classList.contains('motion-ready') && window.__motionTargets.size===0`),true,'economy mode skips reveal observers');
+    await evaluate(`(async()=>{const {setPerformanceMode}=await import('/js/performance.js');setPerformanceMode('balanced');})()`);
+    assert.equal(await evaluate(`document.documentElement.classList.contains('motion-ready')`),true,'balanced mode resumes reveals');
+    await send('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
+    await until(() => evaluate(`!document.documentElement.classList.contains('motion-ready') && window.__motionTargets.size===0`),'system reduced motion applies live');
+    await send('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'no-preference'}]});
+    await until(() => evaluate(`document.documentElement.classList.contains('motion-ready')`),'system motion preference resumes live');
+    await evaluate(`Object.defineProperty(document,'hidden',{configurable:true,value:true});document.dispatchEvent(new Event('visibilitychange'))`);
+    assert.equal(await evaluate(`document.documentElement.dataset.documentHidden==='true' && window.__motionTargets.size===0 && getComputedStyle(document.querySelector('.page-view')).animationPlayState==='paused'`),true,'background tabs pause CSS animation and release observers');
+    await evaluate(`delete document.hidden;document.dispatchEvent(new Event('visibilitychange'))`);
+    await until(() => evaluate(`document.documentElement.classList.contains('motion-ready')`),'foreground resumes motion');
+
+    assert.ok(await evaluate(`window.scrollY>500`),'scroll fixture starts away from the page top');
+    await evaluate(`document.addEventListener('auramaxx:routechange',()=>{window.__routeScrollY=window.scrollY;},{once:true});location.hash='my-aura'`);
+    await until(() => evaluate(`window.__routeScrollY!==undefined`),'route scroll measured at transition');
+    assert.equal(await evaluate(`window.__routeScrollY`),0,'new page starts at the top immediately, without a competing smooth scroll');
+    await send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+    await route('home');
+    await evaluate(`(()=>{const card=document.querySelector('#motion-return-fixture');const fixed=document.createElement('div');fixed.id='motion-fixed-fixture';fixed.style.cssText='position:fixed;right:8px;bottom:8px;width:24px;height:24px';card.append(fixed);card.scrollIntoView({behavior:'instant',block:'center'});})()`);
+    await until(() => evaluate(`getComputedStyle(document.querySelector('#motion-return-fixture')).transform==='none' && getComputedStyle(document.querySelector('[data-page="home"]')).transform==='none'`),'completed motion releases transforms');
+    assert.ok(await evaluate(`Math.abs(document.querySelector('#motion-fixed-fixture').getBoundingClientRect().bottom-(innerHeight-8))<2`),'mobile fixed controls remain anchored to the viewport after reveal');
+    assert.equal(await evaluate(`document.documentElement.scrollWidth<=innerWidth+1`),true,'motion keeps mobile layout within the viewport');
     assert.deepEqual(exceptions, [], 'no application exceptions');
-    console.log('Browser performance smoke passed.');
+    console.log('Browser performance smoke passed: lazy pages, active-page reveals, return navigation, reduced motion, economy mode, background pause, immediate route scroll and mobile fixed controls.');
     await send('Browser.close').catch(() => {});
   } catch (error) {
     fs.writeFileSync(path.join(fixture, 'server.log'), log);

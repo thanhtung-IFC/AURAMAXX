@@ -2,10 +2,11 @@
   --motion-ease: cubic-bezier(.2, .72, .24, 1);
   --motion-fast: 150ms;
   --motion-medium: 240ms;
-  --motion-page: 360ms;
+  --motion-page: 220ms;
 }
 
-.page-view { animation-duration: var(--motion-page); animation-timing-function: var(--motion-ease); }
+.page-view { animation: page-arrive var(--motion-page) var(--motion-ease); }
+@keyframes page-arrive { from { opacity: .65; } to { opacity: 1; } }
 :where(.button, .icon-button, .nav-link, .feature-card, .chat-conversation-item,
   .chat-suggestions button, .send-button, .face-profile-detail summary, .face-profile-details summary) {
   transition-timing-function: var(--motion-ease);
@@ -21,20 +22,21 @@
 
 .motion-ready .motion-reveal {
   opacity: 0;
-  transform: translateY(9px);
-  transition: opacity 380ms var(--motion-ease), transform 380ms var(--motion-ease);
-  will-change: opacity, transform;
+  transform: translateY(6px);
+  transition: opacity 260ms var(--motion-ease), transform 260ms var(--motion-ease);
 }
-.motion-ready .motion-reveal.is-visible { opacity: 1; transform: translateY(0); will-change: auto; }
+.motion-ready .motion-reveal.is-visible { opacity: 1; transform: none; }
 .feature-grid .motion-reveal:nth-child(2), .bottom-grid .motion-reveal:nth-child(2),
-.habit-cards .motion-reveal:nth-child(2), .face-profile-overview .motion-reveal:nth-child(2) { transition-delay: 55ms; }
-.feature-grid .motion-reveal:nth-child(3), .habit-cards .motion-reveal:nth-child(3) { transition-delay: 100ms; }
+.habit-cards .motion-reveal:nth-child(2), .face-profile-overview .motion-reveal:nth-child(2) { transition-delay: 30ms; }
+.feature-grid .motion-reveal:nth-child(3), .habit-cards .motion-reveal:nth-child(3) { transition-delay: 60ms; }
 
 .face-result-content:not([hidden]) .face-score-row .face-score-track i {
-  transition: width 620ms var(--motion-ease);
+  width: var(--score);
+  transform-origin: left center;
+  transition: transform 420ms var(--motion-ease);
 }
-.motion-ready .face-result-content:not([hidden]) .face-score-row .face-score-track i { width: 0; }
-.motion-ready .face-result-content:not([hidden]) .face-score-row.is-visible .face-score-track i { width: var(--score); }
+.motion-ready .face-result-content:not([hidden]) .face-score-row .face-score-track i { transform: scaleX(0); }
+.motion-ready .face-result-content:not([hidden]) .face-score-row.is-visible .face-score-track i { transform: scaleX(1); }
 .face-result-content:not([hidden]) .face-score-row[data-status="missing"] .face-score-track i,
 .face-result-content:not([hidden]) .face-score-row[data-status="unreliable"] .face-score-track i { width: 0; }
 .face-camera-panel:has(#face-progress:not([hidden])) .face-camera-stage::after {
@@ -70,5 +72,5 @@
 
 @media (max-width: 760px) {
   .nav-link:hover { transform: none; }
-  .motion-ready .motion-reveal { transform: translateY(6px); }
+  .motion-ready .motion-reveal:not(.is-visible) { transform: translateY(4px); }
 }

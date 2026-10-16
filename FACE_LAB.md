@@ -72,7 +72,7 @@ node tests/test_camera.cjs
 node tests/check_face_worker_browser.cjs
 node tests/browser_unified_smoke.cjs
 
-# Chỉ chạy phần Face Lab của kiểm thử website hợp nhất.
+# Chỉ kiểm tra camera, chụp và báo cáo Face Lab, trước tích hợp routine/AI.
 $env:FACE_TEST_CAPTURE_ONLY='1'
 node tests/browser_unified_smoke.cjs
 Remove-Item Env:FACE_TEST_CAPTURE_ONLY
