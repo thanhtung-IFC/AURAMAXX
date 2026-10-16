@@ -5,6 +5,9 @@
   position: relative;
   display: block;
   flex-shrink: 0;
+  width: 156px;
+  max-width: 156px;
+  min-width: 0;
   height: auto;
   line-height: 0;
   padding: 0;
@@ -12,9 +15,25 @@
   border: 0;
   border-radius: 0;
   box-shadow: none;
+  overflow: hidden;
 }
-.brand-logo > img { display: block; width: 100%; height: auto; max-width: 100%; }
-:root .brand-logo.auramaxx-account-logo { width: 104px; }
+.brand-logo > img {
+  display: block;
+  width: 100%;
+  max-width: 156px;
+  height: auto;
+  object-fit: contain;
+}
+:root .brand-logo.auramaxx-account-logo {
+  width: 104px;
+  max-width: 104px;
+  min-width: 0;
+}
+:root .manage-header .brand-logo {
+  width: 120px;
+  max-width: 120px;
+  min-width: 0;
+}
 .brand-logo::after {
   content: "";
   position: absolute;

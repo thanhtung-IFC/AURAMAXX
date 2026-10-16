@@ -4,15 +4,14 @@ body { background: var(--color-background); color: var(--color-text); font-size:
 body::before { display: none; }
 ::selection { background: var(--color-primary-soft); color: var(--color-text); }
 
-:root .sidebar { background: var(--color-surface); border-color: var(--color-border-subtle); box-shadow: none; padding-top: 28px; }
-.brand { gap: 10px; }
-.sidebar .brand { height: auto; padding: 0; margin: 0 6px; justify-content: center; }
-.sidebar .brand-logo { width: 156px; max-width: 100%; }
+:root .sidebar { background: var(--color-surface); border-color: var(--color-border-subtle); box-shadow: none; padding-top: 28px; overflow-x: hidden; overflow-y: auto; scrollbar-width: thin; }
+.brand { gap: 10px; min-width: 0; max-width: 100%; }
+.sidebar .brand { height: auto; padding: 0; margin: 0 6px; justify-content: center; min-width: 0; max-width: calc(100% - 12px); overflow: hidden; }
+.sidebar .brand-logo { width: 156px; max-width: 100%; min-width: 0; overflow: hidden; }
 .sidebar .workspace-label { margin-top: 24px; }
-.sidebar { overflow-y: auto; scrollbar-width: thin; }
-.mobile-brand { display: none; }
-.manage-header .brand { height: auto; padding: 0; flex-shrink: 0; }
-.manage-header .brand-logo { width: 120px; }
+.mobile-brand { display: none !important; }
+.manage-header .brand { height: auto; padding: 0; flex-shrink: 0; min-width: 0; }
+.manage-header .brand-logo { width: 120px; max-width: 120px; min-width: 0; overflow: hidden; }
 .brand-context { font-size: 9px; color: var(--color-text-subtle); letter-spacing: 1px; }
 .workspace-label { margin-top: 36px; font-size: 10px; letter-spacing: 1.2px; color: var(--color-text-subtle); }
 .side-nav { gap: 5px; }
@@ -195,7 +194,7 @@ body::before { display: none; }
   :root [data-page="home"] .feature-card { padding: 18px; }
 }
 @media (max-width: 760px) {
-  .mobile-brand { position: relative; display: block; width: 40px; height: 40px; flex: 0 0 40px; overflow: hidden; background: transparent; }
+  .mobile-brand { position: relative; display: block !important; width: 40px; height: 40px; flex: 0 0 40px; overflow: hidden; background: transparent; }
   .mobile-brand img { position: absolute; width: auto; height: 40px; max-width: none; left: 50%; top: 3px; transform: translateX(-50%); clip-path: inset(0 0 17% 0); }
   .topbar .breadcrumbs { flex: 1; }
   :root .button { min-height: 44px; }

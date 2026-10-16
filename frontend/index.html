@@ -56,7 +56,7 @@
 
   <div class="app-shell">
     <aside class="sidebar" aria-label="Thanh điều hướng">
-      <a class="brand" href="#home" aria-label="AURAMAXX trang chủ"><span class="brand-logo"><img src="assets/auramaxx-logo-transparent.webp" width="1706" height="922" alt="AURAMAXX" decoding="async"></span></a>
+      <a class="brand" href="#home" aria-label="AURAMAXX trang chủ"><span class="brand-logo"><img src="assets/auramaxx-logo-transparent.webp" width="156" height="84" alt="AURAMAXX" decoding="async"></span></a>
       <div class="workspace-label">KHÁM PHÁ</div>
       <nav class="side-nav" aria-label="Điều hướng chính">
         <a class="nav-link" href="#home" data-nav="home"><svg><use href="#i-grid"/></svg><span>Tổng quan</span></a>
@@ -75,7 +75,7 @@
 
     <div class="main-column">
       <header class="topbar">
-        <a class="mobile-brand" href="#home" aria-label="AURAMAXX trang chủ"><img src="assets/auramaxx-logo-transparent.webp" width="1706" height="922" alt="" decoding="async"></a>
+        <a class="mobile-brand" href="#home" aria-label="AURAMAXX trang chủ"><img src="assets/auramaxx-logo-transparent.webp" width="74" height="40" alt="" decoding="async"></a>
         <button class="mobile-menu" id="mobile-menu" type="button" aria-label="Mở menu"><svg><use href="#i-menu"/></svg></button>
         <div class="breadcrumbs"><span>AURAMAXX</span><span class="breadcrumb-slash">/</span><strong id="page-breadcrumb">Tổng quan</strong></div>
         <div class="topbar-actions">
@@ -134,20 +134,296 @@
             <div class="face-initial-loading"><div class="eyebrow">FACE LAB · QUÉT TRỰC TIẾP</div><h1 id="face-title">Đang mở Face Lab…</h1><p>Camera chỉ khởi động sau khi bạn bấm nút và cho phép sử dụng.</p></div>
           </section>
           <section class="page-view" data-page="health-hub" aria-labelledby="health-title" hidden>
-          <div class="page-heading-row"><div><div class="eyebrow"><span class="eyebrow-dot"></span> HEALTH HUB · THÓI QUEN CỦA BẠN</div><h1 id="health-title">Thói quen của bạn.</h1><p class="page-lead">Xây dựng lịch chăm sóc, làm theo hướng dẫn và ghi nhận tiến trình ngay trong Health Hub.</p></div><span class="coming-badge"><i></i> ROUTINE & NHẬT KÝ</span></div>
-          <div class="health-intro-grid">
-            <article class="health-welcome panel routine-welcome"><span class="welcome-icon"><svg><use href="#i-heart"/></svg></span><div><span class="panel-overline">ROUTINE DÀNH CHO BẠN</span><h2>Bắt đầu từ những<br>việc nhỏ, dễ làm.</h2><p>Chọn mức độ phù hợp. Bạn có thể đổi giờ, bỏ qua và điều chỉnh theo cảm nhận của mình.</p><label class="routine-select-label" for="routine-intensity">Mức độ hôm nay</label><select id="routine-intensity" disabled><option value="gentle">Nhẹ nhàng · 3 việc</option><option value="moderate" selected>Vừa sức · 4 việc</option><option value="intensive">Nhiều lựa chọn · 6 việc</option></select><div class="routine-start-actions"><button class="button button-primary" id="routine-generate" type="button" disabled><svg><use href="#i-spark"/></svg> Tạo routine hôm nay</button><button class="button button-outline" id="routine-use-report" type="button" disabled>Dùng số đo Face Lab</button></div><small>Chỉ số đo được lưu khi bạn chọn dùng kết quả. Ảnh và điểm mốc không được lưu trong routine.</small></div><span class="health-decoration-large" aria-hidden="true"></span></article>
-            <article class="panel routine-streak"><span class="panel-overline">NHỊP ĐỘ CỦA RIÊNG BẠN</span><div class="routine-streak-number"><span class="habit-icon teal"><svg><use href="#i-spark"/></svg></span><strong id="routine-streak-count">0</strong><span>ngày giữ nhịp</span></div><p>Hoàn thành những việc đang chọn để ghi nhận một ngày. Nghỉ một chút cũng không sao.</p><div id="routine-week" class="routine-week" aria-label="Tiến trình 7 ngày"></div><button class="button button-outline" id="routine-freeze" type="button" disabled>Bảo vệ hôm nay · 2 lượt/tháng</button><small id="routine-freeze-note">Chuỗi và lượt bảo vệ được đồng bộ theo tài khoản.</small></article>
-          </div>
-          <div class="routine-workspace">
-            <article class="panel routine-today"><div class="panel-heading"><div><span class="panel-overline" id="routine-date">HÔM NAY</span><h2>Những việc dành cho bạn</h2></div><span id="routine-progress-label">0 / 0</span></div><progress id="routine-progress-meter" max="1" value="0" aria-label="Tiến độ routine hôm nay"></progress><p class="routine-access" id="routine-access" role="status">Mở Health Hub để tải routine của bạn.</p><div id="routine-task-list" class="routine-task-list"></div><details id="routine-skipped" class="routine-skipped" hidden><summary>Các mục đã bỏ qua hôm nay</summary><div id="routine-skipped-list"></div></details><p class="routine-journal-note">Đánh dấu hoàn thành sẽ ghi một bản ghi vào nhật ký bên dưới. Bỏ dấu hoàn thành sẽ gỡ bản ghi tương ứng.</p></article>
-            <aside class="routine-aside"><article class="panel routine-feedback"><span class="panel-overline">ĐIỀU CHỈNH THEO BẠN</span><h2>Tuần này thế nào?</h2><p>Đổi phản hồi để cập nhật lịch. Những mục bạn đã hoàn thành và thêm riêng sẽ được giữ lại.</p><label class="routine-select-label" for="routine-feedback">Cảm nhận của bạn</label><select id="routine-feedback" disabled><option value="too_much">Hơi nhiều · giảm bớt</option><option value="balanced" selected>Vừa sức · giữ nhịp</option><option value="can_more">Có thể thêm một chút</option></select></article><article class="panel routine-report"><span class="panel-overline">KẾT NỐI FACE LAB</span><h2>Bối cảnh từ lần quét</h2><p id="routine-report-summary">Bạn có thể tạo routine cơ bản ngay, hoặc chọn dùng số đo vừa phân tích trong Face Lab.</p><div class="routine-start-actions"><a class="text-link" href="#face-lab">Mở Face Lab <svg><use href="#i-arrow"/></svg></a><button class="text-link" id="routine-clear-report" type="button" hidden>Xóa số đo đã dùng</button></div></article></aside>
-          </div>
-          <div class="section-row health-section-row"><div><div class="eyebrow">THƯ VIỆN ROUTINE</div><h2 class="section-title">Thêm điều bạn muốn chăm sóc</h2></div><span class="section-note">Có hướng dẫn và lý do gợi ý cho từng mục.</span></div>
-          <div class="routine-filters" aria-label="Lọc thư viện"><button type="button" data-routine-filter="all" aria-pressed="true">Tất cả</button><button type="button" data-routine-filter="habit" aria-pressed="false">Thói quen</button><button type="button" data-routine-filter="exercise" aria-pressed="false">Bài tập</button><button type="button" data-routine-filter="posture" aria-pressed="false">Tư thế</button><button type="button" data-routine-filter="skincare" aria-pressed="false">Chăm sóc da</button></div><div id="routine-library" class="routine-library"></div>
-          <article class="panel habit-empty routine-journal"><div class="section-row"><div><span class="panel-overline">NHẬT KÝ CHUNG CỦA BẠN</span><h2>Việc đã làm & thói quen tự ghi</h2></div></div><div class="empty-state"><span class="empty-orbit"><svg><use href="#i-heart"/></svg></span><b>Nhật ký đang trống</b><p>Hoàn thành một mục routine hoặc tự ghi nhận thói quen để bắt đầu.</p></div></article>
-          <div class="notice-card wellness-notice"><svg><use href="#i-info"/></svg><p>Gợi ý dựa trên mức độ và phản hồi bạn chọn. Số đo từ ảnh chỉ cung cấp bối cảnh tham khảo, không chẩn đoán sức khỏe hay cam kết thay đổi cấu trúc khuôn mặt.</p></div>
-        </section>
+            <!-- Header Section -->
+            <div class="hh-header">
+              <div class="hh-header-copy">
+                <div class="hh-eyebrow"><span class="hh-eyebrow-icon"><svg viewBox="0 0 24 24"><path d="m12 2 1.8 7.2L21 12l-7.2 1.8L12 21l-1.8-7.2L3 12l7.2-2.8L12 2Z"/></svg></span> HEALTH HUB • YOUR PERSONALIZED UPGRADE PLAN</div>
+                <h1 id="health-title" class="hh-main-title">Lộ trình Glow-Up của bạn.<br><span class="hh-title-accent">Cá nhân hóa từ Face Lab.</span></h1>
+                <p class="hh-lead">AI đã phân tích các điểm yếu trên gương mặt và thiết kế danh sách thói quen tập trung vào <strong>Định hình Jawline</strong>, <strong>Giảm tích nước (Debloating)</strong> và <strong>Chăm sóc nền da</strong>.</p>
+              </div>
+              <div class="hh-week-strip" id="hh-week-strip" role="region" aria-label="Lịch trình tuần">
+                <div class="hh-day-pill" data-day="1"><span class="hh-day-name">T2</span><strong class="hh-day-num">12</strong></div>
+                <div class="hh-day-pill" data-day="2"><span class="hh-day-name">T3</span><strong class="hh-day-num">13</strong></div>
+                <div class="hh-day-pill" data-day="3"><span class="hh-day-name">T4</span><strong class="hh-day-num">14</strong></div>
+                <div class="hh-day-pill is-today is-active" data-day="4"><span class="hh-day-name">H.NAY</span><strong class="hh-day-num">15</strong></div>
+                <div class="hh-day-pill" data-day="5"><span class="hh-day-name">T6</span><strong class="hh-day-num">16</strong></div>
+                <div class="hh-day-pill" data-day="6"><span class="hh-day-name">T7</span><strong class="hh-day-num">17</strong></div>
+                <div class="hh-day-pill" data-day="0"><span class="hh-day-name">CN</span><strong class="hh-day-num">18</strong></div>
+              </div>
+            </div>
+
+            <!-- Top Grid: AI Coach & Streak / Progress -->
+            <div class="hh-top-grid">
+              <!-- Left Card: AI Coach Advice & Configuration -->
+              <article class="panel hh-coach-card">
+                <div class="hh-coach-heading">
+                  <div class="hh-coach-brand">
+                    <span class="hh-bulb-icon"><svg viewBox="0 0 24 24"><path d="M9 18h6m-4 3h2m-5-9a5 5 0 1 1 8 0c-.8 1-1.3 1.8-1.5 2.5a.5.5 0 0 1-.5.5h-4a.5.5 0 0 1-.5-.5c-.2-.7-.7-1.5-1.5-2.5Z"/></svg></span>
+                    <strong>AI Glow-Up Coach • Lời khuyên hôm nay</strong>
+                  </div>
+                  <span class="hh-looksmax-badge" id="hh-coach-mode-badge">MẪU: TỐI ƯU LOOKSMAXXING</span>
+                </div>
+                
+                <p class="hh-coach-quote" id="hh-coach-quote">Cấu trúc gương mặt rất cân đối! Lộ trình AI chuyển sang chế độ duy trì đỉnh cao (Looksmaxxing) kết hợp đồng đều giữa Mewing, Dinh dưỡng kháng viêm và bảo vệ da.</p>
+                
+                <div class="hh-methods-row">
+                  <div class="hh-methods-label-bar">
+                    <span>Phương pháp cải thiện đang áp dụng (Bấm để bật/tắt):</span>
+                    <button type="button" class="hh-survey-trigger-btn" id="hh-open-survey">Khảo sát mục tiêu</button>
+                  </div>
+                  <div class="hh-method-chips" id="hh-method-chips">
+                    <button type="button" class="hh-chip is-active" data-method="mewing"><span class="hh-chip-dot"></span> Mewing (Đặt lưỡi chuẩn)</button>
+                    <button type="button" class="hh-chip is-active" data-method="guasha"><span class="hh-chip-dot"></span> Gua Sha / Nâng cơ mặt</button>
+                    <button type="button" class="hh-chip is-active" data-method="nutrition"><span class="hh-chip-dot"></span> Dinh dưỡng giảm sưng (Debloating)</button>
+                    <button type="button" class="hh-chip is-active" data-method="skincare"><span class="hh-chip-dot"></span> Skincare bài bản</button>
+                  </div>
+                </div>
+
+                <div class="hh-coach-footer">
+                  <div class="hh-intensity-group">
+                    <label class="hh-control-label" for="routine-intensity">Mức độ lộ trình hôm nay</label>
+                    <select id="routine-intensity">
+                      <option value="intensive" selected>Toàn diện • Đầy đủ các mục (Khuyên dùng)</option>
+                      <option value="moderate">Vừa sức • 4 việc hàng ngày</option>
+                      <option value="gentle">Nhẹ nhàng • 3 việc cơ bản</option>
+                    </select>
+                  </div>
+                  <button class="button button-outline hh-facelab-btn" id="routine-use-report" type="button">
+                    <svg viewBox="0 0 24 24"><path d="m15 4-2 4 4 2-4 2 2 4-4-2-2 4-2-4-4 2 2-4-4-2 4-2-2-4 4 2 2-4 2 4 4-2Z"/></svg>
+                    Dùng số đo Face Lab mới
+                  </button>
+                </div>
+                <small class="hh-security-note">Chỉ số đo được lưu khi bạn chọn dùng kết quả. Ảnh gốc không được lưu trong routine để bảo mật.</small>
+              </article>
+
+              <!-- Right Card: Progress & Streak -->
+              <article class="panel hh-streak-card">
+                <div class="hh-streak-heading">
+                  <span class="panel-overline">TIẾN ĐỘ & NHỊP ĐỘ CỦA BẠN</span>
+                  <span class="hh-shield-pill" id="hh-shield-pill"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11Z"/><path d="m9 12 2 2 4-4"/></svg> <span id="hh-shield-status">Đã bật khiên bảo vệ hôm nay (Còn 1/2)</span></span>
+                </div>
+
+                <div class="hh-streak-widgets">
+                  <!-- Widget 1: Daily Progress -->
+                  <div class="hh-stat-box hh-daily-stat">
+                    <div class="hh-stat-info">
+                      <span class="hh-stat-kicker">Daily Progress</span>
+                      <strong class="hh-stat-quote" id="hh-progress-cheer">Tuyệt vời! Đã giữ nhịp 🔥</strong>
+                      <span class="hh-stat-ratio" id="routine-progress-label">5 / 5 hoàn thành</span>
+                    </div>
+                    <div class="hh-ring-container">
+                      <svg class="hh-ring-svg" viewBox="0 0 76 76" aria-hidden="true">
+                        <circle class="hh-ring-track" cx="38" cy="38" r="31"></circle>
+                        <circle class="hh-ring-fill" id="hh-ring-bar" cx="38" cy="38" r="31" stroke-dasharray="194.8" stroke-dashoffset="0"></circle>
+                      </svg>
+                      <strong class="hh-ring-number" id="hh-progress-percent">100%</strong>
+                    </div>
+                  </div>
+
+                  <!-- Widget 2: Streak -->
+                  <div class="hh-stat-box hh-streak-stat">
+                    <div class="hh-streak-number-row">
+                      <span class="hh-flame-icon" title="Nhịp chuỗi ngày" aria-label="Nhịp chuỗi ngày"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span>
+                      <div>
+                        <strong><span id="routine-streak-count">4</span> <small>ngày giữ nhịp</small></strong>
+                        <span>Hoàn thành ≥80% để +1 ngày</span>
+                      </div>
+                    </div>
+                    <div class="hh-mini-week" id="routine-week" aria-label="Lịch sử chuỗi 7 ngày"></div>
+                  </div>
+                </div>
+
+                <button class="button button-outline hh-freeze-btn" id="routine-freeze" type="button">
+                  <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11Z"/></svg>
+                  Kích hoạt bảo vệ nhịp hôm nay (Còn 2/2 lượt)
+                </button>
+                <small id="routine-freeze-note" hidden></small>
+              </article>
+            </div>
+
+            <!-- Main Workspace: Left Column Tasks, Right Column Context & Adjustments -->
+            <div class="hh-main-workspace">
+              <!-- Left Column: Tasks -->
+              <section class="hh-tasks-column">
+                <div class="hh-tasks-header">
+                  <div>
+                    <span class="hh-col-date" id="routine-date">T5 • 15/10/2026</span>
+                    <h2 class="hh-col-title">Lộ trình hành động từ AI</h2>
+                  </div>
+                  <div class="hh-filter-tabs" role="tablist" aria-label="Bộ lọc tác vụ">
+                    <button type="button" class="hh-tab is-active" data-cat-filter="all">Tất cả</button>
+                    <button type="button" class="hh-tab" data-cat-filter="facial">Cơ mặt</button>
+                    <button type="button" class="hh-tab" data-cat-filter="nutrition">Dinh dưỡng</button>
+                    <button type="button" class="hh-tab" data-cat-filter="skincare">Skincare</button>
+                  </div>
+                </div>
+
+                <p class="routine-access" id="routine-access" role="status" hidden></p>
+                <progress id="routine-progress-meter" max="1" value="0" hidden></progress>
+                <button id="routine-generate" hidden></button>
+
+                <!-- Tasks List -->
+                <div id="routine-task-list" class="hh-task-list"></div>
+
+                <!-- Skipped Tasks -->
+                <details id="routine-skipped" class="hh-skipped-accordion" hidden>
+                  <summary>Các mục đã bỏ qua hôm nay (<span id="hh-skipped-count">0</span>)</summary>
+                  <div id="routine-skipped-list" class="hh-skipped-list"></div>
+                </details>
+
+                <!-- Custom Habit Input Bar -->
+                <form class="hh-add-task-bar" id="hh-add-task-form">
+                  <input type="text" id="hh-custom-task-input" class="hh-add-input" placeholder="Thêm thói quen riêng của bạn (VD: Ngủ trước 23h, Tập cổ...)" maxlength="120" autocomplete="off">
+                  <button type="submit" class="button button-primary hh-add-btn">
+                    <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+                    Thêm
+                  </button>
+                </form>
+              </section>
+
+              <!-- Right Column Sidebar -->
+              <aside class="hh-sidebar-column">
+                <!-- Card 1: Face Lab Context -->
+                <article class="panel hh-facelab-card">
+                  <div class="hh-card-header">
+                    <div>
+                      <span class="panel-overline">KẾT NỐI FACE LAB</span>
+                      <h3>Bối cảnh từ lần quét mặt</h3>
+                    </div>
+                    <span class="hh-aura-pill" id="hh-aura-score">Điểm Aura: 86/100</span>
+                  </div>
+
+                  <p class="hh-facelab-intro" id="hh-facelab-intro-text">
+                    Đã đồng bộ số đo từ <strong>Face Lab ngày 15 thg 10, 2026</strong>. Dưới đây là các vùng AI phát hiện cần ưu tiên cải thiện:
+                  </p>
+
+                  <div class="hh-metrics-group" id="hh-metrics-group">
+                    <!-- Metric 1: Jawline -->
+                    <div class="hh-metric-card" data-metric="jawline">
+                      <div class="hh-metric-title-row">
+                        <span class="hh-metric-label"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg> Đường viền hàm (Jawline)</span>
+                        <strong class="hh-metric-score" id="hh-metric-jawline-score">85/100 • Sắc nét</strong>
+                      </div>
+                      <div class="hh-metric-bar"><div class="hh-bar-core bar-warning" id="hh-metric-jawline-bar" style="width: 85%;"></div></div>
+                      <small class="hh-metric-subtext" id="hh-metric-jawline-sub">↳ AI đã thêm: Tập Mewing & Massage Gua Sha</small>
+                    </div>
+
+                    <!-- Metric 2: Bloating -->
+                    <div class="hh-metric-card" data-metric="bloating">
+                      <div class="hh-metric-title-row">
+                        <span class="hh-metric-label"><svg viewBox="0 0 24 24"><path d="M12 3s7 7.4 7 12a7 7 0 0 1-14 0c0-4.6 7-12 7-12Z"/></svg> Độ tích nước mặt (Facial Bloating)</span>
+                        <strong class="hh-metric-score" id="hh-metric-bloat-score">84/100 • Thon gọn</strong>
+                      </div>
+                      <div class="hh-metric-bar"><div class="hh-bar-core bar-danger" id="hh-metric-bloat-bar" style="width: 84%;"></div></div>
+                      <small class="hh-metric-subtext" id="hh-metric-bloat-sub">↳ AI đã thêm: Giảm muối, ăn giàu Kali & Uống 2L nước</small>
+                    </div>
+
+                    <!-- Metric 3: Skin Quality -->
+                    <div class="hh-metric-card" data-metric="skin">
+                      <div class="hh-metric-title-row">
+                        <span class="hh-metric-label"><svg viewBox="0 0 24 24"><path d="m12 2 1.8 7.2L21 12l-7.2 1.8L12 21l-1.8-7.2L3 12l7.2-2.8L12 2Z"/></svg> Chất lượng nền da (Skin Quality)</span>
+                        <strong class="hh-metric-score" id="hh-metric-skin-score">88/100 • Nền da khỏe</strong>
+                      </div>
+                      <div class="hh-metric-bar"><div class="hh-bar-core bar-success" id="hh-metric-skin-bar" style="width: 88%;"></div></div>
+                      <small class="hh-metric-subtext" id="hh-metric-skin-sub">↳ AI đã thêm: Chu trình làm sạch dịu nhẹ, dưỡng ẩm & SPF</small>
+                    </div>
+                  </div>
+
+                  <!-- Quick Test Presets -->
+                  <div class="hh-preset-box">
+                    <span class="hh-preset-label">✦ CHẾ ĐỘ TEST NHANH KẾT QUẢ QUÉT MẶT:</span>
+                    <div class="hh-presets-cluster">
+                      <button type="button" class="hh-preset-btn" data-preset="bloated">Mặt sưng & Jawline mờ</button>
+                      <button type="button" class="hh-preset-btn" data-preset="dry_eyes">Da khô & Thâm mắt</button>
+                      <button type="button" class="hh-preset-btn is-active" data-preset="looksmax">Nền tảng tốt (Looksmax)</button>
+                    </div>
+                  </div>
+
+                  <div class="hh-facelab-links">
+                    <a class="text-link" href="#face-lab">Mở Face Lab trực tiếp <svg><use href="#i-arrow"/></svg></a>
+                    <button class="text-link" id="routine-clear-report" type="button" hidden>Xóa số đo đã dùng</button>
+                    <p id="routine-report-summary" hidden></p>
+                  </div>
+                </article>
+
+                <!-- Card 2: Feedback Adjustments -->
+                <article class="panel hh-feedback-card">
+                  <div class="hh-card-header">
+                    <div>
+                      <span class="panel-overline">ĐIỀU CHỈNH THEO BẠN</span>
+                      <h3>Tuần này thế nào?</h3>
+                    </div>
+                  </div>
+                  <p class="hh-feedback-desc">Đổi phản hồi để AI tự động căn chỉnh khối lượng việc. Những mục bạn đã hoàn thành sẽ được giữ lại.</p>
+
+                  <div class="hh-feedback-control">
+                    <label class="hh-control-label" for="routine-feedback">Cảm nhận của bạn về lộ trình</label>
+                    <select id="routine-feedback">
+                      <option value="balanced" selected>Vừa sức • Giữ nhịp hiện tại</option>
+                      <option value="too_much">Quá tải • Giảm bớt việc</option>
+                      <option value="can_more">Thảnh thơi • Thêm thử thách nâng cao</option>
+                    </select>
+                  </div>
+
+                  <button type="button" class="button button-outline hh-btn-custom-goals" id="hh-open-survey-btn">
+                    <svg viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 3M4 15l2 3a7 7 0 0 0 12-1"/></svg>
+                    Cập nhật vùng tự ti & Khái niệm Looksmaxxing
+                  </button>
+                </article>
+              </aside>
+            </div>
+
+            <!-- Preserved Library & Habit Journal (Collapsible & Clean) -->
+            <details class="panel hh-collapsible-panel" id="hh-library-drawer">
+              <summary class="hh-collapsible-summary">
+                <div class="hh-collapsible-title">
+                  <svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h17M7 15l4-4 3 2 6-7M16 6h4v4"/></svg>
+                  <div>
+                    <strong>Thư viện bài tập & Thói quen mở rộng</strong>
+                    <span>Khám phá thêm các bài tập cơ mặt, tư thế và skincare để bổ sung vào hôm nay</span>
+                  </div>
+                </div>
+                <span class="hh-collapsible-pill">Mở rộng ▾</span>
+              </summary>
+              <div class="hh-collapsible-content">
+                <div class="routine-filters" aria-label="Lọc thư viện">
+                  <button type="button" data-routine-filter="all" aria-pressed="true">Tất cả</button>
+                  <button type="button" data-routine-filter="habit" aria-pressed="false">Thói quen</button>
+                  <button type="button" data-routine-filter="exercise" aria-pressed="false">Bài tập</button>
+                  <button type="button" data-routine-filter="posture" aria-pressed="false">Tư thế</button>
+                  <button type="button" data-routine-filter="skincare" aria-pressed="false">Chăm sóc da</button>
+                </div>
+                <div id="routine-library" class="routine-library"></div>
+              </div>
+            </details>
+
+            <details class="panel hh-collapsible-panel" id="hh-journal-drawer">
+              <summary class="hh-collapsible-summary">
+                <div class="hh-collapsible-title">
+                  <svg viewBox="0 0 24 24"><path d="M20.8 8.8c0 5.2-8.8 10.2-8.8 10.2S3.2 14 3.2 8.8a4.8 4.8 0 0 1 8.8-2.6 4.8 4.8 0 0 1 8.8 2.6Z"/></svg>
+                  <div>
+                    <strong>Nhật ký việc đã làm & Ghi nhận thói quen cá nhân</strong>
+                    <span>Nhập lượng nước, số giờ ngủ và xem nhật ký đã đồng bộ</span>
+                  </div>
+                </div>
+                <span class="hh-collapsible-pill">Mở rộng ▾</span>
+              </summary>
+              <div class="hh-collapsible-content">
+                <article class="habit-empty routine-journal">
+                  <div class="empty-state">
+                    <span class="empty-orbit"><svg><use href="#i-heart"/></svg></span>
+                    <b>Nhật ký đang trống</b>
+                    <p>Hoàn thành một mục routine hoặc tự ghi nhận thói quen để bắt đầu.</p>
+                  </div>
+                </article>
+              </div>
+            </details>
+
+            <div class="notice-card wellness-notice">
+              <svg><use href="#i-info"/></svg>
+              <p>Gợi ý dựa trên mức độ và phản hồi bạn chọn. Số đo từ ảnh chỉ cung cấp bối cảnh tham khảo, không chẩn đoán sức khỏe hay cam kết thay đổi cấu trúc khuôn mặt.</p>
+            </div>
+          </section>
 
         <section class="page-view" data-page="aura-ai" aria-labelledby="ai-title" hidden>
           <div class="page-heading-row aura-heading">
@@ -234,6 +510,46 @@
   </dialog>
 
   <dialog class="modal" id="aura-confirm-dialog" aria-labelledby="aura-confirm-title" aria-describedby="aura-confirm-description"><form class="modal-card" method="dialog"><div class="eyebrow">XÁC NHẬN THAY ĐỔI</div><h2 id="aura-confirm-title">Thu hồi quyền?</h2><p class="modal-description" id="aura-confirm-description"></p><div class="aura-dialog-actions"><button class="button button-outline" value="cancel" autofocus>Giữ nguyên</button><button class="button button-danger" value="confirm" id="aura-confirm-action">Thu hồi quyền</button></div></form></dialog>
+
+  <dialog class="modal hh-survey-modal" id="hh-survey-modal" aria-labelledby="hh-survey-title">
+    <div class="modal-card">
+      <div class="modal-heading">
+        <span class="modal-mark"><svg viewBox="0 0 24 24"><path d="m12 2 1.8 7.2L21 12l-7.2 1.8L12 21l-1.8-7.2L3 12l7.2-2.8L12 2Z"/></svg></span>
+        <button class="icon-button" id="hh-survey-close" type="button" aria-label="Đóng"><svg><use href="#i-close"/></svg></button>
+      </div>
+      <div class="eyebrow">CÁ NHÂN HÓA LỘ TRÌNH GLOW-UP</div>
+      <h2 id="hh-survey-title">Vùng tự ti & Mục tiêu Looksmaxxing</h2>
+      <p class="modal-description">Chọn các vùng bạn muốn AI tập trung nhiều nhất trong kế hoạch luyện tập hàng ngày:</p>
+      
+      <div class="hh-survey-options">
+        <label class="hh-survey-check">
+          <input type="checkbox" name="focus_area" value="jawline" checked>
+          <span><b>Đường viền hàm (Jawline & Nọng cằm)</b><small>Tập trung Mewing, massage Gua Sha và nâng cơ thon gọn.</small></span>
+        </label>
+        <label class="hh-survey-check">
+          <input type="checkbox" name="focus_area" value="debloat" checked>
+          <span><b>Giảm sưng phù & Tích nước (Debloating)</b><small>Chế độ dinh dưỡng giàu Kali, giảm natri và uống đủ 2L nước.</small></span>
+        </label>
+        <label class="hh-survey-check">
+          <input type="checkbox" name="focus_area" value="skin" checked>
+          <span><b>Nền da & Sắc tố (Skin Health)</b><small>Làm sạch dịu nhẹ, cấp ẩm sâu và chống nắng bảo vệ toàn diện.</small></span>
+        </label>
+        <label class="hh-survey-check">
+          <input type="checkbox" name="focus_area" value="eyes">
+          <span><b>Vùng mắt & Quầng thâm (Eye care)</b><small>Giảm thâm mắt, ngủ sớm trước 23h và bài tập thư giãn mắt.</small></span>
+        </label>
+        <label class="hh-survey-check">
+          <input type="checkbox" name="focus_area" value="posture" checked>
+          <span><b>Tư thế đầu & Cổ (Forward Head Posture)</b><small>Chỉnh góc làm việc, bài tập thả lỏng vai gáy và khung xương mặt.</small></span>
+        </label>
+      </div>
+
+      <div class="hh-survey-actions">
+        <button class="button button-outline" id="hh-survey-cancel" type="button">Hủy</button>
+        <button class="button button-primary" id="hh-survey-save" type="button">Áp dụng cho lộ trình</button>
+      </div>
+    </div>
+  </dialog>
 
   <nav class="mobile-nav" aria-label="Điều hướng nhanh">
     <a href="#home" data-nav="home"><svg><use href="#i-grid"/></svg><span>Tổng quan</span></a>

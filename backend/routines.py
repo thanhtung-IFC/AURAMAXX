@@ -46,18 +46,59 @@ def empty_state(today):
 
 
 def generate_tasks(state):
-    choices = {
-        "gentle": ["drink_water", "gentle_wash", "straight_posture"],
-        "moderate": ["drink_water", "gentle_wash", "jaw_relax", "straight_posture"],
-        "intensive": ["drink_water", "gentle_wash", "jaw_relax", "straight_posture", "mewing", "neck_stretch"],
-    }
-    identifiers = choices[state["intensity"]].copy()
-    if state["feedback"] == "too_much":
-        identifiers = [key for key in identifiers if key not in {"mewing", "neck_stretch"}]
-    elif state["feedback"] == "can_more":
-        identifiers.append("sunscreen")
+    report = state.get("report") or {}
+    jawline_score = (report.get("jawline") or {}).get("jawline_sharpness_score")
+    skin_info = report.get("skin") or {}
+    smoothness = skin_info.get("smoothness_score")
+    dark_circles = skin_info.get("dark_circles_index")
+
+    focus_jawline = jawline_score is not None and jawline_score < 80
+    focus_skin = smoothness is not None and smoothness < 75
+    focus_sleep = dark_circles is not None and dark_circles > 30
+
+    intensity = state.get("intensity") or "moderate"
+    feedback = state.get("feedback") or "balanced"
+
+    if intensity == "gentle":
+        if focus_jawline:
+            base = ["mewing", "drink_water", "straight_posture"]
+        elif focus_skin:
+            base = ["gentle_wash", "drink_water", "sunscreen"]
+        elif focus_sleep:
+            base = ["sleep_schedule", "drink_water", "gentle_wash"]
+        else:
+            base = ["drink_water", "gentle_wash", "straight_posture"]
+    elif intensity == "moderate":
+        if focus_jawline:
+            base = ["mewing", "kali_debloat", "jaw_relax", "drink_water"]
+        elif focus_skin:
+            base = ["gentle_wash", "sunscreen", "drink_water", "moisturize_night"]
+        elif focus_sleep:
+            base = ["sleep_schedule", "drink_water", "gentle_wash", "lip_balm_sleep"]
+        else:
+            base = ["mewing", "drink_water", "kali_debloat", "gentle_wash"]
+    else:
+        if focus_jawline:
+            base = ["mewing", "guasha", "kali_debloat", "drink_water", "neck_stretch", "gentle_wash"]
+        elif focus_skin:
+            base = ["gentle_wash", "skincare_core", "sunscreen", "drink_water", "ice_facial", "sleep_schedule"]
+        else:
+            base = ["mewing", "drink_water", "kali_debloat", "skincare_core", "lip_balm_sleep", "guasha"]
+
+    identifiers = base.copy()
+    if feedback == "too_much":
+        if len(identifiers) > 3:
+            identifiers = identifiers[:3]
+    elif feedback == "can_more":
+        candidate_pool = ["guasha", "sunscreen", "ice_facial", "neck_stretch", "low_sugar"]
+        for extra in candidate_pool:
+            if extra not in identifiers:
+                identifiers.append(extra)
+                break
+
     previous = {task["id"]: task for task in state["tasks"]}
-    identifiers.extend(task["id"] for task in state["tasks"] if task.get("added_from_library"))
+    # Always preserve completed tasks and manually added tasks so user never loses progress
+    identifiers.extend(task["id"] for task in state["tasks"] if task.get("completed") or task.get("added_from_library"))
     state["tasks"] = [copy.deepcopy(previous.get(key, {
         "id": key, "completed": False, "dismissed": False, "time_shift": 0, "added_from_library": False,
     })) for key in dict.fromkeys(identifiers)]
