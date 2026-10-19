@@ -38,9 +38,9 @@ Chạy trên Windows: mở `start_auramaxx.bat`, hoặc:
 .\.venv\Scripts\python.exe run_web.py
 ```
 
-Mở **http://127.0.0.1:8000/** để vào ứng dụng chính. Khi chạy local, trang hướng dẫn có tại
-**http://127.0.0.1:8000/huong-dan.html**. Trên Render, trang hướng dẫn được cấu hình thành
-Static Site riêng, dùng chung repository nhưng có URL và lần triển khai tách biệt với web chính.
+Mở **http://127.0.0.1:8000/** để vào ứng dụng chính. Trên Render, trang hướng dẫn từ
+`guide-site/index.html` được triển khai thành Static Site riêng, dùng chung repository nhưng có
+URL và lần triển khai tách biệt với web chính.
 Website dùng PostgreSQL trên Supabase nên cần kết nối Internet. Không cần bật
 SQL Server hoặc cấp quyền quản trị Windows. Nếu web đã chạy, tệp BAT mở lại trang.
 Trong **My Aura**, chọn đăng nhập để mở lại **bố cục trang đăng nhập cũ** đã đổi

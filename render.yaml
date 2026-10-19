@@ -21,13 +21,13 @@ services:
     runtime: static
     buildCommand: >-
       mkdir -p guide-site-dist/assets/videos &&
-      cp frontend/huong-dan.html guide-site-dist/index.html &&
+      cp guide-site/index.html guide-site-dist/index.html &&
       cp frontend/assets/auramaxx-logo-transparent.webp guide-site-dist/assets/auramaxx-logo-transparent.webp &&
       cp frontend/assets/videos/huong-dan-auramaxx.mp4 guide-site-dist/assets/videos/huong-dan-auramaxx.mp4
     staticPublishPath: ./guide-site-dist
     buildFilter:
       paths:
-        - frontend/huong-dan.html
+        - guide-site/index.html
         - frontend/assets/auramaxx-logo-transparent.webp
         - frontend/assets/videos/huong-dan-auramaxx.mp4
         - render.yaml
