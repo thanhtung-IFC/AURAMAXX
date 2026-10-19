@@ -7,9 +7,9 @@ const params = new URLSearchParams(location.search);
 let mode = "login", busy = false;
 
 export function safeNext(value) {
-  if (!value || !value.startsWith("/") || value.startsWith("//") || value.includes("\\")) return "/#home";
+  if (!value || !value.startsWith("/") || value.startsWith("//") || value.includes("\\")) return "/app#home";
   const url = new URL(value, location.origin);
-  if (url.origin !== location.origin || /\/(?:login|admin-login)\.html$/i.test(url.pathname)) return "/#home";
+  if (url.origin !== location.origin || /\/(?:login|admin-login)\.html$/i.test(url.pathname)) return "/app#home";
   return url.pathname + url.search + url.hash;
 }
 

@@ -129,19 +129,21 @@ def legacy_health():
 
 @app.get("/", include_in_schema=False)
 def frontend_index() -> FileResponse:
-    """Serve giao diện và API cùng một cổng để chạy local đơn giản hơn."""
-    return FileResponse(PROJECT_ROOT / "frontend" / "index.html")
+    """Serve the public guide page at the site's short URL."""
+    return FileResponse(PROJECT_ROOT / "frontend" / "huong-dan.html")
 
 
+@app.get("/app", include_in_schema=False)
 @app.get("/index.html", include_in_schema=False)
-def index_alias():
-    return frontend_index()
+def index_alias() -> FileResponse:
+    """Keep the main AURAMAXX application available at /app and /index.html."""
+    return FileResponse(PROJECT_ROOT / "frontend" / "index.html")
 
 
 @app.get("/visionface.html", include_in_schema=False)
 @app.get("/real_time_face_landmark_liveness_tracker.html", include_in_schema=False)
 def integrated_face_lab():
-    return RedirectResponse("/#face-lab", status_code=303)
+    return RedirectResponse("/app#face-lab", status_code=303)
 
 
 @app.get("/login.html", include_in_schema=False)
