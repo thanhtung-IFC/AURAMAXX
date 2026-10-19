@@ -129,8 +129,8 @@ def legacy_health():
 
 @app.get("/", include_in_schema=False)
 def frontend_index() -> FileResponse:
-    """Serve the public guide page at the site's short URL."""
-    return FileResponse(PROJECT_ROOT / "frontend" / "huong-dan.html")
+    """Serve the main AURAMAXX application at the site's short URL."""
+    return FileResponse(PROJECT_ROOT / "frontend" / "index.html")
 
 
 @app.get("/app", include_in_schema=False)
