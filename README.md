@@ -7,7 +7,7 @@
 
 AURAMAXX là website chính thức; VisionFace là công nghệ được tích hợp trong các tính năng phân tích khuôn mặt.
 
-Chatbot **AURA AI** hỗ trợ OpenAI/Gemini. Xem [AURA_AI.md](AURA_AI.md) để cấu hình
+Chatbot **AURA AI** hỗ trợ Gemini. Xem [AURA_AI.md](AURA_AI.md) để cấu hình
 API, kiểm tra kết nối và sử dụng lịch sử hội thoại theo tài khoản.
 
 Face Lab: xem [FACE_LAB.md](FACE_LAB.md) về luồng camera, điều kiện chụp và các kiểm thử phép đo.
