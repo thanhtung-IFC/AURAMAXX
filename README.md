@@ -1,4 +1,11 @@
-# AURAMAXX + VisionFace — website hợp nhất
+# AURAMAXX — Website chính thức
+
+## Truy cập
+
+- **Ứng dụng AURAMAXX:** [Mở trang chính](https://visionface-ygiq.onrender.com/app)
+- **Video và hướng dẫn sử dụng:** [Mở trang hướng dẫn](https://visionface-ygiq.onrender.com/huong-dan.html)
+
+AURAMAXX là website chính thức; VisionFace là công nghệ được tích hợp trong các tính năng phân tích khuôn mặt.
 
 Chatbot **AURA AI** hỗ trợ OpenAI/Gemini. Xem [AURA_AI.md](AURA_AI.md) để cấu hình
 API, kiểm tra kết nối và sử dụng lịch sử hội thoại theo tài khoản.
@@ -31,7 +38,8 @@ Chạy trên Windows: mở `start_auramaxx.bat`, hoặc:
 .\.venv\Scripts\python.exe run_web.py
 ```
 
-Mở **http://127.0.0.1:8000**. Giao diện và tất cả API chạy chung một cổng.
+Mở **http://127.0.0.1:8000/app** để vào ứng dụng chính. Trang hướng dẫn có tại
+**http://127.0.0.1:8000/huong-dan.html**. Giao diện và tất cả API chạy chung một cổng.
 Website dùng PostgreSQL trên Supabase nên cần kết nối Internet. Không cần bật
 SQL Server hoặc cấp quyền quản trị Windows. Nếu web đã chạy, tệp BAT mở lại trang.
 Trong **My Aura**, chọn đăng nhập để mở lại **bố cục trang đăng nhập cũ** đã đổi
