@@ -118,9 +118,9 @@ def analyze_facial_symmetry(
     eye_tilt_deg = math.degrees(math.atan2(eye_dy, eye_dx))
     median_difference = round(float(np.median(differences)), 2) if differences else None
     note = (
-        "Chỉ số cân xứng tương đối được tính bằng 100 trừ chênh lệch trung vị giữa các cặp landmark, "
-        "tính theo phần trăm bề rộng mặt và giới hạn trong khoảng 0–100. Đây là phép quy đổi mô tả từ ảnh, "
-        "không phải điểm thẩm mỹ, chuẩn thống kê phổ quát hay đánh giá giá trị cá nhân. Biểu cảm, góc quay, "
+        "Chỉ số cân xứng tương đối được quy đổi từ chênh lệch trung vị của 8 cặp landmark: mỗi 1 điểm phần trăm "
+        "chênh lệch so với bề rộng mặt làm giảm 10 điểm, giới hạn trong khoảng 0–100. Đây là thang heuristic để dễ đọc độ lệch, "
+        "chưa được hiệu chuẩn trên quần thể và không phải điểm thẩm mỹ hay đánh giá giá trị cá nhân. Biểu cảm, góc quay, "
         "lật gương và sai số landmark có thể ảnh hưởng số đo."
     )
     pose = pose_quality or {}
@@ -139,13 +139,14 @@ def analyze_facial_symmetry(
     ]
     score_available = bool(differences) and pose_assessed and not pose_limited
     relative_symmetry_score = (
-        round(max(0.0, min(100.0, 100.0 - median_difference)), 1)
+        round(max(0.0, min(100.0, 100.0 - (10.0 * median_difference))), 1)
         if score_available and median_difference is not None else None
     )
     return {
         "overall_symmetry_score": None,
         "relative_symmetry_score": relative_symmetry_score,
-        "relative_symmetry_score_formula": "max(0, min(100, 100 − chênh lệch trung vị (% bề rộng mặt)))",
+        "relative_symmetry_score_formula": "max(0, min(100, 100 − 10 × chênh lệch trung vị (% bề rộng mặt)))",
+        "relative_symmetry_score_scale_note": "Thang heuristic: mỗi 1 điểm phần trăm chênh lệch trung vị so với bề rộng mặt tương ứng 10 điểm; chưa hiệu chuẩn thống kê và không đại diện điểm thẩm mỹ.",
         "evaluation": "Báo cáo khoảng cách giữa các cặp điểm mốc nhìn thấy trong ảnh.",
         "feedback": note,
         "measurement_status": (
@@ -188,9 +189,10 @@ def analyze_facial_proportions(
     points: List[FaceAnalyzerPoint],
     img_w: int,
     img_h: int,
-    image_pil: Optional[Image.Image] = None
+    image_pil: Optional[Image.Image] = None,
+    pose_quality: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
-    """Return neutral 2D measurements from the visible Face Mesh boundary."""
+    """Return neutral 2D measurements and a heuristic visible-outline shape estimate."""
     trichion = estimate_true_trichion(points, img_w, img_h, image_pil)
     glabella = points[9]            # Chân mày
     subnasale = points[2]           # Chân mũi
@@ -223,30 +225,60 @@ def analyze_facial_proportions(
     cheek_w = cheekbone_width
     jaw_w = dist_2d(points[172], points[397])
 
-    # Broad shape labels describe the visible 2D outline and carry no value judgment.
-    if ratio_hw > 1.58:
+    forehead_to_cheek = forehead_w / max(cheek_w, 1e-6)
+    jaw_to_cheek = jaw_w / max(cheek_w, 1e-6)
+    pose = pose_quality or {}
+    pose_limited = pose_quality is not None and (
+        abs(float(pose.get("yaw_deg", 0.0))) > 10
+        or abs(float(pose.get("roll_deg", 0.0))) > 8
+        or bool(pose.get("clipped"))
+        or float(pose.get("face_height_fraction", 1.0)) < 0.25
+        or min(int(pose.get("image_width", img_w)), int(pose.get("image_height", img_h))) < 320
+    )
+
+    # Order distinguishes diamond from heart: diamond requires cheek width to
+    # exceed both forehead and jaw; heart requires a relatively broad forehead.
+    face_shape_key = "oval"
+    if pose_limited:
+        face_shape_key = "unknown"
+        face_shape = "Chưa xác định rõ"
+        shape_desc = "Ảnh bị nghiêng, lệch góc, cắt viền hoặc có độ phân giải thấp nên chưa phân loại dáng mặt đáng tin cậy. Hãy chụp chính diện, đủ sáng và để trọn khuôn mặt trong khung."
+    elif ratio_hw > 1.58:
+        face_shape_key = "oblong"
         face_shape = "Mặt Dài / Chữ Nhật (Oblong)"
-        shape_desc = "Viền Face Mesh trong ảnh có tỷ lệ dọc/rộng thuộc nhóm dài theo ngưỡng phân loại nội bộ; không bao gồm đường chân tóc."
-    elif ratio_hw < 1.22:
-        if jaw_w / cheek_w > 0.84:
-            face_shape = "Mặt Vuông (Square)"
-            shape_desc = "Tỷ lệ viền hàm và vùng má trong ảnh gần nhóm vuông; đây là mô tả đường nét 2D, không suy ra cấu trúc xương."
-        else:
-            face_shape = "Mặt Tròn (Round)"
-            shape_desc = "Tỷ lệ dọc/rộng trong ảnh gần nhóm tròn theo ngưỡng phân loại nội bộ; góc máy và biểu cảm có thể làm thay đổi kết quả."
-    elif forehead_w > cheek_w * 0.95 and jaw_w < cheek_w * 0.72:
-        face_shape = "Mặt Trái Tim (Heart)"
-        shape_desc = "Vùng thái dương của Face Mesh rộng hơn vùng hàm trong ảnh; đường chân tóc và bề ngang trán thật chưa được đo."
-    elif cheek_w > forehead_w * 1.15 and cheek_w > jaw_w * 1.25:
+        shape_desc = "Tỷ lệ chiều dài trên bề ngang vùng Face Mesh nằm trong nhóm dài theo ngưỡng nội bộ."
+    elif cheek_w > forehead_w * 1.08 and jaw_w < cheek_w * 0.84 and cheek_w > jaw_w * 1.12:
+        face_shape_key = "diamond"
         face_shape = "Mặt Kim Cương (Diamond)"
-        shape_desc = "Vùng má rộng hơn vùng thái dương và hàm trong ảnh; nhãn chỉ tóm tắt tỷ lệ 2D, không phải đánh giá thẩm mỹ."
+        shape_desc = "Vùng gò má rộng hơn vùng thái dương và hàm theo các tỷ lệ đo trong ảnh; dáng cằm và chân tóc chưa được nhận diện trực tiếp."
+    elif forehead_w > cheek_w * 1.03 and jaw_w < cheek_w * 0.80:
+        face_shape_key = "heart"
+        face_shape = "Mặt Trái Tim (Heart)"
+        shape_desc = "Vùng thái dương Face Mesh rộng hơn vùng hàm theo tỷ lệ đo trong ảnh; đường chân tóc và đỉnh cằm chưa được phân tích trực tiếp."
+    elif ratio_hw < 1.24 and jaw_to_cheek > 0.84:
+        face_shape_key = "square"
+        face_shape = "Mặt Vuông (Square)"
+        shape_desc = "Tỷ lệ chiều dài/rộng thấp và bề ngang hàm gần bề ngang gò má; đây là mô tả đường nét 2D, không suy ra cấu trúc xương."
+    elif ratio_hw < 1.30 and jaw_to_cheek <= 0.84:
+        face_shape_key = "round"
+        face_shape = "Mặt Tròn (Round)"
+        shape_desc = "Tỷ lệ chiều dài/rộng thấp và hàm hẹp hơn gò má theo phép đo trong ảnh; biểu cảm và góc máy có thể làm đổi nhãn."
     else:
         face_shape = "Mặt Trái Xoan (Oval)"
-        shape_desc = "Tỷ lệ viền Face Mesh gần nhóm oval theo các ngưỡng nội bộ; không bao gồm đường chân tóc và không phải xếp hạng."
+        shape_desc = "Các tỷ lệ đo gần nhóm oval theo ngưỡng nội bộ; đây là nhãn tóm tắt đường viền Face Mesh, không bao gồm chân tóc và không phải xếp hạng."
+
+    shape_metrics = {
+        "length_to_width_ratio": ratio_hw,
+        "forehead_to_cheek_width_ratio": round(forehead_to_cheek, 3),
+        "jaw_to_cheek_width_ratio": round(jaw_to_cheek, 3),
+    }
 
     return {
         "face_shape": face_shape,
+        "face_shape_key": face_shape_key,
+        "face_shape_status": "pose_limited" if pose_limited else "estimated",
         "face_shape_description": shape_desc,
+        "face_shape_metrics": shape_metrics,
         "trichion": {
             "x": round(trichion.x, 4),
             "y": round(trichion.y, 4),
@@ -755,7 +787,7 @@ def run_comprehensive_face_analysis(
 
     # Trả về số đo ảnh và quan sát pixel, không xếp hạng ngoại hình.
     symmetry = analyze_facial_symmetry(points, actual_w, actual_h, quality)
-    proportions = analyze_facial_proportions(points, actual_w, actual_h, pil_img)
+    proportions = analyze_facial_proportions(points, actual_w, actual_h, pil_img, quality)
     nose = analyze_nose_proportions(points, actual_w, actual_h, quality)
     jawline = analyze_jawline_and_chin(points, actual_w, actual_h, quality)
     skin = analyze_skin_condition(pil_img, points)

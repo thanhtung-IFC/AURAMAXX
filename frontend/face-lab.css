@@ -79,6 +79,12 @@
 [data-page="face-lab"] .face-metric-row > span { font-size: 11px; color: var(--color-text-muted); }
 [data-page="face-lab"] .face-metric-row > b { color: var(--face-accent); font-size: 12px; }
 [data-page="face-lab"] .face-engine-detail p { font-size: 11px; color: var(--color-text-subtle); line-height: 1.8; }
+[data-page="face-lab"] .face-engine-score small { display: block; max-width: 230px; color: var(--color-text-subtle); font-size: 10px; line-height: 1.6; }
+[data-page="face-lab"] .face-shape-summary { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin: 0 0 18px; padding: 16px 18px; border: 1px solid color-mix(in srgb, var(--face-accent) 24%, var(--color-border)); border-radius: 12px; background: color-mix(in srgb, var(--face-accent) 6%, var(--color-surface)); }
+[data-page="face-lab"] .face-shape-summary > div { display: grid; gap: 5px; flex: none; }
+[data-page="face-lab"] .face-shape-summary .panel-overline { font-size: 9px; }
+[data-page="face-lab"] .face-shape-summary strong { color: var(--color-text); font: 600 17px/1.4 var(--display); }
+[data-page="face-lab"] .face-shape-summary p { max-width: 560px; margin: 0; color: var(--color-text-subtle); font-size: 11px; line-height: 1.7; }
 [data-page="face-lab"] button:focus-visible { outline: 2px solid var(--color-primary-hover); outline-offset: 3px; }
 @media (max-width: 1080px) {
   [data-page="face-lab"] .face-native-layout { grid-template-columns: minmax(0, 1.5fr) minmax(260px, 1fr); gap: 14px; }
@@ -111,6 +117,8 @@
   [data-page="face-lab"] .face-shot-preview { width: 48px; height: 58px; }
   [data-page="face-lab"] .face-native-report, [data-page="face-lab"] .face-profiles-panel { padding: 16px; }
   [data-page="face-lab"] .face-report-quality { padding: 14px; }
+  [data-page="face-lab"] .face-shape-summary { align-items: flex-start; flex-direction: column; gap: 8px; padding: 14px; }
+  [data-page="face-lab"] .face-engine-score small { max-width: 320px; }
 }
 @media (prefers-reduced-motion: reduce) {
   [data-page="face-lab"] *, [data-page="face-lab"] *::before { transition: none !important; animation: none !important; }

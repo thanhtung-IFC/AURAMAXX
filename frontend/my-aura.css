@@ -112,7 +112,7 @@
 @media(max-width:800px) {
   [data-page="my-aura"] .profile-layout { grid-template-columns:1fr }
   .aura-sidebar { position:static; gap:12px }
-  .aura-account-toolbar { position:sticky; top:8px; z-index:12; display:flex; align-items:center; justify-content:space-between; gap:12px; align-self:start; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:color-mix(in srgb,var(--surface) 94%,transparent); box-shadow:0 8px 24px #070a1166; backdrop-filter:blur(14px) }
+  .aura-account-toolbar { position:sticky; top:74px; z-index:16; display:flex; align-items:center; justify-content:space-between; gap:12px; align-self:start; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:color-mix(in srgb,var(--surface) 94%,transparent); box-shadow:0 8px 24px #070a1166; backdrop-filter:blur(14px) }
   .aura-account-toolbar > span { display:grid; gap:2px; min-width:0 }
   .aura-account-toolbar b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px }
   .aura-account-toolbar small { color:var(--subtle); font-size:10px }
