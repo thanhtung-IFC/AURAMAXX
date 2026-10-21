@@ -685,25 +685,25 @@
               <div class="space-y-1.5 text-xs">
                 <div class="flex items-center justify-between">
                   <span class="text-slate-400">Dáng mặt:</span>
-                  <strong id="dailyLatestFaceShape" class="text-white font-medium">Trái xoan (Oval)</strong>
+                  <strong id="dailyLatestFaceShape" class="text-white font-medium">Chưa quét</strong>
                 </div>
                 <div class="flex items-center justify-between">
-                  <span class="text-slate-400">Hướng tham chiếu:</span>
-                  <strong id="dailyLatestRefDirection" class="text-white font-medium">Cân bằng</strong>
+                  <span class="text-slate-400">Trạng thái đo:</span>
+                  <strong id="dailyLatestRefDirection" class="text-white font-medium">Chưa quét</strong>
                 </div>
                 <div class="flex items-center justify-between">
-                  <span class="text-slate-400">Hài hòa tổng thể:</span>
-                  <strong id="dailyLatestHarmonyScore" class="text-cyan-400 font-mono font-bold">76.8 / 100</strong>
+                  <span class="text-slate-400">Cân xứng tương đối:</span>
+                  <strong id="dailyLatestHarmonyScore" class="text-cyan-400 font-mono font-bold">—</strong>
                 </div>
               </div>
 
               <p class="text-[10px] text-slate-500 leading-normal">
-                Điểm và hướng tính theo tỉ lệ khuôn mặt khảo sát qua phần mềm theo tính năng và giao diện.
+                Chỉ số = 100 trừ chênh lệch landmark trung vị tính theo % bề rộng mặt; không phải điểm thẩm mỹ.
               </p>
 
               <div class="flex items-center gap-2 pt-1">
                 <button id="btnToggleDailyScore" type="button" class="flex-1 py-1.5 px-3 rounded-xl bg-surface-900 hover:bg-surface-700 border border-surface-700 text-xs text-slate-300 font-medium transition text-center">
-                  Ẩn điểm số
+                  Ẩn chỉ số
                 </button>
                 <button id="btnViewFullReport" type="button" class="flex-1 py-1.5 px-3 rounded-xl bg-surface-900 hover:bg-surface-700 border border-surface-700 text-xs text-cyan-300 hover:text-cyan-200 font-semibold transition text-center">
                   Xem báo cáo đầy đủ
@@ -761,22 +761,22 @@
           </div>
           <div>
             <div class="flex flex-wrap items-center gap-2">
-              <h2 class="text-base font-bold text-white">Báo Cáo Định Lượng Thẩm Mỹ & Sinh Trắc Học</h2>
+              <h2 class="text-base font-bold text-white">Báo cáo số đo khuôn mặt</h2>
               <span id="badgeOverallGrade" class="text-[10px] px-2 py-0.5 rounded-full font-mono bg-cyan-950 text-cyan-300 border border-cyan-800">
                 Chờ phân tích...
               </span>
               <span class="text-[10px] px-2 py-0.5 rounded-full font-mono bg-emerald-950/60 text-emerald-400 border border-emerald-800 flex items-center gap-1">
-                <i class="fa-solid fa-scale-balanced text-[10px]"></i>Đo tỷ lệ hình học • Mốc tham khảo
+                <i class="fa-solid fa-scale-balanced text-[10px]"></i>Chỉ số mô tả theo số đo tương đối
               </span>
             </div>
-            <p id="analysisQualityNote" class="text-xs text-slate-400">Điểm tham khảo từ các tỷ lệ hình học; không phải xếp hạng dân số hay chẩn đoán y khoa.</p>
+            <p id="analysisQualityNote" class="text-xs text-slate-400">Chỉ số cân xứng được tính từ số đo tương đối và không phải điểm thẩm mỹ.</p>
           </div>
         </div>
 
         <div class="flex items-center gap-2">
           <div class="hidden sm:flex items-center gap-2 bg-surface-800 border border-surface-700 px-3 py-1.5 rounded-xl">
-            <span class="text-xs text-slate-400 font-medium">Hài Hòa Tổng Thể:</span>
-            <span id="txtOverallHarmonyScore" class="text-base font-mono font-bold text-emerald-400">92.5</span>
+            <span class="text-xs text-slate-400 font-medium">Cân xứng tương đối:</span>
+            <span id="txtOverallHarmonyScore" class="text-base font-mono font-bold text-emerald-400">—</span>
             <span class="text-xs font-mono text-slate-500">/ 100</span>
           </div>
 
@@ -838,19 +838,19 @@
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-2 font-bold text-white text-xs">
                 <i class="fa-solid fa-arrows-split-up-and-left text-cyan-400"></i>
-                <span>1. Độ Cân Đối Trục Mặt (Facial Symmetry)</span>
+                <span>1. Chỉ số cân xứng tương đối</span>
               </div>
               <div class="flex items-center gap-2 font-mono text-xs">
-                <span id="txtSymmetryLevel" class="text-emerald-400">Cân đối cao</span>
-                <strong id="txtSymmetryScore" class="text-white text-sm">94.2%</strong>
+                <span id="txtSymmetryLevel" class="min-w-0 flex-1 break-words text-right text-slate-400">Chưa đo</span>
+                <strong id="txtSymmetryScore" class="text-white text-sm">—</strong>
               </div>
             </div>
             <div class="text-[11px] text-slate-400 flex items-center justify-between">
-              <span>Độ nghiêng hai mắt: <strong id="txtEyeTilt" class="text-cyan-300 font-mono">0.4°</strong></span>
+              <span>Độ nghiêng đường nối tâm mắt: <strong id="txtEyeTilt" class="text-cyan-300 font-mono">Chưa đo</strong></span>
             </div>
             <div id="listSymmetryDetails" class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs"></div>
             <div id="boxAsymmetryFlaws" class="mt-1 p-2.5 rounded-xl bg-surface-900 border border-surface-700 text-xs">
-              <span class="text-amber-400 font-semibold block mb-1 text-[11px]">Lưu ý lệch trục:</span>
+              <span class="text-amber-400 font-semibold block mb-1 text-[11px]">Chênh lệch các cặp landmark:</span>
               <ul id="listAsymmetryFlaws" class="space-y-1 text-slate-300 text-[11px]"></ul>
             </div>
           </div>
@@ -860,11 +860,11 @@
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-2 font-bold text-white text-xs">
                 <i class="fa-solid fa-divide text-emerald-400"></i>
-                <span>2. Tỷ Lệ 3 Phần & Tỷ Lệ Vàng (Rule of Thirds)</span>
+                <span>2. Tỷ trọng ba vùng trong ảnh</span>
               </div>
-              <div class="flex items-center gap-2 font-mono text-xs">
-                <span class="text-slate-400">Độ khớp:</span>
-                <strong id="txtGoldenFitScore" class="text-white text-sm">88.5%</strong>
+              <div class="hidden items-center gap-2 font-mono text-xs">
+              <span class="text-slate-400">Điểm theo tỷ lệ tham chiếu:</span>
+                <strong id="txtGoldenFitScore" class="text-white text-sm">—</strong>
               </div>
             </div>
             <div class="grid grid-cols-3 gap-2 text-center text-xs">
@@ -883,7 +883,7 @@
             </div>
             <div class="flex items-center justify-between text-xs text-slate-400 font-mono">
               <span>fWHR (Dài/Rộng): <strong id="txtFwhrRatio" class="text-white">1.46</strong></span>
-              <span>Độ hài hòa: <strong id="txtThirdsHarmony" class="text-emerald-400">91.0%</strong></span>
+              <span>Chênh lệch 3 tầng: <strong id="txtThirdsHarmony" class="text-emerald-400">—</strong></span>
             </div>
             <p id="txtThirdsHonestEvaluation" class="text-xs text-slate-400 leading-relaxed"></p>
           </div>
@@ -895,7 +895,7 @@
                 <i class="fa-solid fa-shapes text-amber-400"></i>
                 <span>3. Tỷ Lệ Mũi (Nose Proportions)</span>
               </div>
-              <strong id="txtNoseScore" class="text-white font-mono text-sm">86.0%</strong>
+              <strong id="txtNoseScore" class="hidden text-white font-mono text-sm">—</strong>
             </div>
             <div class="grid grid-cols-2 gap-2 text-xs">
               <div class="p-2 bg-surface-900 rounded-xl border border-surface-700">
@@ -918,9 +918,9 @@
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-2 font-bold text-white text-xs">
                 <i class="fa-solid fa-bezier-curve text-rose-400"></i>
-                <span>4. Viền Hàm & Cằm (Jawline & Chin)</span>
+                <span>4. Góc hàm & cằm · số đo 2D</span>
               </div>
-              <strong id="txtJawSharpness" class="text-white font-mono text-sm">88.0%</strong>
+              <strong id="txtJawSharpness" class="hidden text-white font-mono text-sm">—</strong>
             </div>
             <div class="grid grid-cols-3 gap-2 text-center text-xs">
               <div class="p-2 bg-surface-900 rounded-xl border border-surface-700">
@@ -946,14 +946,14 @@
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-2 font-bold text-white text-xs">
                 <i class="fa-solid fa-head-side text-indigo-400"></i>
-                <span>5. Chẩn Đoán Trắc Diện Góc Nghiêng (Profile View)</span>
+                <span>5. Góc nghiêng · số đo 2D</span>
               </div>
-              <strong id="txtProfileAestheticScore" class="text-white font-mono text-sm">85.0%</strong>
+              <strong id="txtProfileAestheticScore" class="hidden text-white font-mono text-sm">—</strong>
             </div>
             <div class="grid grid-cols-2 gap-2 text-xs">
               <div class="p-2 bg-surface-900 rounded-xl border border-surface-700">
-                <span class="text-slate-400 block text-[10px]">Đường Ricketts E-line:</span>
-                <strong id="txtElineScore" class="font-mono text-cyan-300">90%</strong>
+                <span class="text-slate-400 block text-[10px]">Độ lệch môi dưới so với đường tham chiếu 2D:</span>
+                <strong id="txtElineScore" class="font-mono text-cyan-300">Chưa đo</strong>
                 <span id="txtChinProjection" class="block text-[11px] text-slate-300 mt-0.5"></span>
               </div>
               <div class="p-2 bg-surface-900 rounded-xl border border-surface-700">
@@ -975,26 +975,26 @@
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-2 font-bold text-white text-xs">
                 <i class="fa-solid fa-wand-magic text-emerald-400"></i>
-                <span>6. Tình Trạng Bề Mặt Da (Skin Health ROI)</span>
+                <span>6. Pixel các vùng da trong ảnh</span>
               </div>
-              <strong id="txtSkinSmoothScore" class="text-white font-mono text-sm">82%</strong>
+              <strong id="txtSkinSmoothScore" class="hidden text-white font-mono text-sm">—</strong>
             </div>
             <div class="grid grid-cols-4 gap-2 text-center text-xs">
               <div class="p-2 bg-surface-900 rounded-xl border border-surface-700">
-                <span class="text-slate-400 block text-[10px]">Độ mịn</span>
-                <strong id="txtSkinSmoothness" class="font-mono text-cyan-300">82%</strong>
+                <span class="text-slate-400 block text-[10px]">Biến thiên pixel ở má</span>
+                <strong id="txtSkinSmoothness" class="font-mono text-cyan-300">Chưa đo</strong>
               </div>
               <div class="p-2 bg-surface-900 rounded-xl border border-surface-700">
-                <span class="text-slate-400 block text-[10px]">Đều màu</span>
-                <strong id="txtSkinUniformity" class="font-mono text-cyan-300">79%</strong>
+                <span class="text-slate-400 block text-[10px]">Chênh sáng hai má</span>
+                <strong id="txtSkinUniformity" class="font-mono text-cyan-300">Chưa đo</strong>
               </div>
               <div class="p-2 bg-surface-900 rounded-xl border border-surface-700">
-                <span class="text-slate-400 block text-[10px]">Quầng thâm</span>
-                <strong id="txtDarkCircles" class="font-mono text-amber-300">22%</strong>
+                <span class="text-slate-400 block text-[10px]">Dưới mắt / má</span>
+                <strong id="txtDarkCircles" class="font-mono text-amber-300">Chưa đo</strong>
               </div>
               <div class="p-2 bg-surface-900 rounded-xl border border-surface-700">
-                <span class="text-slate-400 block text-[10px]">Bóng nhờn</span>
-                <strong id="txtSkinOiliness" class="font-mono text-cyan-300">35%</strong>
+                <span class="text-slate-400 block text-[10px]">Vùng có số đo</span>
+                <strong id="txtSkinOiliness" class="font-mono text-cyan-300">Chưa đo</strong>
               </div>
             </div>
             <div class="flex items-center justify-between text-xs text-slate-400 pt-1">
@@ -1013,7 +1013,7 @@
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-2 font-bold text-white text-xs">
                 <i class="fa-solid fa-scissors text-cyan-400"></i>
-                <span>7. Kiểu Tóc & Bù Trừ Khuyết Điểm (Hair Recommendations)</span>
+                <span>7. Tóc & gợi ý tạo kiểu</span>
               </div>
               <span id="txtHairlineType" class="text-xs text-slate-300 font-medium">Chân tóc vòng cung</span>
             </div>
@@ -1032,7 +1032,7 @@
               </div>
               <div id="boxStylistCorrection" class="p-2.5 bg-amber-950/20 border border-amber-800/40 rounded-xl">
                 <span class="text-amber-400 font-semibold block mb-1 text-[11px]">
-                  <i class="fa-solid fa-lightbulb mr-1"></i>Chiến Lược Tạo Kiểu Bù Trừ Khuyết Điểm:
+                  <i class="fa-solid fa-lightbulb mr-1"></i>Gợi ý tạo kiểu:
                 </span>
                 <p id="txtHairCorrective" class="text-slate-300 text-[11px] leading-relaxed"></p>
                 <div class="mt-1.5 text-[10px] font-mono text-amber-300/90" id="txtHairFocus"></div>

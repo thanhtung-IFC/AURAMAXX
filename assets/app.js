@@ -2054,8 +2054,9 @@
       if (profileYaw < 15 || profileYaw > 40) {
         fResult.is_multi_view = false;
         fResult.measurement_quality = {
-          label: "Ước lượng hình học, không phải xếp hạng dân số hay chẩn đoán y khoa",
-          warnings: ["Ảnh góc nghiêng chưa nằm trong khoảng 15–40°; điểm tổng hợp chỉ dùng ảnh chính diện."],
+          ...fResult.measurement_quality,
+          label: "Chỉ số cân xứng được tính riêng từ ảnh chính diện; góc nghiêng chỉ có số đo mô tả.",
+          warnings: [...(fResult.measurement_quality?.warnings || []), "Ảnh góc nghiêng chưa nằm trong khoảng 15–40°; không dùng ảnh này để tính chỉ số."],
           profile_used: false
         };
         return fResult;
@@ -2102,16 +2103,12 @@
 
       let chinProj = "Cằm đạt chuẩn tỷ lệ thẩm mỹ Ricketts E-line";
       let chinComment = "Cằm và môi có độ dốc hài hòa trên đường thẩm mỹ chuẩn.";
-      let chinScore = 92.0;
-
       if (normLowerLip > 5.5) {
         chinProj = "Cằm lẹm (Retrognathia) / Môi nhô trước đường E-line";
         chinComment = "Đường E-line cho thấy cằm bị thụt lùi so với trục mũi và môi, làm góc nghiêng thiếu độ sắc nét.";
-        chinScore = 65.0;
       } else if (normLowerLip < -3.5) {
         chinProj = "Cằm nhô / Cằm phát triển quá mức (Prognathia)";
         chinComment = "Cằm phát triển chìa ra trước nhiều hơn trục thẩm mỹ E-line.";
-        chinScore = 72.0;
       }
 
       const nasolabialDeg = Math.round(angleDeg(pronasale, subnasale, labraleSup) * 10) / 10;
@@ -2134,17 +2131,16 @@
       let pJawDesc = pGonial < 118 ? `Góc hàm vuông vức sắc nét (${pGonial}°)` :
                      pGonial <= 128 ? `Góc hàm nghiêng thanh tú (${pGonial}°)` : `Góc hàm nghiêng mở rộng (${pGonial}°)`;
 
-      const pScore = Math.round((chinScore * 0.40 + (nasolabialDeg >= 90 && nasolabialDeg <= 106 ? 92 : 72) * 0.35 + 85 * 0.25) * 10) / 10;
-
       const profileAnalysis = {
-        profile_aesthetic_score: pScore,
+        profile_aesthetic_score: null,
         view_side: isLeftProfile ? "Góc nghiêng Trái" : "Góc nghiêng Phải",
         ricketts_eline: {
           chin_projection: chinProj,
           chin_comment: chinComment,
           upper_lip_offset_px: Math.round(elineDistUpper * 10) / 10,
           lower_lip_offset_px: Math.round(elineDistLower * 10) / 10,
-          score: chinScore
+          lower_lip_offset_pct: Math.round(normLowerLip * 100) / 100,
+          score: null
         },
         nasolabial_angle_deg: nasolabialDeg,
         nasolabial_status: nasolabialStatus,
@@ -2197,16 +2193,12 @@
 
       fResult.profile = profileAnalysis;
       fResult.is_multi_view = true;
-      fResult.overall_harmony_score = Math.round((fResult.overall_harmony_score * 0.80 + pScore * 0.20) * 10) / 10;
-
-      const sc = fResult.overall_harmony_score;
-      fResult.overall_grade = sc >= 85 ? "Điểm tổng hợp cao theo tiêu chí tham khảo" :
-                              sc >= 75 ? "Điểm tổng hợp khá theo tiêu chí tham khảo" :
-                              sc >= 63 ? "Điểm tổng hợp trung bình theo tiêu chí tham khảo" :
-                              sc >= 50 ? "Một số tỷ lệ lệch khỏi mốc tham khảo" : "Nhiều tỷ lệ lệch khỏi mốc tham khảo";
+      fResult.overall_harmony_score = null;
+      fResult.overall_grade = "Báo cáo hiển thị số đo; chỉ số cân xứng được tính riêng từ số đo tương đối.";
       fResult.measurement_quality = {
-        label: "Ước lượng hình học, không phải xếp hạng dân số hay chẩn đoán y khoa",
-        warnings: [], profile_used: true
+        ...fResult.measurement_quality,
+        label: "Ước lượng hình học 2D; chỉ số cân xứng không phải điểm thẩm mỹ hay chuẩn thống kê.",
+        warnings: fResult.measurement_quality?.warnings || [], profile_used: true
       };
 
       return fResult;
@@ -2270,50 +2262,70 @@
       }
 
       const trichion = estimateTrueTrichion(points, imgW, imgH);
-      const forehead = trichion; // Khắc phục triệt để lỗi trán bị đánh giá thấp do mốc 10
+      const forehead = trichion;
+      const midlineTop = points[10];
       const glabella = points[9];
       const subnasale = points[2];
       const chin = points[152];
 
-      const hasIris = points.length >= 478;
-      const eyeL = hasIris ? points[468] : { x: (points[159].x + points[145].x) / 2, y: (points[159].y + points[145].y) / 2 };
-      const eyeR = hasIris ? points[473] : { x: (points[386].x + points[374].x) / 2, y: (points[386].y + points[374].y) / 2 };
-
+      const eyeCenterL = { x: (points[33].x + points[133].x) / 2, y: (points[33].y + points[133].y) / 2 };
+      const eyeCenterR = { x: (points[362].x + points[263].x) / 2, y: (points[362].y + points[263].y) / 2 };
       const pairs = [
-        ["Mắt (Tâm đồng tử)", eyeL, eyeR, 1.25],
-        ["Khóe mắt ngoài", points[33], points[362], 1.0],
-        ["Khóe mắt trong", points[133], points[263], 1.0],
-        ["Gò má", points[234], points[454], 1.15],
-        ["Cánh mũi", points[102], points[331], 1.05],
-        ["Khóe miệng", points[61], points[291], 1.1],
-        ["Góc xương hàm", points[172], points[397], 1.2],
-        ["Đuôi chân mày", points[70] || points[33], points[300] || points[362], 0.85]
+        ["Tâm hai khóe mắt", eyeCenterL, eyeCenterR],
+        ["Khóe mắt ngoài", points[33], points[263]],
+        ["Khóe mắt trong", points[133], points[362]],
+        ["Gò má", points[234], points[454]],
+        ["Cánh mũi", points[102], points[331]],
+        ["Khóe miệng", points[61], points[291]],
+        ["Góc hàm", points[172], points[397]],
+        ["Đuôi chân mày", points[70], points[300]]
       ];
 
-      let totW = 0, weightedSym = 0, symDetails = [], asymmetryFlaws = [];
-      pairs.forEach(([name, pl, pr, w]) => {
-        const dl = Math.abs(pLineDist(pl, forehead, chin));
-        const dr = Math.abs(pLineDist(pr, forehead, chin));
-        const diff = Math.abs(dl - dr);
-        const avg = (dl + dr) / 2.0 + 1e-4;
-        const rel = diff / avg;
-        const score = Math.max(30, Math.min(100, 100 - (rel * 140)));
-        weightedSym += score * w;
-        totW += w;
-        if (diff > 4.5) {
-          const side = dr > dl ? "bên phải xa trục hơn" : "bên trái xa trục hơn";
-          asymmetryFlaws.push(`${name} lệch ${diff.toFixed(1)}px (${side})`);
-        }
-        symDetails.push({ feature: name, score: Math.round(score * 10) / 10, diff_px: Math.round(diff * 10) / 10 });
+      const faceWidthPx = Math.max(d2d(points[234], points[454]), 1);
+      const differences = [];
+      const symDetails = pairs.map(([name, pl, pr]) => {
+        const signedL = pLineDist(pl, midlineTop, chin);
+        const signedR = pLineDist(pr, midlineTop, chin);
+        const leftDist = Math.abs(signedL), rightDist = Math.abs(signedR);
+        const diffPx = Math.abs(leftDist - rightDist);
+        const diffPct = diffPx / faceWidthPx * 100;
+        differences.push(diffPct);
+        return {
+          feature: name,
+          left_dist_px: Math.round(leftDist * 10) / 10,
+          right_dist_px: Math.round(rightDist * 10) / 10,
+          left_offset_px_signed: Math.round(signedL * 10) / 10,
+          right_offset_px_signed: Math.round(signedR * 10) / 10,
+          diff_px: Math.round(diffPx * 10) / 10,
+          diff_face_width_pct: Math.round(diffPct * 100) / 100
+        };
       });
 
-      const eyeDy = (eyeR.y - eyeL.y) * imgH;
-      const eyeDx = (eyeR.x - eyeL.x) * imgW;
+      const eyeDy = (eyeCenterR.y - eyeCenterL.y) * imgH;
+      const eyeDx = (eyeCenterR.x - eyeCenterL.x) * imgW;
       const eyeTilt = Math.round(Math.atan2(eyeDy, eyeDx) * (180 / Math.PI) * 10) / 10;
-      const overallSym = Math.round((weightedSym / totW) * 10) / 10;
-      let symEval = overallSym >= 88 && Math.abs(eyeTilt) <= 0.8 ? "Điểm đối xứng cao theo phép đo hình học" :
-                    overallSym >= 76 ? "Độ lệch thấp theo ngưỡng đo tham khảo" :
-                    overallSym >= 64 ? "Lệch tự nhiên phổ biến (Thói quen nhai một bên)" : "Bất đối xứng rõ rệt";
+      const sortedDifferences = [...differences].sort((a, b) => a - b);
+      const medianDifference = sortedDifferences.length
+        ? Math.round(((sortedDifferences.length % 2
+          ? sortedDifferences[(sortedDifferences.length - 1) / 2]
+          : (sortedDifferences[sortedDifferences.length / 2 - 1] + sortedDifferences[sortedDifferences.length / 2]) / 2) * 100)) / 100
+        : null;
+      const yawDeg = Math.abs(Math.atan2(points[234].z - points[454].z, Math.max(1e-6, Math.abs(points[454].x - points[234].x))) * 180 / Math.PI);
+      const rollDeg = Math.abs(Math.atan2((points[263].y - points[33].y) * imgH, Math.max(1e-6, Math.abs((points[263].x - points[33].x) * imgW))) * 180 / Math.PI);
+      const faceHeightFraction = Math.abs(points[152].y - points[10].y);
+      const clipped = [points[10], points[152], points[234], points[454]].some(p => p.x < 0.015 || p.x > 0.985 || p.y < 0.015 || p.y > 0.985);
+      const captureWarnings = [];
+      if (yawDeg > 10) captureWarnings.push("Ảnh có thể quay khỏi chính diện; phép đo hai bên có thể sai lệch.");
+      if (rollDeg > 8) captureWarnings.push("Đường nối khóe mắt bị nghiêng; phép đo ngang có thể thiếu ổn định.");
+      if (clipped) captureWarnings.push("Một phần khuôn mặt sát mép ảnh; phép đo có thể thiếu chính xác.");
+      if (faceHeightFraction < 0.25) captureWarnings.push("Khuôn mặt chiếm ít diện tích ảnh; hãy chụp gần hơn.");
+      if (Math.min(imgW, imgH) < 320) captureWarnings.push("Độ phân giải ảnh thấp; các phép đo chi tiết có thể thiếu ổn định.");
+      const scoreEligible = captureWarnings.length === 0 && medianDifference != null;
+      const relativeSymmetryScore = scoreEligible ? Math.round(Math.max(0, Math.min(100, 100 - medianDifference)) * 10) / 10 : null;
+      const symmetryStatus = scoreEligible
+        ? "Chỉ số mô tả theo số đo tương đối; không phải điểm thẩm mỹ."
+        : "Đã ẩn chỉ số do cảnh báo tư thế hoặc chất lượng ảnh.";
+      const asymmetryFlaws = symDetails.map(item => `${item.feature}: chênh ${item.diff_px}px (${item.diff_face_width_pct}% bề rộng mặt).`);
 
       const upperH = d2d(forehead, glabella);
       const middleH = d2d(glabella, subnasale);
@@ -2323,8 +2335,7 @@
       const middlePct = Math.round((middleH / totH) * 1000) / 10;
       const lowerPct = Math.round((lowerH / totH) * 1000) / 10;
 
-      const dev3 = Math.abs(upperPct - 33.3) + Math.abs(middlePct - 33.3) + Math.abs(lowerPct - 33.3);
-      const thirdsHarm = Math.round(Math.max(40, Math.min(98, 100 - dev3 * 3.8)) * 10) / 10;
+      const thirdsSpread = Math.round((Math.max(upperPct, middlePct, lowerPct) - Math.min(upperPct, middlePct, lowerPct)) * 10) / 10;
 
       let thirdsNotes = [];
       if (upperPct > 36.5) thirdsNotes.push(`Tầng trán chiếm ${upperPct}% (trán cao/dô)`);
@@ -2338,7 +2349,6 @@
       const faceL = d2d(forehead, chin);
       const cheekW = d2d(points[234], points[454]) + 1e-6;
       const ratioHW = Math.round((faceL / cheekW) * 100) / 100;
-      const goldenFit = Math.round(Math.max(40, Math.min(98, 100 - Math.abs(ratioHW - 1.618) * 60)) * 10) / 10;
 
       let faceShape = "Mặt Trái Xoan (Oval)";
       let shapeDesc = "Dáng mặt cân đối chuẩn mực, đường viền thanh thoát tự nhiên.";
@@ -2353,7 +2363,6 @@
       const alarW = d2d(points[102], points[331]);
       const noseL = d2d(points[168] || points[9], subnasale) + 1e-6;
       const noseRatio = Math.round((alarW / noseL) * 100) / 100;
-      const noseScore = Math.round(Math.max(45, Math.min(97, 100 - Math.abs(noseRatio - 0.67) * 75)) * 10) / 10;
       const bridgeDevPx = Math.abs(pLineDist(points[1], forehead, chin));
       const bridgeDev = Math.round((bridgeDevPx / cheekW) * 1000) / 10;
       const bridgeComment = bridgeDev > 0.5 ? `Đỉnh mũi lệch ${bridgeDev}% bề rộng mặt trong ảnh; góc chụp có thể ảnh hưởng.` : "Đỉnh mũi gần trục giữa trong ảnh.";
@@ -2363,7 +2372,6 @@
       const gonialR = angleDeg(points[454], points[397], chin);
       const avgGonial = Math.round(((gonialL + gonialR) / 2) * 10) / 10;
       const chinApex = Math.round(angleDeg(points[172], chin, points[397]) * 10) / 10;
-      const jawScore = Math.round(Math.max(45, Math.min(98, 100 - Math.abs(avgGonial - 124.0) * 1.8)) * 10) / 10;
       let chinType = chinApex < 92 ? "Cằm V-line" : chinApex < 112 ? "Cằm tròn đều" : "Cằm bạnh / vuông";
       let chinFlaw = avgGonial < 118 ? "Khung xương hàm dưới bạnh vuông, góc hàm sắc nhưng thiếu độ thon." :
                      chinApex > 115 ? "Đáy cằm phẳng ngang, làm phần dưới khuôn mặt trông hơi thô." :
@@ -2383,40 +2391,40 @@
         target_focus: "Cân bằng tỷ lệ 3 tầng và làm mềm góc hàm"
       };
 
-      const harmonyScore = Math.round(((overallSym * 0.25 + thirdsHarm * 0.25 + noseScore * 0.18 + jawScore * 0.17) / 0.85) * 10) / 10;
-      const overallGrade = harmonyScore >= 85 ? "Điểm tổng hợp cao theo tiêu chí tham khảo" :
-                           harmonyScore >= 75 ? "Điểm tổng hợp khá theo tiêu chí tham khảo" :
-                           harmonyScore >= 63 ? "Điểm tổng hợp trung bình theo tiêu chí tham khảo" :
-                           harmonyScore >= 50 ? "Một số tỷ lệ lệch khỏi mốc tham khảo" : "Nhiều tỷ lệ lệch khỏi mốc tham khảo";
-
       return {
         success: true,
-        overall_harmony_score: harmonyScore,
-        overall_grade: overallGrade,
+        overall_harmony_score: null,
+        overall_grade: "Chỉ số cân xứng được tính riêng từ số đo tương đối; báo cáo không chấm điểm tổng thể ngoại hình.",
         symmetry: {
-          overall_symmetry_score: overallSym,
+          overall_symmetry_score: null,
+          relative_symmetry_score: relativeSymmetryScore,
+          relative_symmetry_score_formula: "max(0, min(100, 100 − chênh lệch trung vị (% bề rộng mặt)))",
+          median_pair_difference_pct_of_face_width: medianDifference,
+          measurement_status: symmetryStatus,
           eye_tilt_deg: eyeTilt,
-          evaluation: symEval,
+          evaluation: symmetryStatus,
           details: symDetails,
           asymmetry_flaws: asymmetryFlaws,
-          midline_axis: { top: { x: forehead.x * imgW, y: forehead.y * imgH }, bottom: { x: chin.x * imgW, y: chin.y * imgH } }
+          measurement_note: "Chỉ số là phép quy đổi mô tả từ sai khác landmark 2D đã chuẩn hóa theo bề rộng mặt; không phải điểm thẩm mỹ hay chuẩn phổ quát.",
+          midline_axis: { top: { x: midlineTop.x * imgW, y: midlineTop.y * imgH }, bottom: { x: chin.x * imgW, y: chin.y * imgH } }
         },
         proportions: {
           face_shape: faceShape,
           face_shape_description: shapeDesc,
           length_to_width_ratio: ratioHW,
-          golden_ratio_fit_score: goldenFit,
+          golden_ratio_fit_score: null,
           rule_of_thirds: {
             upper_third_pct: upperPct,
             middle_third_pct: middlePct,
             lower_third_pct: lowerPct,
-            harmony_score: thirdsHarm,
+            harmony_score: null,
+            spread_pct: thirdsSpread,
             evaluation: thirdsNotes
           },
           honest_evaluation: thirdsNotes.join("; ")
         },
         nose: {
-          nose_aesthetic_score: noseScore,
+          nose_aesthetic_score: null,
           width_to_length_ratio: noseRatio,
           alar_status: alarComment,
           alar_comment: alarComment,
@@ -2426,7 +2434,7 @@
           bridge_deviation_face_width_pct: bridgeDev
         },
         jawline: {
-          jawline_sharpness_score: jawScore,
+          jawline_sharpness_score: null,
           average_jaw_angle_deg: avgGonial,
           chin_type: chinType,
           chin_apex_angle_deg: chinApex,
@@ -2451,7 +2459,7 @@
           hair_recommendations: hairAdvice
         },
         visual_guides: {
-          midline: [{ x: forehead.x * imgW, y: forehead.y * imgH }, { x: chin.x * imgW, y: chin.y * imgH }],
+          midline: [{ x: midlineTop.x * imgW, y: midlineTop.y * imgH }, { x: chin.x * imgW, y: chin.y * imgH }],
           thirds_lines: [
             { name: "Chân tóc (Trichion)", y: Math.round(forehead.y * imgH) },
             { name: "Chân mày (Glabella)", y: Math.round(glabella.y * imgH) },
@@ -2471,7 +2479,8 @@
         },
         measurement_quality: {
           label: "Ước lượng hình học, không phải xếp hạng dân số hay chẩn đoán y khoa",
-          warnings: ["Phân tích dự phòng trên trình duyệt; tình trạng da chưa được đo."],
+          front_pose: { yaw_deg: Math.round(yawDeg * 10) / 10, roll_deg: Math.round(rollDeg * 10) / 10, face_height_fraction: Math.round(faceHeightFraction * 1000) / 1000, clipped, image_width: imgW, image_height: imgH },
+          warnings: [...captureWarnings, "Phân tích dự phòng trên trình duyệt; tình trạng da chưa được đo."],
           profile_used: false
         }
       };
@@ -2538,38 +2547,35 @@
       window.displayAnalysisReport = displayAnalysisReport;
       if (typeof window !== 'undefined' && window.VisionChat) window.VisionChat.setAnalysis(data);
       if (typeof window !== 'undefined' && window.DailyRoutine) window.DailyRoutine.onFaceAnalysisComplete(data, snapshotDataUrl);
-      // 1. Overall heuristic score and capture-quality note.
-      txtOverallHarmonyScore.innerText = data.overall_harmony_score;
-      badgeOverallGrade.innerText = data.overall_grade;
+      // Chỉ số duy nhất là cân xứng tương đối, tính từ độ lệch landmark / bề rộng mặt.
+      const symmetryScore = data.symmetry?.relative_symmetry_score;
+      const scoreValue = Number.isFinite(symmetryScore) ? symmetryScore.toFixed(1) : '—';
+      const displayedSymmetryScore = scoreValue === '—' ? '—' : `${scoreValue} / 100`;
+      txtOverallHarmonyScore.innerText = scoreValue;
+      badgeOverallGrade.innerText = data.overall_grade || 'Không chấm điểm tổng thể ngoại hình';
       const qualityNote = document.getElementById('analysisQualityNote');
       if (qualityNote) {
         const measurement = data.measurement_quality;
         const warnings = Array.isArray(measurement?.warnings) ? measurement.warnings : [];
-        qualityNote.textContent = [measurement?.label || 'Điểm tham khảo từ các tỷ lệ hình học.', ...warnings].join(' ');
+        qualityNote.textContent = [
+          measurement?.label || data.symmetry?.measurement_note,
+          data.symmetry?.measurement_status,
+          data.symmetry?.relative_symmetry_score_formula,
+          ...warnings
+        ].filter(Boolean).join(' ');
         qualityNote.classList.toggle('text-amber-300', warnings.length > 0);
         qualityNote.classList.toggle('text-slate-400', warnings.length === 0);
       }
 
-      const score = data.overall_harmony_score;
-      if (score >= 85) {
-        badgeOverallGrade.className = "text-[10px] px-2.5 py-0.5 rounded-full font-mono bg-emerald-950 text-emerald-300 border border-emerald-700 font-bold";
-      } else if (score >= 75) {
-        badgeOverallGrade.className = "text-[10px] px-2.5 py-0.5 rounded-full font-mono bg-cyan-950 text-cyan-300 border border-cyan-800 font-bold";
-      } else if (score >= 63) {
-        badgeOverallGrade.className = "text-[10px] px-2.5 py-0.5 rounded-full font-mono bg-blue-950 text-blue-300 border border-blue-800 font-semibold";
-      } else if (score >= 50) {
-        badgeOverallGrade.className = "text-[10px] px-2.5 py-0.5 rounded-full font-mono bg-amber-950 text-amber-300 border border-amber-800 font-semibold";
-      } else {
-        badgeOverallGrade.className = "text-[10px] px-2.5 py-0.5 rounded-full font-mono bg-rose-950 text-rose-300 border border-rose-800 font-semibold";
-      }
+      badgeOverallGrade.className = "text-[10px] px-2.5 py-0.5 rounded-full font-mono bg-surface-800 text-slate-300 border border-surface-700";
 
       txtShapeBadge.innerText = data.proportions.face_shape;
       txtShapeDescription.innerText = data.proportions.face_shape_description;
 
       // 2. Độ Cân Đối (Facial Symmetry) - Chẩn đoán sai lệch thực tế
-      txtSymmetryScore.innerText = `${data.symmetry.overall_symmetry_score}%`;
-      txtSymmetryLevel.innerText = data.symmetry.evaluation;
-      txtEyeTilt.innerText = `${data.symmetry.eye_tilt_deg}°`;
+      txtSymmetryScore.innerText = displayedSymmetryScore;
+      txtSymmetryLevel.innerText = data.symmetry.measurement_status || data.symmetry.evaluation || 'Số đo tương đối';
+      txtEyeTilt.innerText = Number.isFinite(data.symmetry.eye_tilt_deg) ? `${data.symmetry.eye_tilt_deg}°` : 'Chưa đo';
 
       listSymmetryDetails.innerHTML = '';
       if (data.symmetry.details) {
@@ -2579,8 +2585,8 @@
           card.innerHTML = `
             <span class="text-slate-300">${item.feature}:</span>
             <div class="flex items-center gap-2">
-              <span class="text-[10px] text-slate-500 font-mono">(Lệch ${item.diff_face_width_pct ?? item.diff_px}% ${item.diff_face_width_pct !== undefined ? 'bề rộng mặt' : ''})</span>
-              <strong class="font-mono text-cyan-400 font-bold">${item.score}%</strong>
+              <span class="text-[10px] text-slate-500 font-mono">Chênh ${item.diff_face_width_pct ?? '—'}% bề rộng mặt</span>
+              <strong class="font-mono text-cyan-400 font-bold">${item.diff_px ?? '—'} px</strong>
             </div>
           `;
           listSymmetryDetails.appendChild(card);
@@ -2603,22 +2609,23 @@
       }
 
       // 3. Tỷ Lệ Khuôn Mặt & Quy Tắc 3 Phần (Proportions)
-      txtGoldenFitScore.innerText = `${data.proportions.golden_ratio_fit_score}%`;
-      txtUpperThird.innerText = `${data.proportions.rule_of_thirds.upper_third_pct}%`;
-      txtMiddleThird.innerText = `${data.proportions.rule_of_thirds.middle_third_pct}%`;
-      txtLowerThird.innerText = `${data.proportions.rule_of_thirds.lower_third_pct}%`;
-      txtFwhrRatio.innerText = data.proportions.length_to_width_ratio;
-      txtThirdsHarmony.innerText = `${data.proportions.rule_of_thirds.harmony_score}%`;
+      txtGoldenFitScore.innerText = '—';
+      txtUpperThird.innerText = Number.isFinite(data.proportions.rule_of_thirds?.upper_third_pct) ? `${data.proportions.rule_of_thirds.upper_third_pct}%` : 'Chưa đo';
+      txtMiddleThird.innerText = Number.isFinite(data.proportions.rule_of_thirds?.middle_third_pct) ? `${data.proportions.rule_of_thirds.middle_third_pct}%` : 'Chưa đo';
+      txtLowerThird.innerText = Number.isFinite(data.proportions.rule_of_thirds?.lower_third_pct) ? `${data.proportions.rule_of_thirds.lower_third_pct}%` : 'Chưa đo';
+      txtFwhrRatio.innerText = data.proportions.length_to_width_ratio ?? 'Chưa đo';
+      txtThirdsHarmony.innerText = Number.isFinite(data.proportions.rule_of_thirds.spread_pct)
+        ? `${data.proportions.rule_of_thirds.spread_pct}%` : '—';
       
       const thirdsDesc = data.proportions.honest_evaluation || 
         (data.proportions.rule_of_thirds && data.proportions.rule_of_thirds.evaluation ? data.proportions.rule_of_thirds.evaluation.join('. ') : '3 tầng phân bổ tương đối đồng đều.');
       txtThirdsHonestEvaluation.innerText = thirdsDesc;
 
       // 4. Mũi (Nose)
-      txtNoseScore.innerText = `${data.nose.nose_aesthetic_score}%`;
-      txtNoseWidthLength.innerText = data.nose.width_to_length_ratio;
-      txtAlarStatus.innerText = data.nose.alar_status;
-      txtBridgeStatus.innerText = data.nose.bridge_status;
+      txtNoseScore.innerText = '—';
+      txtNoseWidthLength.innerText = data.nose.width_to_length_ratio ?? data.nose.alar_to_intercanthal_ratio ?? 'Chưa đo';
+      txtAlarStatus.innerText = data.nose.alar_status || 'Chưa có mô tả đo';
+      txtBridgeStatus.innerText = data.nose.bridge_status || 'Chưa có mô tả đo';
       txtBridgeDev.innerText = data.nose.bridge_deviation_face_width_pct == null
         ? `Độ lệch: ${data.nose.bridge_deviation_px}px`
         : `Độ lệch: ${data.nose.bridge_deviation_face_width_pct}% bề rộng mặt`;
@@ -2626,36 +2633,38 @@
       txtAlarComment.innerText = data.nose.alar_comment || data.nose.alar_status;
 
       // 5. Đường Viền Hàm & Cằm (Jawline & Chin)
-      txtJawSharpness.innerText = `${data.jawline.jawline_sharpness_score}%`;
-      txtJawAngle.innerText = `${data.jawline.average_jaw_angle_deg || (data.jawline.gonial_angle_deg && data.jawline.gonial_angle_deg.average_deg) || 124.5}°`;
-      txtChinType.innerText = data.jawline.chin_type;
-      txtChinAngle.innerText = `Góc đỉnh cằm: ${data.jawline.chin_apex_angle_deg}°`;
-      txtJawCheekRatio.innerText = data.jawline.jaw_to_cheek_ratio;
-      txtJawEvaluation.innerText = data.jawline.jawline_evaluation;
-      txtChinFlaw.innerText = data.jawline.chin_flaw || data.jawline.jawline_evaluation;
+      txtJawSharpness.innerText = '—';
+      const measuredJawAngle = data.jawline.average_jaw_angle_deg ?? data.jawline.gonial_angle_deg?.average_deg ?? data.jawline.jaw_angle_left_deg;
+      txtJawAngle.innerText = Number.isFinite(measuredJawAngle) ? `${measuredJawAngle}°` : 'Chưa đo';
+      txtChinType.innerText = data.jawline.chin_type || 'Chưa phân loại';
+      txtChinAngle.innerText = Number.isFinite(data.jawline.chin_apex_angle_deg) ? `Góc đỉnh cằm: ${data.jawline.chin_apex_angle_deg}°` : '';
+      txtJawCheekRatio.innerText = data.jawline.jaw_to_cheek_ratio ?? 'Chưa đo';
+      txtJawEvaluation.innerText = data.jawline.measurement_note || data.jawline.jawline_evaluation || 'Chỉ hiển thị hình học 2D; không suy ra chuẩn thẩm mỹ.';
+      txtChinFlaw.innerText = data.jawline.chin_flaw || '';
 
       // 5.5. Chẩn Đoán Trắc Diện Góc Nghiêng (Profile Diagnostics - Hiển thị khi có dữ liệu)
       if (data.profile && panelProfileDiagnostics) {
         panelProfileDiagnostics.classList.remove('hidden');
-        txtProfileAestheticScore.innerText = `${data.profile.profile_aesthetic_score}%`;
+        txtProfileAestheticScore.innerText = '—';
         txtProfileViewSide.innerText = data.profile.view_side || "Góc nghiêng";
 
         const pRicketts = data.profile.ricketts_eline;
         if (pRicketts) {
-          txtElineScore.innerText = `${pRicketts.score}%`;
-          txtChinProjection.innerText = pRicketts.chin_projection;
-          txtChinProjectionComment.innerText = pRicketts.chin_comment;
+          txtElineScore.innerText = Number.isFinite(pRicketts.lower_lip_offset_pct)
+            ? `${pRicketts.lower_lip_offset_pct}%` : 'Chưa đo';
+          txtChinProjection.innerText = pRicketts.chin_projection || 'Chỉ báo 2D';
+          txtChinProjectionComment.innerText = pRicketts.chin_comment || data.profile.measurement_note || '';
         }
 
-        txtNasolabialDeg.innerText = `${data.profile.nasolabial_angle_deg}°`;
-        txtNasolabialStatus.innerText = data.profile.nasolabial_status;
+        txtNasolabialDeg.innerText = Number.isFinite(data.profile.nasolabial_angle_deg) ? `${data.profile.nasolabial_angle_deg}°` : 'Chưa đo';
+        txtNasolabialStatus.innerText = data.profile.nasolabial_status || 'Số đo 2D';
 
         if (data.profile.nasal_bridge_profile) {
           txtNasalBridgeProfile.innerText = data.profile.nasal_bridge_profile.description;
         }
 
-        txtProfileGonialDeg.innerText = `${data.profile.profile_gonial_angle_deg}°`;
-        txtProfileJawDesc.innerText = data.profile.profile_jaw_description;
+        txtProfileGonialDeg.innerText = Number.isFinite(data.profile.profile_gonial_angle_deg) ? `${data.profile.profile_gonial_angle_deg}°` : 'Chưa đo';
+        txtProfileJawDesc.innerText = data.profile.profile_jaw_description || data.profile.measurement_note || '';
       } else if (panelProfileDiagnostics) {
         panelProfileDiagnostics.classList.add('hidden');
       }
@@ -2663,15 +2672,15 @@
       // 6. Tình Trạng Da (Skin Health) - Chẩn đoán ROI thực tế
       const skinMetric = value => value == null ? 'Chưa đo' : `${value}%`;
       txtSkinSmoothScore.innerText = skinMetric(data.skin.smoothness_score);
-      txtSkinSmoothness.innerText = skinMetric(data.skin.smoothness_score);
-      txtSkinUniformity.innerText = skinMetric(data.skin.uniformity_score);
-      txtDarkCircles.innerText = skinMetric(data.skin.dark_circles_index);
-      txtSkinOiliness.innerText = skinMetric(data.skin.oiliness_score);
-      txtSkinToneDetail.innerText = [data.skin.skin_tone, data.skin.undertone].filter(Boolean).join(' • ');
-      txtSkinToneName.innerText = data.skin.skin_tone;
-      dotSkinColor.style.backgroundColor = data.skin.hex_color || '#e4c5b0';
-      paletteSkinColor.style.backgroundColor = data.skin.hex_color || '#e4c5b0';
-      txtSkinHex.innerText = data.skin.hex_color || '#e4c5b0';
+      txtSkinSmoothness.innerText = skinMetric(data.skin.cheek_texture_variation_pct);
+      txtSkinUniformity.innerText = skinMetric(data.skin.left_right_cheek_luminance_difference_pct);
+      txtDarkCircles.innerText = skinMetric(data.skin.under_eye_vs_cheek_luminance_difference_pct);
+      txtSkinOiliness.innerText = data.skin.measurement_coverage == null ? 'Chưa đo' : `${data.skin.measurement_coverage} vùng`;
+      txtSkinToneDetail.innerText = 'Chỉ quan sát pixel; không xác định tông da hoặc tình trạng da.';
+      txtSkinToneName.innerText = 'Chưa đo';
+      dotSkinColor.style.backgroundColor = '#808080';
+      paletteSkinColor.style.backgroundColor = '#808080';
+      txtSkinHex.innerText = 'Chưa đo';
 
       listSkinHealthAlerts.innerHTML = '';
       if (Array.isArray(data.skin.skin_health_evaluation) && data.skin.skin_health_evaluation.length > 0) {
@@ -2687,20 +2696,18 @@
         li.innerHTML = `<span class="text-rose-400 font-bold">•</span><span>${escapeHtml(data.skin.skin_health_evaluation)}</span>`;
         listSkinHealthAlerts.appendChild(li);
       } else {
-        listSkinHealthAlerts.innerHTML = '<li class="text-emerald-400 flex items-center gap-1.5"><i class="fa-solid fa-check text-xs"></i><span>Tình trạng da tương đối ổn định, không phát hiện quầng thâm hay sần sùi bất thường.</span></li>';
+        listSkinHealthAlerts.innerHTML = '<li class="text-slate-400">Chưa có đủ số đo pixel để nhận xét vùng da.</li>';
       }
-      txtSkinAdvice.innerText = data.skin.smoothness_score == null
-        ? 'Tình trạng da chưa được phân tích trong chế độ dự phòng trên trình duyệt.'
-        : 'Kết quả pixel có thể thay đổi theo ánh sáng, camera và lớp trang điểm; chỉ dùng để tham khảo.';
+      txtSkinAdvice.innerText = 'Các số liệu da chỉ mô tả pixel trong ảnh; ánh sáng, camera và trang điểm có thể làm thay đổi kết quả.';
 
       // 7. Kiểu Tóc & Khắc Phục Khuyết Điểm (Hair & Corrective Styling)
-      txtHairlineType.innerText = data.hair.hairline_type;
-      txtDominantColor.innerText = data.hair.dominant_hair_color;
+      txtHairlineType.innerText = data.hair.hairline_type || 'Chưa đo đường chân tóc';
+      txtDominantColor.innerText = data.hair.dominant_hair_color || 'Chưa đo';
       txtHairlineComment.innerText = data.hair.hairline_comment || '';
-      txtHairMen.innerText = data.hair.hair_recommendations.for_men;
-      txtHairWomen.innerText = data.hair.hair_recommendations.for_women;
-      txtHairCorrective.innerText = data.hair.hair_recommendations.corrective_guidelines || 'Tạo phồng ở chân tóc để cân đối khung xương mặt.';
-      txtHairFocus.innerText = `🎯 Mục tiêu chỉnh thể: ${data.hair.hair_recommendations.target_focus || 'Tối ưu độ cân đối tổng thể'}`;
+      txtHairMen.innerText = data.hair.hair_recommendations?.for_men || 'Tham khảo lựa chọn dựa trên sở thích cá nhân.';
+      txtHairWomen.innerText = data.hair.hair_recommendations?.for_women || 'Tham khảo lựa chọn dựa trên sở thích cá nhân.';
+      txtHairCorrective.innerText = data.hair.hair_recommendations?.corrective_guidelines || 'Không có gợi ý chỉnh sửa từ số đo này.';
+      txtHairFocus.innerText = `Gợi ý tạo kiểu: ${data.hair.hair_recommendations?.target_focus || 'Chọn theo sở thích cá nhân'}`;
 
       // 8. Vẽ ảnh và lớp trắc hình lên Canvas Báo Cáo
       drawReportCanvasOverlay();

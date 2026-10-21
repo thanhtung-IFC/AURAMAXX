@@ -69,7 +69,7 @@ def analyze_facial_symmetry(
     img_h: int,
     pose_quality: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
-    """Compare paired landmark distances in the image; do not score appearance."""
+    """Compare paired landmark distances and derive a transparent relative index."""
     forehead = points[10]
     chin = points[152]
     eye_center_l = FaceAnalyzerPoint(
@@ -118,13 +118,15 @@ def analyze_facial_symmetry(
     eye_tilt_deg = math.degrees(math.atan2(eye_dy, eye_dx))
     median_difference = round(float(np.median(differences)), 2) if differences else None
     note = (
-        "Các con số là chênh lệch landmark 2D so với trục từ rìa Face Mesh đến đáy cằm; "
-        "không phải điểm đối xứng hay đánh giá thẩm mỹ. Biểu cảm, góc quay, lật gương và sai số landmark có thể ảnh hưởng."
+        "Chỉ số cân xứng tương đối được tính bằng 100 trừ chênh lệch trung vị giữa các cặp landmark, "
+        "tính theo phần trăm bề rộng mặt và giới hạn trong khoảng 0–100. Đây là phép quy đổi mô tả từ ảnh, "
+        "không phải điểm thẩm mỹ, chuẩn thống kê phổ quát hay đánh giá giá trị cá nhân. Biểu cảm, góc quay, "
+        "lật gương và sai số landmark có thể ảnh hưởng số đo."
     )
     pose = pose_quality or {}
     pose_assessed = pose_quality is not None
     pose_limited = pose_assessed and (
-        float(pose.get("yaw_deg", 0.0)) > 10
+        abs(float(pose.get("yaw_deg", 0.0))) > 10
         or abs(float(pose.get("roll_deg", 0.0))) > 8
         or bool(pose.get("clipped"))
         or float(pose.get("face_height_fraction", 1.0)) < 0.25
@@ -135,14 +137,21 @@ def analyze_facial_symmetry(
         f"({item['diff_face_width_pct']}% bề rộng mặt trong ảnh)."
         for item in details
     ]
+    score_available = bool(differences) and pose_assessed and not pose_limited
+    relative_symmetry_score = (
+        round(max(0.0, min(100.0, 100.0 - median_difference)), 1)
+        if score_available and median_difference is not None else None
+    )
     return {
         "overall_symmetry_score": None,
+        "relative_symmetry_score": relative_symmetry_score,
+        "relative_symmetry_score_formula": "max(0, min(100, 100 − chênh lệch trung vị (% bề rộng mặt)))",
         "evaluation": "Báo cáo khoảng cách giữa các cặp điểm mốc nhìn thấy trong ảnh.",
         "feedback": note,
         "measurement_status": (
-            "Chưa có dữ liệu tư thế ảnh để xét điều kiện đo" if not pose_assessed else
-            "Có cảnh báo về góc chụp, kích thước ảnh hoặc điểm mốc sát mép" if pose_limited else
-            "Không kích hoạt ngưỡng cảnh báo tư thế; số đo vẫn chưa được hiệu chuẩn"
+            "Chưa có dữ liệu tư thế ảnh; chưa tính chỉ số" if not pose_assessed else
+            "Có cảnh báo về tư thế hoặc chất lượng ảnh; đã ẩn chỉ số" if pose_limited else
+            "Không kích hoạt ngưỡng cảnh báo tư thế; chỉ số là phép quy đổi trực tiếp từ số đo tương đối"
         ),
         "median_pair_difference_pct_of_face_width": median_difference,
         "eye_tilt_deg": round(eye_tilt_deg, 2),
@@ -783,7 +792,7 @@ def run_comprehensive_face_analysis(
         # Legacy score fields stay null until a confidence model is calibrated.
         "measurement_confidence_score": None,
         "overall_harmony_score": None,
-        "overall_grade": "Không có điểm tổng hợp đã hiệu chuẩn; báo cáo chỉ hiển thị số đo và cảnh báo ảnh.",
+        "overall_grade": "Báo cáo dùng số đo tương đối; chỉ hiển thị chỉ số cân xứng khi ảnh đủ điều kiện, không chấm điểm tổng thể ngoại hình.",
         "symmetry": symmetry,
         "proportions": proportions,
         "nose": nose,
@@ -797,7 +806,7 @@ def run_comprehensive_face_analysis(
             "landmarks_count": len(points)
         },
         "measurement_quality": {
-            "label": "Không tính điểm tin cậy tổng hợp vì các ngưỡng hiện chưa được hiệu chuẩn thống kê. Góc quay và độ nghiêng chỉ là ước tính Face Mesh, chưa hiệu chuẩn camera. Xem trực tiếp độ phân giải, vùng bị cắt và cảnh báo bên dưới.",
+            "label": "Không tính điểm tin cậy tổng hợp. Chỉ số cân xứng là phép quy đổi hình học từ số đo tương đối, không phải xác suất chính xác hay xếp hạng ngoại hình. Góc quay và độ nghiêng là ước tính Face Mesh; xem độ phân giải, vùng bị cắt và cảnh báo bên dưới.",
             "front_pose": quality,
             "front_confidence_score": None,
             "confidence_model": "not_calibrated",

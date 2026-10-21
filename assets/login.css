@@ -47,6 +47,7 @@
 .auth-note { text-align: center; font-size: 11px; color: #85858e; line-height: 1.8; margin: 18px 0 26px; }
 .team-credit { text-align: center; color: #94949d; font-size: 9px; letter-spacing: 1.6px; line-height: 1.8; }
 .team-credit strong { font-weight: 600; color: #2443d9; }
+.auth-page .password-match-hint[data-state="error"] { color: var(--color-danger); }
 @media (min-width: 1400px) { .auth-shell { min-height: 740px; } }
 @media (max-width: 1000px) { .auth-panel { padding: 30px; } .journey { padding: 32px; } .journey-steps { gap: 10px; } .journey-steps li { padding: 14px 10px; font-size: 11px; } }
 @media (max-width: 740px) { .auth-page { padding: 24px 16px; } .auth-shell { grid-template-columns: 1fr; min-height: 0; max-width: 480px; border-radius: 28px; } .journey { border-radius: 21px; padding: 26px; } .journey-content { margin-top: 44px; } .journey h1 { font-size: 36px; letter-spacing: -1.3px; } .journey-description { margin-bottom: 22px; font-size: 12px; } .journey-steps li { min-height: 105px; gap: 20px; border-radius: 13px; } .auth-panel { padding: 30px 24px; } .auth-role-links { margin-bottom: 24px; } .auth-panel h2 { font-size: 27px; } }

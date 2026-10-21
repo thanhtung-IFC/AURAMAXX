@@ -399,6 +399,25 @@ function openAuth(mode = "login") {
   window.location.assign(`/login.html?mode=${mode === "register" ? "register" : "login"}&next=${encodeURIComponent(next)}`);
 }
 
+function setActiveSettingsAnchor(id) {
+  document.querySelectorAll("[data-settings-anchor]").forEach((link) => {
+    if (link.dataset.settingsAnchor === id) link.setAttribute("aria-current", "location");
+    else link.removeAttribute("aria-current");
+  });
+}
+
+function observeSettingsSections() {
+  if (!("IntersectionObserver" in window)) return;
+  const sections = [...document.querySelectorAll("[data-settings-anchor]")]
+    .map((link) => document.getElementById(link.dataset.settingsAnchor))
+    .filter(Boolean);
+  const observer = new IntersectionObserver((entries) => {
+    const active = entries.find((entry) => entry.isIntersecting);
+    if (active) setActiveSettingsAnchor(active.target.id);
+  }, { rootMargin: "-18% 0px -68% 0px", threshold: 0 });
+  sections.forEach((section) => observer.observe(section));
+}
+
 export function initMyAura() {
   $("#aura-consent-list").innerHTML = PURPOSES.map((purpose) => `
     <div class="consent-control-row"><div class="consent-control-copy"><b id="consent-${purpose.id}-label">${purpose.title}</b><span id="consent-${purpose.id}-description">${purpose.description}</span><span class="setting-state" data-consent-state="${purpose.id}">CHƯA BẬT</span></div><label class="switch-control"><input type="checkbox" data-consent="${purpose.id}" disabled aria-labelledby="consent-${purpose.id}-label" aria-describedby="consent-${purpose.id}-description"><span class="switch-track"></span></label></div>`).join("");
@@ -423,8 +442,11 @@ export function initMyAura() {
   $("#delete-dialog").addEventListener("close", () => { $("#delete-form").reset(); message("#delete-status"); });
   document.querySelectorAll("[data-settings-anchor]").forEach((link) => link.addEventListener("click", (event) => {
     event.preventDefault();
+    setActiveSettingsAnchor(link.dataset.settingsAnchor);
     $(`#${link.dataset.settingsAnchor}`).scrollIntoView({ behavior: document.documentElement.dataset.reducedMotion === "true" ? "auto" : "smooth", block: "start" });
   }));
+  setActiveSettingsAnchor("aura-profile");
+  observeSettingsSections();
   document.querySelectorAll('input[name="aura-theme"]').forEach((input) => input.addEventListener("change", () => setTheme(input.value)));
   $("#aura-reduce-motion").addEventListener("change", (event) => setReducedMotion(event.target.checked));
   window.addEventListener("auramaxx:appearance-changed", syncAppearance);

@@ -202,8 +202,7 @@
       ],
       tips: 'Cứ mỗi 45 - 60 phút làm việc, hãy đứng dậy vươn vai và nhìn ra xa 20 giây để giảm áp lực cho mắt và cột sống.',
       reasoning: (report) => {
-        const symmetry = report?.symmetry?.overall_symmetry_score ?? 85;
-        return `Điểm đối xứng khuôn mặt là ${symmetry}%. Tư thế ngồi gù gập cổ khiến trọng lực kéo dồn mô mềm xuống dưới, làm tăng rãnh cười và nọng cằm.`;
+        return 'Đây là gợi ý tư thế chung; không suy ra nhu cầu sức khỏe từ ảnh khuôn mặt.';
       }
     },
     {
@@ -1066,15 +1065,14 @@
     const btnToggleScore = document.getElementById('btnToggleDailyScore');
 
     if (report) {
-      const shape = report?.proportions?.face_shape || 'Trái xoan (Oval)';
-      const symmetry = report?.symmetry?.overall_symmetry_score ?? 80;
-      const refDir = symmetry >= 85 ? 'Cân bằng' : symmetry >= 70 ? 'Cân đối khá' : 'Lệch nhẹ trục';
-      const score = report?.overall_harmony_score ?? 76.8;
+      const shape = report?.proportions?.face_shape || 'Chưa đo';
+      const symmetry = report?.symmetry?.relative_symmetry_score;
+      const measurementStatus = report?.symmetry?.measurement_status || 'Chưa có trạng thái đo';
 
       if (lblShape) lblShape.textContent = shape;
-      if (lblDirection) lblDirection.textContent = refDir;
+      if (lblDirection) lblDirection.textContent = measurementStatus;
       if (lblScore) {
-        lblScore.textContent = hideScore ? '--- / 100' : `${score} / 100`;
+        lblScore.textContent = hideScore ? '— / 100' : Number.isFinite(symmetry) ? `${symmetry.toFixed(1)} / 100` : 'Chưa đủ điều kiện';
       }
     } else {
       if (lblShape) lblShape.textContent = 'Chưa quét';
@@ -1083,7 +1081,7 @@
     }
 
     if (btnToggleScore) {
-      btnToggleScore.textContent = hideScore ? 'Hiện điểm số' : 'Ẩn điểm số';
+      btnToggleScore.textContent = hideScore ? 'Hiện chỉ số' : 'Ẩn chỉ số';
     }
   }
 

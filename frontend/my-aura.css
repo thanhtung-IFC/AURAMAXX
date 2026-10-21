@@ -13,9 +13,10 @@
 [data-page="my-aura"] [data-admin-signin] { display:inline-block; font-size:12px; margin-top:16px; color:var(--muted) }
 [data-page="my-aura"] .profile-status { font-size:12px; gap:8px }
 [data-page="my-aura"] .profile-status span:last-child { color:var(--subtle); font-size:11px }
-.aura-settings-nav { padding:12px; display:grid; gap:4px }
-.aura-settings-nav a { display:flex; align-items:center; gap:11px; padding:11px 12px; color:var(--muted); border-radius:10px; font-size:13px }
+.aura-settings-nav { padding:12px; display:grid; gap:4px; align-content:start }
+.aura-settings-nav a { display:flex; align-items:center; gap:11px; min-height:44px; padding:10px 12px; color:var(--muted); border-radius:10px; font-size:13px; transition:background .18s ease,color .18s ease }
 .aura-settings-nav a:hover,.aura-settings-nav a:focus-visible { background:var(--blue-soft); color:var(--blue-hi) }
+.aura-settings-nav a[aria-current="location"] { background:var(--blue-soft); color:var(--blue-hi); font-weight:650 }
 .aura-settings-nav svg,.aura-section-heading svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.7; flex:none }
 .aura-settings-content { display:grid; gap:20px; min-width:0 }
 .aura-account-notice { padding:14px 18px; font-size:13px; color:var(--muted); border:1px solid var(--line); background:var(--surface-2); border-radius:12px }
@@ -109,9 +110,9 @@
 }
 @media(max-width:800px) {
   [data-page="my-aura"] .profile-layout { grid-template-columns:1fr }
-  .aura-sidebar { position:static }
-  .aura-settings-nav { display:flex; flex-wrap:wrap; gap:3px; padding:8px }
-  .aura-settings-nav a { padding:9px; font-size:12px; gap:7px }
+  .aura-sidebar { position:static; gap:12px }
+  .aura-settings-nav { display:flex; flex-wrap:nowrap; gap:5px; padding:8px; overflow-x:auto; overscroll-behavior-inline:contain; -webkit-overflow-scrolling:touch; scrollbar-width:thin; scroll-snap-type:x proximity }
+  .aura-settings-nav a { flex:0 0 auto; min-height:42px; padding:9px 11px; font-size:12px; gap:7px; white-space:nowrap; scroll-snap-align:start }
   .aura-settings-nav svg { width:16px; height:16px }
   [data-page="my-aura"] .profile-card { padding:24px }
   [data-page="my-aura"] .profile-auth-actions { max-width:320px; margin-left:auto; margin-right:auto }
@@ -119,6 +120,10 @@
   .aura-settings-content .form-input { font-size:16px }
 }
 @media(max-width:480px) {
+  [data-page="my-aura"] .page-heading-row { align-items:flex-start; gap:10px }
+  [data-page="my-aura"] .page-heading-row .coming-badge { flex:none; font-size:9px }
+  [data-page="my-aura"] .profile-card { padding:20px 17px }
+  [data-page="my-aura"] .aura-settings-panel { padding:19px 16px }
   .aura-section-heading { gap:11px }
   .aura-section-heading .settings-icon { width:34px; height:34px; border-radius:10px }
   .aura-section-heading h3 { font-size:17px }
@@ -130,4 +135,7 @@
   .aura-session { align-items:flex-start; flex-wrap:wrap }
   .aura-form-footer { flex-wrap:wrap }
   .aura-form-footer .form-status { width:100% }
+}
+@media(prefers-reduced-motion:reduce) {
+  .aura-settings-nav a { transition:none }
 }
