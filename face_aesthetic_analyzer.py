@@ -7,7 +7,7 @@ population norms, or objective ratings of a person's appearance.
 import base64
 import io
 import math
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional
  
 import numpy as np
 from PIL import Image
@@ -60,108 +60,104 @@ def point_line_distance(pt: FaceAnalyzerPoint, line_p1: FaceAnalyzerPoint, line_
 
 
 # =========================================================================
-# 1. ĐỘ CÂN ĐỐI CỦA KHUÔN MẶT (FACIAL SYMMETRY - KHÁCH QUAN & KHOA HỌC)
+# 1. SO SÁNH CẶP LANDMARK HAI BÊN
 # =========================================================================
 
-def analyze_facial_symmetry(points: List[FaceAnalyzerPoint], img_w: int, img_h: int) -> Dict[str, Any]:
-    """
-    Đo lường độ bất đối xứng tự nhiên hai bên trục giữa khuôn mặt.
-    Tiêu chí nhân trắc học: Không ai đối xứng 100%. Thang điểm thực tế, không tâng bốc.
-    """
+def analyze_facial_symmetry(
+    points: List[FaceAnalyzerPoint],
+    img_w: int,
+    img_h: int,
+    pose_quality: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """Compare paired landmark distances in the image; do not score appearance."""
     forehead = points[10]
     chin = points[152]
+    eye_center_l = FaceAnalyzerPoint(
+        (points[33].x + points[133].x) / 2,
+        (points[33].y + points[133].y) / 2, 0, img_w, img_h
+    )
+    eye_center_r = FaceAnalyzerPoint(
+        (points[362].x + points[263].x) / 2,
+        (points[362].y + points[263].y) / 2, 0, img_w, img_h
+    )
 
-    # Eye corners describe the structure; pupil centers move when the user looks aside.
-    eye_center_l = FaceAnalyzerPoint((points[33].x + points[133].x) / 2, (points[33].y + points[133].y) / 2, 0, img_w, img_h)
-    eye_center_r = FaceAnalyzerPoint((points[362].x + points[263].x) / 2, (points[362].y + points[263].y) / 2, 0, img_w, img_h)
-
-    # Các cặp đối xứng quan trọng và trọng số
     pairs = [
-        ("Tâm hai khóe mắt", eye_center_l, eye_center_r, 1.25),
-        ("Khóe mắt ngoài", points[33], points[263], 1.0),
-        ("Khóe mắt trong", points[133], points[362], 1.0),
-        ("Gò má", points[234], points[454], 1.15),
-        ("Cánh mũi", points[102], points[331], 1.05),
-        ("Khóe miệng", points[61], points[291], 1.1),
-        ("Góc xương hàm", points[172], points[397], 1.2),
-        ("Đuôi chân mày", points[70], points[300], 0.85)
+        ("Tâm hai khóe mắt", eye_center_l, eye_center_r),
+        ("Khóe mắt ngoài", points[33], points[263]),
+        ("Khóe mắt trong", points[133], points[362]),
+        ("Gò má", points[234], points[454]),
+        ("Cánh mũi", points[102], points[331]),
+        ("Khóe miệng", points[61], points[291]),
+        ("Góc hàm", points[172], points[397]),
+        ("Đuôi chân mày", points[70], points[300]),
     ]
-
     face_width = max(dist_2d(points[234], points[454]), 1.0)
-    total_weight = 0.0
-    weighted_symmetry = 0.0
     details = []
-    asymmetry_flaws = []
-
-    for name, pt_l, pt_r, weight in pairs:
-        dist_l = abs(point_line_distance(pt_l, forehead, chin))
-        dist_r = abs(point_line_distance(pt_r, forehead, chin))
-
+    differences = []
+    for name, pt_l, pt_r in pairs:
+        signed_l = point_line_distance(pt_l, forehead, chin)
+        signed_r = point_line_distance(pt_r, forehead, chin)
+        dist_l = abs(signed_l)
+        dist_r = abs(signed_r)
         diff_px = abs(dist_l - dist_r)
-        avg_d = (dist_l + dist_r) / 2.0 + 1e-4
-
-        # Tính tỷ lệ lệch tương đối (chặt chẽ, phản ánh đúng khuyết điểm)
-        rel_diff = diff_px / avg_d
-        sym_score = max(30.0, min(100.0, 100.0 - (rel_diff * 140.0)))
-
-        weighted_symmetry += sym_score * weight
-        total_weight += weight
-
-        # Pixel thay đổi theo độ phân giải; so sánh độ lệch với bề rộng mặt.
         diff_face_pct = diff_px / face_width * 100.0
-        if diff_face_pct > 1.0:
-            side = "bên phải xa trục hơn" if dist_r > dist_l else "bên trái xa trục hơn"
-            asymmetry_flaws.append(f"{name} lệch khoảng {round(diff_face_pct, 1)}% bề rộng mặt ({side})")
-
+        differences.append(diff_face_pct)
         details.append({
             "feature": name,
-            "score": round(sym_score, 1),
             "left_dist_px": round(dist_l, 1),
             "right_dist_px": round(dist_r, 1),
+            "left_offset_px_signed": round(signed_l, 1),
+            "right_offset_px_signed": round(signed_r, 1),
             "diff_px": round(diff_px, 1),
-            "diff_face_width_pct": round(diff_face_pct, 2)
+            "right_minus_left_distance_pct_signed": round((dist_r - dist_l) / face_width * 100.0, 2),
+            "diff_face_width_pct": round(diff_face_pct, 2),
         })
 
-    # Độ lệch cao độ hai mắt (Eye Level Tilt)
     eye_dy = eye_center_r.py - eye_center_l.py
     eye_dx = eye_center_r.px - eye_center_l.px
     eye_tilt_deg = math.degrees(math.atan2(eye_dy, eye_dx))
-
-    overall_score = round(weighted_symmetry / total_weight, 1)
-
-    # Đánh giá công bằng, trung thực
-    if overall_score >= 88.0 and abs(eye_tilt_deg) <= 0.8:
-        level = "Điểm đối xứng cao theo phép đo hình học"
-        feedback = "Khuôn mặt có sự đồng đều đáng kể giữa hai nửa bán cầu mặt."
-    elif overall_score >= 76.0:
-        level = "Độ lệch thấp theo ngưỡng đo tham khảo"
-        feedback = "Các điểm mốc nhìn chung gần trục giữa trong ảnh; biểu cảm và góc chụp vẫn có thể ảnh hưởng."
-    elif overall_score >= 64.0:
-        level = "Có điểm mốc lệch khỏi trục giữa"
-        feedback = "Có một số điểm mốc lệch khỏi trục giữa; hãy kiểm tra lại với ảnh chính diện và ánh sáng đều."
-    else:
-        level = "Bất đối xứng đáng kể"
-        feedback = "Các điểm mốc lệch tương đối nhiều khỏi trục giữa; tư thế, biểu cảm và độ chính xác landmark có thể góp phần."
-
-    if asymmetry_flaws:
-        feedback += f" Điểm cần lưu ý: {', '.join(asymmetry_flaws[:2])}."
-
+    median_difference = round(float(np.median(differences)), 2) if differences else None
+    note = (
+        "Các con số là chênh lệch landmark 2D so với trục từ rìa Face Mesh đến đáy cằm; "
+        "không phải điểm đối xứng hay đánh giá thẩm mỹ. Biểu cảm, góc quay, lật gương và sai số landmark có thể ảnh hưởng."
+    )
+    pose = pose_quality or {}
+    pose_assessed = pose_quality is not None
+    pose_limited = pose_assessed and (
+        float(pose.get("yaw_deg", 0.0)) > 10
+        or abs(float(pose.get("roll_deg", 0.0))) > 8
+        or bool(pose.get("clipped"))
+        or float(pose.get("face_height_fraction", 1.0)) < 0.25
+        or min(int(pose.get("image_width", 640)), int(pose.get("image_height", 640))) < 320
+    )
+    neutral_observations = [
+        f"{item['feature']}: khoảng cách hai bên chênh {item['diff_px']} px "
+        f"({item['diff_face_width_pct']}% bề rộng mặt trong ảnh)."
+        for item in details
+    ]
     return {
-        "overall_symmetry_score": overall_score,
-        "evaluation": level,
-        "feedback": feedback,
+        "overall_symmetry_score": None,
+        "evaluation": "Báo cáo khoảng cách giữa các cặp điểm mốc nhìn thấy trong ảnh.",
+        "feedback": note,
+        "measurement_status": (
+            "Chưa có dữ liệu tư thế ảnh để xét điều kiện đo" if not pose_assessed else
+            "Có cảnh báo về góc chụp, kích thước ảnh hoặc điểm mốc sát mép" if pose_limited else
+            "Không kích hoạt ngưỡng cảnh báo tư thế; số đo vẫn chưa được hiệu chuẩn"
+        ),
+        "median_pair_difference_pct_of_face_width": median_difference,
         "eye_tilt_deg": round(eye_tilt_deg, 2),
         "details": details,
-        "asymmetry_flaws": asymmetry_flaws,
+        "asymmetry_observations": details,
+        # Legacy field kept as neutral text so older clients do not render objects as flaws.
+        "asymmetry_flaws": neutral_observations,
+        "measurement_note": note,
         "midline_axis": {
             "top": {"x": round(forehead.px, 1), "y": round(forehead.py, 1)},
             "bottom": {"x": round(chin.px, 1), "y": round(chin.py, 1)}
         }
     }
-
-
 # =========================================================================
-# 2. TỶ LỆ KHUÔN MẶT & DÁNG MẶT (FACIAL PROPORTIONS - CHUẨN NHÂN TRẮC HỌC)
+# 2. TỶ LỆ 2D CỦA VÙNG FACE MESH
 # =========================================================================
 
 def estimate_true_trichion(
@@ -280,77 +276,60 @@ def analyze_facial_proportions(
 
 
 # =========================================================================
-# 3. TỶ LỆ MŨI (NOSE PROPORTIONS - THẲNG THẮN, KHÔNG GIẤU KHUYẾT ĐIỂM)
+# 3. SỐ ĐO 2D QUANH MŨI
 # =========================================================================
 
-def analyze_nose_proportions(points: List[FaceAnalyzerPoint], img_w: int, img_h: int) -> Dict[str, Any]:
-    """
-    Đo một số tỷ lệ 2D quanh mũi; không suy ra bệnh lý từ ảnh.
-    """
-    nasion = points[168]        # Gốc sống mũi
-    nose_tip = points[1]        # Đỉnh chóp mũi
-    subnasale = points[2]       # Chân mũi
-    alar_l = points[102]        # Cánh mũi trái
-    alar_r = points[331]        # Cánh mũi phải
-
-    inner_canthus_l = points[133]  # Khóe mắt trong trái
-    inner_canthus_r = points[362]  # Khóe mắt trong phải
+def analyze_nose_proportions(
+    points: List[FaceAnalyzerPoint],
+    img_w: int,
+    img_h: int,
+    pose_quality: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """Return visible nose ratios and offsets without ideal targets or appearance labels."""
+    del img_w, img_h
+    nasion = points[168]
+    nose_tip = points[1]
+    subnasale = points[2]
+    alar_l = points[102]
+    alar_r = points[331]
+    inner_canthus_l = points[133]
+    inner_canthus_r = points[362]
 
     nose_length = dist_2d(nasion, subnasale)
     alar_width = dist_2d(alar_l, alar_r)
-    intercanthal_dist = dist_2d(inner_canthus_l, inner_canthus_r) + 1e-6
+    intercanthal_dist = dist_2d(inner_canthus_l, inner_canthus_r)
+    width_to_length = round(alar_width / max(nose_length, 1e-6), 3)
+    alar_to_eye_ratio = round(alar_width / max(intercanthal_dist, 1e-6), 3)
 
-    width_to_length = round(alar_width / (nose_length + 1e-6), 2)
-    alar_to_eye_ratio = round(alar_width / intercanthal_dist, 2)
-
-    # Độ lệch sống mũi được so theo bề rộng mặt để không phụ thuộc độ phân giải.
-    deviation_px = point_line_distance(nose_tip, nasion, subnasale)
+    signed_deviation_px = point_line_distance(nose_tip, nasion, subnasale)
     face_width = max(dist_2d(points[234], points[454]), 1.0)
-    deviation_face_pct = abs(deviation_px) / face_width * 100.0
-
-    # Đánh giá trục sống mũi thẳng hay vẹo
-    if deviation_face_pct < 0.5:
-        bridge_status = "Sống mũi thẳng, trục giữa chuẩn"
-        dev_comment = "Đường giữa trong ảnh gần trùng với trục mặt; đây không phải đánh giá y khoa."
-    elif deviation_px > 0:
-        bridge_status = f"Đỉnh mũi lệch nhẹ sang PHẢI ({round(deviation_face_pct, 1)}% bề rộng mặt)"
-        dev_comment = "Đỉnh mũi lệch khỏi trục giữa trong ảnh; góc chụp và biểu cảm có thể ảnh hưởng phép đo."
-    else:
-        bridge_status = f"Đỉnh mũi lệch nhẹ sang TRÁI ({round(deviation_face_pct, 1)}% bề rộng mặt)"
-        dev_comment = "Đỉnh mũi lệch khỏi trục giữa trong ảnh; góc chụp và biểu cảm có thể ảnh hưởng phép đo."
-
-    # Đánh giá cánh mũi
-    if alar_to_eye_ratio <= 1.04:
-        alar_status = "Cánh mũi thon gọn (Độ rộng vừa bằng khoảng cách 2 khóe mắt)"
-    elif alar_to_eye_ratio <= 1.15:
-        alar_status = "Cánh mũi hơi rộng nhẹ so với khoảng cách 2 mắt"
-    else:
-        alar_status = f"Cánh mũi bè to (Vượt {round((alar_to_eye_ratio - 1.0) * 100, 1)}% khoảng cách 2 mắt, làm mặt thiếu thanh thoát)"
-
-    # Điểm thẩm mỹ mũi khắt khe, thực tế
-    diff_wl = abs(width_to_length - 0.67)
-    diff_alar = max(0.0, alar_to_eye_ratio - 1.0)
-    dev_penalty = max(0.0, deviation_face_pct - 0.5) * 2.0
-
-    nose_score = round(max(40.0, min(96.0, 100.0 - (diff_wl * 85.0) - (diff_alar * 65.0) - dev_penalty)), 1)
+    signed_deviation_pct = signed_deviation_px / face_width * 100.0
+    pose = pose_quality or {}
+    note = (
+        "Đây là tỷ lệ 2D trên ảnh, không có khoảng lý tưởng áp dụng cho mọi người. "
+        "Góc quay, phối cảnh, biểu cảm và chiều sâu 3D có thể làm thay đổi số đo; dấu lệch phụ thuộc hướng ảnh."
+    )
 
     return {
-        "nose_aesthetic_score": nose_score,
+        "nose_aesthetic_score": None,
         "nose_length_px": round(nose_length, 1),
         "alar_width_px": round(alar_width, 1),
+        "intercanthal_distance_px": round(intercanthal_dist, 1),
         "width_to_length_ratio": width_to_length,
-        "ideal_width_to_length": "0.65 - 0.70",
+        "ideal_width_to_length": None,
         "alar_to_intercanthal_ratio": alar_to_eye_ratio,
-        "alar_status": alar_status,
-        "bridge_status": bridge_status,
-        "bridge_comment": dev_comment,
-        "bridge_deviation_px": round(abs(deviation_px), 1),
-        "bridge_deviation_face_width_pct": round(deviation_face_pct, 2)
+        "alar_status": f"Tỷ lệ bề ngang cánh mũi / khoảng cách hai khóe mắt: {alar_to_eye_ratio}.",
+        "bridge_status": f"Độ lệch có dấu của chóp mũi so với trục gốc–chân mũi: {round(signed_deviation_pct, 2)}% bề rộng mặt.",
+        "bridge_comment": note,
+        "bridge_deviation_px": round(abs(signed_deviation_px), 1),
+        "bridge_offset_px_signed": round(signed_deviation_px, 1),
+        "bridge_deviation_face_width_pct": round(abs(signed_deviation_pct), 2),
+        "bridge_offset_face_width_pct_signed": round(signed_deviation_pct, 2),
+        "pose_yaw_deg": pose.get("yaw_deg"),
+        "measurement_note": note,
     }
-
-
 # =========================================================================
-# 4. ĐƯỜNG VIỀN HÀM & CẰM (JAWLINE & CHIN - ĐÁNH GIÁ CHÂN THỰC)
+# 4. ĐƯỜNG VIỀN HÀM VÀ CẰM TRONG ẢNH
 # =========================================================================
 
 def analyze_jawline_and_chin(
@@ -399,7 +378,7 @@ def analyze_jawline_and_chin(
 
 
 # =========================================================================
-# 5. TÌNH TRẠNG DA (SKIN CONDITION - PHÂN TÍCH KHÁCH QUAN, PHÁT HIỆN LỖI)
+# 5. ĐO ĐỘ SÁNG VÀ BIẾN THIÊN PIXEL Ở CÁC VÙNG ẢNH
 # =========================================================================
 
 def _crop_skin_roi(np_img: np.ndarray, center_pt: FaceAnalyzerPoint, radius: int) -> Optional[np.ndarray]:
@@ -513,7 +492,7 @@ def analyze_skin_condition(image_pil: Image.Image, points: List[FaceAnalyzerPoin
 
 
 # =========================================================================
-# 6. KIỂU TÓC & LỜI KHUYÊN KHẮC PHỤC KHUYẾT ĐIỂM THỰC TẾ
+# 6. GIỚI HẠN NHẬN DIỆN TÓC VÀ CHÂN TÓC
 # =========================================================================
 
 def analyze_hair_and_hairline(
@@ -581,7 +560,7 @@ def analyze_profile_view(
         "view_side": "Bên trái trong ảnh (có thể bị đảo bởi camera)" if is_left_profile else "Bên phải trong ảnh (có thể bị đảo bởi camera)",
         "pose_yaw_deg": pose.get("yaw_deg"),
         "pose_roll_deg": pose.get("roll_deg"),
-        "measurement_note": "Các số đo là hình học 2D trên ảnh, không phải chỉ định nha khoa hay chẩn đoán cấu trúc xương. Mốc 152 là rìa dưới Face Mesh, không phải điểm cằm lâm sàng; dấu +/- phụ thuộc hướng điểm và ảnh có thể bị lật.",
+        "measurement_note": "Các số đo là hình học 2D trên ảnh; góc quay và nghiêng đầu chỉ là ước tính Face Mesh, không hiệu chuẩn camera. Đây không phải chỉ định nha khoa hay chẩn đoán cấu trúc xương. Mốc 152 là rìa dưới Face Mesh, không phải điểm cằm lâm sàng; dấu +/- phụ thuộc hướng điểm và ảnh có thể bị lật.",
         "ricketts_eline": {
             "reference_name": "Đường nối chóp mũi với rìa dưới Face Mesh ở cằm (tham chiếu 2D)",
             "chin_projection": "Chỉ báo khoảng lệch môi so với đường tham chiếu; không phân loại cằm nhô/lẹm.",
@@ -641,6 +620,7 @@ def _pose_quality(points: List[FaceAnalyzerPoint], img_w: int, img_h: int) -> Di
         "yaw_deg": round(yaw, 1),
         "yaw_signed_deg": round(yaw_signed, 1),
         "roll_deg": round(roll, 1),
+        "pose_estimate_note": "Góc quay ước tính từ độ sâu landmark Face Mesh; độ nghiêng ước tính từ đường nối khóe mắt. Không hiệu chuẩn với camera.",
         "face_height_fraction": round(face_height, 3),
         "clipped": clipped,
         "image_width": img_w,
@@ -651,9 +631,9 @@ def _pose_quality(points: List[FaceAnalyzerPoint], img_w: int, img_h: int) -> Di
 def _front_quality_warnings(quality: Dict[str, Any]) -> List[str]:
     warnings = []
     if quality["yaw_deg"] > 10:
-        warnings.append("Ảnh chính diện hơi quay; độ cân xứng có thể sai lệch.")
+        warnings.append("Ước tính Face Mesh cho thấy ảnh có thể quay khỏi chính diện; phép đo hai bên có thể sai lệch.")
     if abs(quality["roll_deg"]) > 8:
-        warnings.append("Đầu nghiêng sang một bên; các phép đo ngang có thể thiếu ổn định.")
+        warnings.append("Đường nối khóe mắt ước tính bị nghiêng; phép đo ngang có thể thiếu ổn định.")
     if quality["clipped"]:
         warnings.append("Một phần khuôn mặt sát mép ảnh; phép đo đường viền có thể thiếu chính xác.")
     if quality["face_height_fraction"] < 0.25:
@@ -662,32 +642,6 @@ def _front_quality_warnings(quality: Dict[str, Any]) -> List[str]:
         warnings.append("Độ phân giải ảnh thấp; các phép đo chi tiết có độ tin cậy hạn chế.")
     return warnings
 
-
-def _measurement_confidence(
-    quality: Dict[str, Any],
-    expected_yaw: Tuple[float, float] = (0.0, 5.0)
-) -> int:
-    """Estimate capture suitability, never a score for a person's appearance."""
-    yaw = float(quality.get("yaw_deg", 0.0))
-    yaw_excess = max(0.0, expected_yaw[0] - yaw, yaw - expected_yaw[1])
-    roll_excess = max(0.0, abs(float(quality.get("roll_deg", 0.0))) - 3.0)
-    face_height = float(quality.get("face_height_fraction", 0.0))
-    resolution = min(int(quality.get("image_width", 0)), int(quality.get("image_height", 0)))
-    penalty = min(35.0, yaw_excess * 2.2) + min(24.0, roll_excess * 2.0)
-    penalty += 25.0 if quality.get("clipped") else 0.0
-    penalty += min(25.0, max(0.0, 0.35 - face_height) * 100.0)
-    penalty += 18.0 if resolution < 320 else 8.0 if resolution < 640 else 0.0
-    return max(0, min(100, round(100.0 - penalty)))
-
-
-def _confidence_label(score: int) -> str:
-    if score >= 80:
-        level = "cao"
-    elif score >= 55:
-        level = "vừa"
-    else:
-        level = "thấp"
-    return f"Độ tin cậy phép đo {level} (ước lượng nội bộ, chưa hiệu chuẩn thống kê); điểm phản ánh chất lượng ảnh và tư thế, không đánh giá ngoại hình."
 
 def run_multi_view_face_analysis(
     frontal_b64: str,
@@ -723,7 +677,6 @@ def run_multi_view_face_analysis(
     profile_warning = None
     profile_analysis = None
     profile_pose = None
-    profile_confidence = None
     if len(profile_points) >= 468 and any(
         not all(math.isfinite(value) for value in (point.x, point.y, point.z)) for point in profile_points
     ):
@@ -731,25 +684,21 @@ def run_multi_view_face_analysis(
     elif len(profile_points) >= 468:
         profile_pose = _pose_quality(profile_points, actual_w, actual_h)
         if not 15 <= profile_pose["yaw_deg"] <= 40:
-            profile_warning = "Góc quay của ảnh nghiêng nằm ngoài khoảng đo tham khảo 15–40°; chưa hiển thị các số đo góc nghiêng."
+            profile_warning = "Ước tính góc quay Face Mesh nằm ngoài khoảng xử lý tham khảo 15–40°; chưa hiển thị các số đo góc nghiêng."
         elif abs(profile_pose["roll_deg"]) > 12 or profile_pose["clipped"]:
             profile_warning = "Ảnh nghiêng bị nghiêng đầu hoặc khuôn mặt sát mép ảnh; chưa hiển thị các số đo góc nghiêng."
         else:
             profile_analysis = analyze_profile_view(profile_points, actual_w, actual_h, profile_pose)
-            profile_confidence = _measurement_confidence(profile_pose, expected_yaw=(15.0, 40.0))
-            profile_analysis["measurement_confidence_score"] = profile_confidence
-            profile_analysis["measurement_confidence_label"] = _confidence_label(profile_confidence)
     else:
         profile_warning = "Thiếu điểm mốc ở ảnh nghiêng; chưa thể đo góc nghiêng."
 
     quality = frontal_result["measurement_quality"]
     quality["profile_pose"] = profile_pose
-    quality["profile_confidence_score"] = profile_confidence
     quality["profile_used"] = profile_analysis is not None
     if profile_warning:
         quality["warnings"].append(profile_warning)
     else:
-        quality["warnings"].append("Các số đo góc nghiêng được giữ riêng, không gộp với tỷ lệ chính diện hoặc điểm tin cậy chính diện.")
+            quality["warnings"].append("Các số đo góc nghiêng được giữ riêng, không gộp với tỷ lệ chính diện.")
     frontal_result["profile"] = profile_analysis
     frontal_result["is_multi_view"] = profile_analysis is not None
     return frontal_result
@@ -763,11 +712,7 @@ def run_comprehensive_face_analysis(
     img_width: int,
     img_height: int
 ) -> Dict[str, Any]:
-    """
-    Điểm vào trung tâm (Pipeline entry):
-    Đánh giá CÔNG BẰNG, KHÁCH QUAN, KHOA HỌC NHÂN TRẮC HỌC, KHÔNG NỊNH NỌT.
-    Thang điểm chuẩn: 60 - 75 là mức trung bình của đa số người thật.
-    """
+    """Analyze visible measurements and state what the image cannot establish."""
     try:
         if "," in image_base64:
             image_base64 = image_base64.split(",", 1)[1]
@@ -800,17 +745,15 @@ def run_comprehensive_face_analysis(
     quality_warnings = _front_quality_warnings(quality)
 
     # Trả về số đo ảnh và quan sát pixel, không xếp hạng ngoại hình.
-    symmetry = analyze_facial_symmetry(points, actual_w, actual_h)
+    symmetry = analyze_facial_symmetry(points, actual_w, actual_h, quality)
     proportions = analyze_facial_proportions(points, actual_w, actual_h, pil_img)
-    nose = analyze_nose_proportions(points, actual_w, actual_h)
+    nose = analyze_nose_proportions(points, actual_w, actual_h, quality)
     jawline = analyze_jawline_and_chin(points, actual_w, actual_h, quality)
     skin = analyze_skin_condition(pil_img, points)
     hair = analyze_hair_and_hairline(pil_img, points, proportions["face_shape"], proportions.get("trichion"))
 
-    confidence_score = _measurement_confidence(quality)
     if not skin.get("measurement_available", True):
         quality_warnings.append("Một số vùng ảnh không đủ dữ liệu để đo biến thiên pixel của da.")
-    overall_grade = _confidence_label(confidence_score)
 
     visual_guide_lines = {
         "midline": [
@@ -837,10 +780,10 @@ def run_comprehensive_face_analysis(
 
     return {
         "success": True,
-        "measurement_confidence_score": confidence_score,
-        # Compatibility alias for older clients; this no longer describes appearance.
-        "overall_harmony_score": confidence_score,
-        "overall_grade": overall_grade,
+        # Legacy score fields stay null until a confidence model is calibrated.
+        "measurement_confidence_score": None,
+        "overall_harmony_score": None,
+        "overall_grade": "Không có điểm tổng hợp đã hiệu chuẩn; báo cáo chỉ hiển thị số đo và cảnh báo ảnh.",
         "symmetry": symmetry,
         "proportions": proportions,
         "nose": nose,
@@ -854,9 +797,10 @@ def run_comprehensive_face_analysis(
             "landmarks_count": len(points)
         },
         "measurement_quality": {
-            "label": "Chỉ báo nội bộ về độ phù hợp của ảnh và tư thế; chưa hiệu chuẩn thống kê, không đánh giá ngoại hình hay sức khỏe.",
+            "label": "Không tính điểm tin cậy tổng hợp vì các ngưỡng hiện chưa được hiệu chuẩn thống kê. Góc quay và độ nghiêng chỉ là ước tính Face Mesh, chưa hiệu chuẩn camera. Xem trực tiếp độ phân giải, vùng bị cắt và cảnh báo bên dưới.",
             "front_pose": quality,
-            "front_confidence_score": confidence_score,
+            "front_confidence_score": None,
+            "confidence_model": "not_calibrated",
             "warnings": quality_warnings,
             "profile_used": False
         }

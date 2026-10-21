@@ -278,34 +278,22 @@ const TASK_METADATA = {
   }
 };
 
-// Preset scenarios for quick test mode
+// User-selected routine focuses; these are not inferred from facial measurements.
 const PRESETS = {
-  looksmax: {
-    auraScore: 86,
-    coachBadge: "MẪU: TỐI ƯU LOOKSMAXXING",
-    quote: "Cấu trúc gương mặt rất cân đối! Lộ trình AI chuyển sang chế độ duy trì đỉnh cao (Looksmaxxing) kết hợp đồng đều giữa Mewing, Dinh dưỡng kháng viêm và bảo vệ da.",
-    jawline: { score: "85/100 • Sắc nét", width: "85%", sub: "↳ AI đã thêm: Tập Mewing & Massage Gua Sha" },
-    bloat: { score: "84/100 • Thon gọn", width: "84%", sub: "↳ AI đã thêm: Giảm muối, ăn giàu Kali & Uống 2L nước" },
-    skin: { score: "88/100 • Nền da khỏe", width: "88%", sub: "↳ AI đã thêm: Chu trình làm sạch dịu nhẹ, dưỡng ẩm & SPF" },
-    highlightCategory: "all"
+  general: {
+    coachBadge: "MẪU LỊCH · CHĂM SÓC TỔNG QUÁT",
+    quote: "Đây là lịch mẫu theo lựa chọn chăm sóc tổng quát, không phải kết luận từ ảnh khuôn mặt.",
+    focusTaskIds: ["drink_water", "gentle_wash", "sunscreen", "sleep_schedule", "jaw_relax", "neck_stretch"]
   },
-  bloated: {
-    auraScore: 74,
-    coachBadge: "MỤC TIÊU: KHỬ SƯNG & JAWLINE",
-    quote: "AI nhận thấy dấu hiệu giữ nước tạm thời và viền hàm chưa tối ưu. Lộ trình ưu tiên tuyệt đối cho Dinh dưỡng xả nước (Debloat), giảm muối và bài tập kích hoạt viền hàm.",
-    jawline: { score: "68/100 • Mờ nhẹ", width: "68%", sub: "↳ AI đã thêm: Mewing 2 giờ/lần & Day cơ nhai" },
-    bloat: { score: "54/100 • Tích nước cao", width: "54%", sub: "↳ AI đã thêm: Kali, cắt giảm hoàn toàn muối & đồ gas" },
-    skin: { score: "82/100 • Khá ổn", width: "82%", sub: "↳ AI đã thêm: Dưỡng ẩm nhẹ nhàng & Uống đủ nước" },
-    highlightCategory: "nutrition"
+  nutrition: {
+    coachBadge: "MẪU LỊCH · DINH DƯỠNG & NƯỚC",
+    quote: "Đây là lịch mẫu tập trung vào thói quen ăn uống và uống nước; ảnh khuôn mặt không đo mức tích nước hay nhu cầu dinh dưỡng.",
+    focusTaskIds: ["drink_water", "kali_debloat", "low_sugar", "sleep_schedule", "sunscreen", "neck_stretch"]
   },
-  dry_eyes: {
-    auraScore: 78,
-    coachBadge: "MỤC TIÊU: NỀN DA & THÂM MẮT",
-    quote: "Đường nét khuôn mặt khá tốt, tuy nhiên nền da có dấu hiệu thiếu ẩm và quầng thâm mắt mệt mỏi. Lộ trình bổ sung cấp nước sâu, kem dưỡng ẩm và kỷ luật ngủ trước 23h.",
-    jawline: { score: "84/100 • Rõ nét", width: "84%", sub: "↳ AI đã thêm: Mewing tư thế chuẩn" },
-    bloat: { score: "80/100 • Bình thường", width: "80%", sub: "↳ AI đã thêm: Uống 2L nước ấm mỗi ngày" },
-    skin: { score: "65/100 • Thiếu ẩm", width: "65%", sub: "↳ AI đã thêm: Kem dưỡng ẩm sâu & Ngủ trước 23h" },
-    highlightCategory: "skincare"
+  skincare: {
+    coachBadge: "MẪU LỊCH · CHĂM SÓC DA CƠ BẢN",
+    quote: "Đây là lịch mẫu chăm sóc da cơ bản; ảnh chỉ ghi nhận pixel và không xác định da khô, thiếu ẩm hay quầng thâm.",
+    focusTaskIds: ["gentle_wash", "sunscreen", "skincare_core", "lip_balm_sleep", "sleep_schedule", "drink_water"]
   }
 };
 
@@ -315,117 +303,76 @@ let requestNumber = 0;
 let sessionNumber = 0;
 let taskFilter = "all";
 let libraryFilter = "all";
-let currentPreset = "looksmax";
+let currentPreset = "general";
 
 /**
- * Intelligent task selection engine driven directly by Face Lab measurements.
- * Accurately scores and ranks exercises based on:
- * - Jawline sharpness & jaw-to-cheek ratio
- * - Facial bloating (water retention in lower cheeks)
- * - Skin smoothness & oiliness
- * - Dark circles index (eye fatigue)
- *
- * It seamlessly adapts according to:
- * - Intensity: gentle (3 tasks), moderate (4 tasks), intensive (5-6 tasks)
- * - Weekly Feedback: too_much (drops load), balanced (standard), can_more (adds challenge)
- *
- * CRITICAL: Any tasks the user already completed today are ALWAYS preserved so progress is never lost.
+ * Selects tasks from the user's chosen focus and workload preference.
+ * Face measurements do not determine health needs or score appearance.
+ * Previously completed tasks are preserved when the task list changes.
  */
-function selectTasksForProfile(profile, intensity = "intensive", feedback = "balanced", currentTasks = []) {
-  let jawlineScore = 85;
-  let bloatScore = 80;
-  let skinScore = 85;
-  let darkCircles = 20;
-
-  const isFaceReport = Boolean(profile?.measurement_quality || (profile?.jawline && profile?.skin));
-  if (!isFaceReport && currentPreset === "bloated") {
-    jawlineScore = 68;
-    bloatScore = 54;
-    skinScore = 82;
-    darkCircles = 24;
-  } else if (!isFaceReport && currentPreset === "dry_eyes") {
-    jawlineScore = 84;
-    bloatScore = 80;
-    skinScore = 65;
-    darkCircles = 42;
-  } else {
-    jawlineScore = 85;
-    bloatScore = 84;
-    skinScore = 88;
-    darkCircles = 18;
-  }
-
-  // Weight scoring per task based on real measurement thresholds
+function selectTasksForFocus(intensity = "intensive", feedback = "balanced", currentTasks = []) {
+  // Task ordering follows the user's selected focus, not guessed facial traits.
   const candidates = [
     {
       id: "mewing",
-      score: 100 + (100 - jawlineScore) * 1.6,
       reason: "Bài tập tư thế lưỡi tùy chọn; không có cam kết thay đổi cấu trúc xương hoặc đường nét khuôn mặt."
     },
     {
       id: "kali_debloat",
-      score: 100 + (100 - bloatScore) * 1.7,
       reason: "Chọn thực phẩm cân bằng theo nhu cầu cá nhân; ảnh khuôn mặt không đo lượng nước giữ trong cơ thể."
     },
     {
       id: "drink_water",
-      score: 95 + (100 - bloatScore) * 0.9 + (100 - skinScore) * 0.6,
       reason: "Uống nước theo nhu cầu cơ thể và điều kiện sinh hoạt; không cần ép theo một mục tiêu cố định từ ảnh khuôn mặt."
     },
     {
       id: "gentle_wash",
-      score: 90 + (100 - skinScore) * 1.5,
       reason: "Làm sạch dịu nhẹ là lựa chọn chăm sóc cá nhân; phân tích ảnh không xác định độ dầu hay tình trạng hàng rào da."
     },
     {
       id: "guasha",
-      score: 86 + (100 - jawlineScore) * 1.1 + (100 - bloatScore) * 1.2,
       reason: "Nếu thấy dễ chịu, massage nhẹ có thể dùng như một bước thư giãn; không làm thay đổi cấu trúc xương hoặc nâng cơ tức thì."
     },
     {
       id: "skincare_core",
-      score: 88 + (100 - skinScore) * 1.2,
       reason: "Chọn sản phẩm chăm sóc da theo nhu cầu và khả năng dung nạp cá nhân; phép đo pixel không kê đơn sản phẩm."
     },
     {
       id: "sleep_schedule",
-      score: 80 + darkCircles * 1.8,
       reason: "Giữ lịch ngủ phù hợp với sinh hoạt cá nhân; vùng tối trong ảnh không xác định nguyên nhân hay chất lượng giấc ngủ."
     },
     {
       id: "sunscreen",
-      score: 82 + (100 - skinScore) * 1.1,
-      reason: `Bảo vệ màng tế bào trước tia UVA/UVB, ngăn ngừa sạm màu và đứt gãy sợi collagen nền da.`
+      reason: "Chống nắng là lựa chọn bảo vệ da thường ngày; tần suất và sản phẩm nên theo điều kiện tiếp xúc và khả năng dung nạp cá nhân."
     },
     {
       id: "ice_facial",
-      score: 78 + (100 - bloatScore) * 1.3,
       reason: "Chườm mát là lựa chọn tạo cảm giác dễ chịu; ảnh không xác định nguyên nhân sưng hay tình trạng da."
     },
     {
       id: "neck_stretch",
-      score: 75 + (100 - jawlineScore) * 1.0,
       reason: "Kéo giãn cổ nhẹ nhàng để thư giãn sau thời gian ngồi lâu; dừng nếu thấy đau hoặc khó chịu."
     },
     {
       id: "jaw_relax",
-      score: 72 + (100 - jawlineScore) * 0.9,
       reason: "Giữ hàm thư giãn, tránh nghiến răng; bài tập không làm thay đổi hình dạng xương hàm."
     },
     {
       id: "lip_balm_sleep",
-      score: 70 + (100 - skinScore) * 0.7,
-      reason: `Dưỡng ẩm môi ban đêm chống nứt nẻ và làm đầy rãnh môi tự nhiên trong suốt chu kỳ nghỉ ngơi.`
+      reason: "Dưỡng môi nếu thấy khô; ảnh khuôn mặt không xác định độ ẩm môi hoặc nguyên nhân khô."
     },
     {
       id: "straight_posture",
-      score: 68 + (100 - jawlineScore) * 0.6,
       reason: "Điều chỉnh tư thế ngồi để cổ và vai thoải mái hơn; không nhằm thay đổi cấu trúc khuôn mặt."
     }
   ];
 
-  // Sort candidates by score descending
-  candidates.sort((a, b) => b.score - a.score);
+  const focusOrder = PRESETS[currentPreset]?.focusTaskIds || PRESETS.general.focusTaskIds;
+  candidates.sort((a, b) => {
+    const aOrder = focusOrder.indexOf(a.id);
+    const bOrder = focusOrder.indexOf(b.id);
+    return (aOrder < 0 ? focusOrder.length : aOrder) - (bOrder < 0 ? focusOrder.length : bOrder);
+  });
 
   // Target task count per intensity
   let targetCount = 4;
@@ -465,15 +412,13 @@ function selectTasksForProfile(profile, intensity = "intensive", feedback = "bal
   return resultTasks;
 }
 
-// Generate an authentic default demo routine state
+// Create an empty routine state for a user with no saved activity yet.
 function createDefaultRoutine() {
   const now = new Date();
   const dayNames = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
   const formattedDate = `${dayNames[now.getDay()]} • ${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
 
-  const tasks = selectTasksForProfile(PRESETS.looksmax, "intensive", "balanced");
-  // Seed initial checkmarks for demo feel
-  tasks.forEach((t, i) => { if (i < 3) t.completed = true; });
+  const tasks = selectTasksForFocus("intensive", "balanced");
 
   return {
     date: now.toISOString().slice(0, 10),
@@ -481,14 +426,13 @@ function createDefaultRoutine() {
     intensity: "intensive",
     feedback: "balanced",
     revision: 1,
-    auraScore: 86,
-    coachQuote: PRESETS.looksmax.quote,
+    coachQuote: PRESETS.general.quote,
     tasks,
     streak: {
-      count: 4,
+      count: 0,
       freezes_left: 2,
       frozen_today: false,
-      completed_today: true,
+      completed_today: false,
       completed_dates: []
     },
     library: []
@@ -663,7 +607,7 @@ function render() {
 
   // Streak count
   const streakCount = $("#routine-streak-count");
-  if (streakCount) streakCount.textContent = state.streak?.count ?? 4;
+  if (streakCount) streakCount.textContent = state.streak?.count ?? 0;
 
   // Freeze button
   const freezeBtn = $("#routine-freeze");
@@ -679,14 +623,27 @@ function render() {
   const weekElem = $("#routine-week");
   if (weekElem) {
     weekElem.replaceChildren();
-    const dayKeys = [12, 13, 14, 15, 16, 17];
-    dayKeys.forEach(num => {
+    const now = new Date();
+    const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const baseDate = new Date(`${state.date || localToday}T12:00:00`);
+    const todayKey = state.date || `${baseDate.getFullYear()}-${String(baseDate.getMonth() + 1).padStart(2, "0")}-${String(baseDate.getDate()).padStart(2, "0")}`;
+    const completedDates = new Set(state.streak?.completed_dates || []);
+    const frozenDates = new Set(state.streak?.frozen_dates || []);
+    const dayNames = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
+    for (let offset = -6; offset <= 0; offset++) {
+      const day = new Date(baseDate);
+      day.setDate(baseDate.getDate() + offset);
+      const dayKey = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
       const span = document.createElement("span");
-      span.textContent = String(num);
-      if (num < 15) span.className = "is-complete";
-      else if (num === 15) span.className = "is-today is-active";
+      span.textContent = String(day.getDate());
+      const isToday = dayKey === todayKey;
+      if (completedDates.has(dayKey)) span.classList.add("is-complete");
+      else if (frozenDates.has(dayKey)) span.classList.add("is-frozen");
+      if (isToday) span.classList.add("is-today", "is-active");
+      const stateLabel = completedDates.has(dayKey) ? "đã hoàn thành" : frozenDates.has(dayKey) ? "đã dùng ngày bảo vệ" : "chưa hoàn thành";
+      span.setAttribute("aria-label", `${dayNames[day.getDay()]} ${day.getDate()}: ${stateLabel}`);
       weekElem.append(span);
-    });
+    }
   }
 
   // Render tasks
@@ -773,23 +730,17 @@ function render() {
   renderLibrary();
 }
 
-function updateCoachQuote(profile, intensity, feedback) {
+function updateCoachQuote(intensity, feedback) {
   const quoteElem = $("#hh-coach-quote");
   if (!quoteElem) return;
 
-  let baseQuote = "";
-  if (intensity === "gentle") {
-    baseQuote = "AI đã rút gọn còn 3 bài tập trọng tâm nhất theo phân tích Face Lab: Tập trung trực tiếp vào điểm yếu ưu tiên cao mà không gây quá tải.";
-  } else if (intensity === "moderate") {
-    baseQuote = "AI thiết lập 4 bài tập cân đối: Kết hợp định hình đường viền hàm, dinh dưỡng xả nước (Debloating) và thói quen bảo vệ da hàng ngày.";
-  } else {
-    baseQuote = "AI kích hoạt chế độ toàn diện (Looksmaxxing): Đầy đủ các bước từ cơ hàm, dinh dưỡng kháng viêm xả nước đến phục hồi nền da đỉnh cao.";
-  }
+  const focus = PRESETS[currentPreset] || PRESETS.general;
+  let baseQuote = `${focus.quote} Số việc đang hiển thị được chọn theo mức độ bạn đặt: ${intensity === "gentle" ? "nhẹ" : intensity === "moderate" ? "vừa" : "cao"}.`;
 
   if (feedback === "too_much") {
-    baseQuote += " (Đã giảm nhẹ khối lượng theo cảm nhận tuần này của bạn).";
+    baseQuote += " Đã giảm số việc theo phản hồi của bạn.";
   } else if (feedback === "can_more") {
-    baseQuote += " (Đã kích hoạt thêm bài tập nâng cao bứt phá).";
+    baseQuote += " Đã thêm một việc theo phản hồi của bạn.";
   }
 
   quoteElem.textContent = baseQuote;
@@ -807,7 +758,7 @@ function applyPreset(name) {
 
   // Aura Score
   const auraPill = $("#hh-aura-score");
-  if (auraPill) auraPill.textContent = `Điểm Aura: ${preset.auraScore}/100`;
+  if (auraPill) auraPill.textContent = "Không có điểm ngoại hình";
 
   // Coach Badge and Quote
   const coachBadge = $("#hh-coach-mode-badge");
@@ -817,32 +768,32 @@ function applyPreset(name) {
   const jawlineScore = $("#hh-metric-jawline-score");
   const jawlineBar = $("#hh-metric-jawline-bar");
   const jawlineSub = $("#hh-metric-jawline-sub");
-  if (jawlineScore) jawlineScore.textContent = preset.jawline.score;
-  if (jawlineBar) jawlineBar.style.width = preset.jawline.width;
-  if (jawlineSub) jawlineSub.textContent = preset.jawline.sub;
+  if (jawlineScore) jawlineScore.textContent = "Chưa có điểm hiệu chuẩn";
+  if (jawlineBar) jawlineBar.style.width = "0%";
+  if (jawlineSub) jawlineSub.textContent = "Ảnh 2D không đo sức mạnh hoặc độ nét của hàm.";
 
   const bloatScore = $("#hh-metric-bloat-score");
   const bloatBar = $("#hh-metric-bloat-bar");
   const bloatSub = $("#hh-metric-bloat-sub");
-  if (bloatScore) bloatScore.textContent = preset.bloat.score;
-  if (bloatBar) bloatBar.style.width = preset.bloat.width;
-  if (bloatSub) bloatSub.textContent = preset.bloat.sub;
+  if (bloatScore) bloatScore.textContent = "Không đo từ ảnh";
+  if (bloatBar) bloatBar.style.width = "0%";
+  if (bloatSub) bloatSub.textContent = "Ảnh không xác định mức tích nước hay nguyên nhân sưng.";
 
   const skinScore = $("#hh-metric-skin-score");
   const skinBar = $("#hh-metric-skin-bar");
   const skinSub = $("#hh-metric-skin-sub");
-  if (skinScore) skinScore.textContent = preset.skin.score;
-  if (skinBar) skinBar.style.width = preset.skin.width;
-  if (skinSub) skinSub.textContent = preset.skin.sub;
+  if (skinScore) skinScore.textContent = "Chỉ đo pixel ảnh";
+  if (skinBar) skinBar.style.width = "0%";
+  if (skinSub) skinSub.textContent = "Không chấm sức khỏe da, độ ẩm, mụn hoặc sắc tố.";
 
   // Select tasks based on this preset
   if (!routine) routine = createDefaultRoutine();
-  routine.tasks = selectTasksForProfile(preset, routine.intensity, routine.feedback, routine.tasks);
-  updateCoachQuote(preset, routine.intensity, routine.feedback);
+  routine.tasks = selectTasksForFocus(routine.intensity, routine.feedback, routine.tasks);
+  updateCoachQuote(routine.intensity, routine.feedback);
 
   persistLocal();
   render();
-  showToast(`Đã áp dụng chế độ: ${preset.coachBadge}`, "success");
+  showToast(`Đã áp dụng lịch mẫu: ${preset.coachBadge}`, "success");
 }
 
 function persistLocal() {
@@ -915,9 +866,8 @@ async function mutate(method, payload) {
     if (payload.intensity) routine.intensity = payload.intensity;
     if (payload.feedback) routine.feedback = payload.feedback;
 
-    const profile = getFaceReport() || PRESETS[currentPreset];
-    routine.tasks = selectTasksForProfile(profile, routine.intensity, routine.feedback, routine.tasks);
-    updateCoachQuote(profile, routine.intensity, routine.feedback);
+    routine.tasks = selectTasksForFocus(routine.intensity, routine.feedback, routine.tasks);
+    updateCoachQuote(routine.intensity, routine.feedback);
   } else if (payload.action === "dismiss") {
     const target = routine.tasks.find(t => t.id === payload.task_id);
     if (target) target.dismissed = true;
@@ -1108,23 +1058,15 @@ export function initRoutine() {
     const report = getFaceReport();
     if (report) {
       if (!routine) routine = createDefaultRoutine();
-      routine.tasks = selectTasksForProfile(report, routine.intensity, routine.feedback, routine.tasks);
-      updateCoachQuote(report, routine.intensity, routine.feedback);
+      routine.tasks = selectTasksForFocus(routine.intensity, routine.feedback, routine.tasks);
+      updateCoachQuote(routine.intensity, routine.feedback);
 
-      // Update metrics UI if values exist
-      if (Number.isFinite(report.jawline?.jawline_sharpness_score)) {
-        const val = Math.round(report.jawline.jawline_sharpness_score);
-        $("#hh-metric-jawline-score").textContent = `${val}/100 • ${val >= 80 ? "Sắc nét" : "Cần kích hoạt"}`;
-        $("#hh-metric-jawline-bar").style.width = `${val}%`;
-      } else if (report.jawline) {
+      // Do not display legacy, uncalibrated appearance scores in routine cards.
+      if (report.jawline) {
         $("#hh-metric-jawline-score").textContent = "Chưa có điểm được hiệu chỉnh";
         $("#hh-metric-jawline-bar").style.width = "0%";
       }
-      if (Number.isFinite(report.skin?.smoothness_score) && !report.skin?.observation_only) {
-        const val = Math.round(report.skin.smoothness_score);
-        $("#hh-metric-skin-score").textContent = `${val}/100 • ${val >= 80 ? "Nền da khỏe" : "Cần phục hồi"}`;
-        $("#hh-metric-skin-bar").style.width = `${val}%`;
-      } else if (report.skin?.observation_only) {
+      if (report.skin) {
         $("#hh-metric-skin-score").textContent = "Ảnh chỉ đo pixel, không chấm sức khỏe da";
         $("#hh-metric-skin-bar").style.width = "0%";
       }
@@ -1132,10 +1074,10 @@ export function initRoutine() {
       persistLocal();
       render();
       mutate("post", { report: { skin: report.skin || {} } });
-      showToast("Đã đồng bộ số đo thực tế từ Face Lab vào lộ trình!", "success");
+      showToast("Đã liên kết báo cáo Face Lab. Lịch vẫn theo mục tiêu và mức độ bạn chọn.", "success");
     } else {
-      applyPreset("looksmax");
-      showToast("Đã nạp số đo mẫu Face Lab & tối ưu hóa bài tập!", "success");
+      applyPreset("general");
+      showToast("Đã áp dụng lịch mẫu tổng quát; chưa có số đo cá nhân được hiệu chuẩn.", "success");
     }
   });
 
@@ -1156,8 +1098,8 @@ export function initRoutine() {
     if (window.location.hash === "#health-hub") {
       const rep = getFaceReport();
       if (rep && routine) {
-        routine.tasks = selectTasksForProfile(rep, routine.intensity, routine.feedback, routine.tasks);
-        updateCoachQuote(rep, routine.intensity, routine.feedback);
+        routine.tasks = selectTasksForFocus(routine.intensity, routine.feedback, routine.tasks);
+        updateCoachQuote(routine.intensity, routine.feedback);
         persistLocal();
         render();
       }
