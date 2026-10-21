@@ -47,7 +47,7 @@ function setBusy(value) {
   busy = value;
   const disabled = busy || loading || !currentUser;
   document.querySelectorAll("[data-account-control], input[data-consent]").forEach((node) => { node.disabled = disabled; });
-  ["#logout-button", "#aura-export", "#open-delete-dialog"].forEach((selector) => { $(selector).disabled = disabled; });
+  ["#logout-button", "#aura-quick-logout", "#aura-export", "#open-delete-dialog"].forEach((selector) => { $(selector).disabled = disabled; });
   $("#aura-revoke-others").disabled = disabled || !sessions.some((session) => !session.current);
   document.querySelectorAll("[data-session-revoke]").forEach((button) => { button.disabled = disabled; });
   document.querySelectorAll("#delete-form input, #delete-form button").forEach((node) => { node.disabled = busy; });
@@ -111,6 +111,7 @@ function renderAccount(profile) {
   currentUser = profile;
   const name = profile.display_name || profile.email || profile.username;
   $(".profile-card h2").textContent = name;
+  $("#aura-toolbar-name").textContent = name;
   $(".profile-card > p").textContent = profile.email || `Tên đăng nhập: ${profile.username}`;
   $("#aura-display-name").value = profile.display_name;
   $("#aura-login-id").value = profile.email || profile.username;
@@ -127,6 +128,7 @@ function renderAccount(profile) {
   $(".profile-status span:last-child").textContent = "Dữ liệu được quản lý theo tài khoản";
   document.querySelectorAll(".profile-card [data-auth-open]").forEach((node) => { node.hidden = true; });
   $("#logout-button").hidden = false;
+  $("#aura-account-toolbar").hidden = false;
   $(".unified-account-links").hidden = profile.role !== "admin";
   $("[data-unified-admin]").hidden = profile.role !== "admin";
   $("[data-admin-signin]").hidden = true;
@@ -161,6 +163,7 @@ function clearPrivateView(text = "Đăng nhập để chỉnh sửa hồ sơ, b�
   document.querySelectorAll(".avatar-small, .avatar-top, #aura-profile-avatar").forEach((node) => { node.textContent = "A"; });
   document.querySelectorAll(".profile-card [data-auth-open]").forEach((node) => { node.hidden = false; });
   $("#logout-button").hidden = true;
+  $("#aura-account-toolbar").hidden = true;
   $(".unified-account-links").hidden = true;
   $("[data-unified-admin]").hidden = true;
   $("[data-admin-signin]").hidden = false;
@@ -424,6 +427,7 @@ export function initMyAura() {
   document.querySelectorAll("input[data-consent]").forEach((input) => input.addEventListener("change", () => saveConsent(input)));
   document.querySelectorAll(".profile-card [data-auth-open]").forEach((button) => button.addEventListener("click", () => openAuth(button.dataset.authOpen)));
   $("#logout-button").addEventListener("click", logout);
+  $("#aura-quick-logout").addEventListener("click", logout);
   $("#aura-profile-form").addEventListener("submit", saveProfile);
   $("#aura-password-form").addEventListener("submit", changePassword);
   $("#aura-show-password").addEventListener("change", (event) => {

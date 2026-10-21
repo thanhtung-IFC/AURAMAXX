@@ -20,6 +20,7 @@
 .aura-settings-nav svg,.aura-section-heading svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.7; flex:none }
 .aura-settings-content { display:grid; gap:20px; min-width:0 }
 .aura-account-notice { padding:14px 18px; font-size:13px; color:var(--muted); border:1px solid var(--line); background:var(--surface-2); border-radius:12px }
+.aura-account-toolbar { display:none }
 .aura-account-notice[data-state="error"] { color:var(--color-danger) }
 .aura-account-notice button { margin-left:8px; border:0; background:transparent; color:inherit; text-decoration:underline; cursor:pointer }
 [data-page="my-aura"] .aura-settings-panel { padding:clamp(20px,2.5vw,30px); margin:0; scroll-margin-top:92px }
@@ -111,6 +112,11 @@
 @media(max-width:800px) {
   [data-page="my-aura"] .profile-layout { grid-template-columns:1fr }
   .aura-sidebar { position:static; gap:12px }
+  .aura-account-toolbar { position:sticky; top:8px; z-index:12; display:flex; align-items:center; justify-content:space-between; gap:12px; align-self:start; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:color-mix(in srgb,var(--surface) 94%,transparent); box-shadow:0 8px 24px #070a1166; backdrop-filter:blur(14px) }
+  .aura-account-toolbar > span { display:grid; gap:2px; min-width:0 }
+  .aura-account-toolbar b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px }
+  .aura-account-toolbar small { color:var(--subtle); font-size:10px }
+  .aura-account-toolbar .button { flex:none; min-height:40px }
   .aura-settings-nav { display:flex; flex-wrap:nowrap; gap:5px; padding:8px; overflow-x:auto; overscroll-behavior-inline:contain; -webkit-overflow-scrolling:touch; scrollbar-width:thin; scroll-snap-type:x proximity }
   .aura-settings-nav a { flex:0 0 auto; min-height:42px; padding:9px 11px; font-size:12px; gap:7px; white-space:nowrap; scroll-snap-align:start }
   .aura-settings-nav svg { width:16px; height:16px }
