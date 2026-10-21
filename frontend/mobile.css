@@ -61,10 +61,11 @@
   [data-page="face-lab"] .face-camera-panel { order: 1; width: 100%; }
   [data-page="face-lab"] .face-capture-column { order: 2; }
   [data-page="face-lab"] .face-biometrics-panel { order: 3; width: 100%; }
-  [data-page="face-lab"] .face-camera-stage { min-height: 0; height: clamp(160px, min(calc((100vw - 50px) * .75), calc(100svh - 330px)), 360px); max-height: none; aspect-ratio: auto; scroll-margin-top: 0; }
+  [data-page="face-lab"] .face-camera-stage { min-height: 0; height: clamp(160px, min(calc((100vw - 50px) * .75), calc(100svh - 330px)), 360px); max-height: none; aspect-ratio: auto; scroll-margin-top: 0; transition: height 180ms ease-out; }
+  [data-page="face-lab"] .face-camera-stage[data-video-orientation="portrait"] { height: clamp(240px, min(calc((100vw - 50px) * 1.22), calc(100svh - 330px)), 460px); }
   [data-page="face-lab"] .face-live-message { min-height: 0; margin: 10px 0 8px; font-size: 12px; line-height: 1.6; }
-  .face-quality-checks { gap: 5px; margin-bottom: 10px; }
-  .face-quality-checks > span { font-size: 10px; padding: 4px 6px; }
+  .face-quality-checks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; margin-bottom: 10px; }
+  .face-quality-checks > span { min-height: 32px; font-size: 10px; line-height: 1.4; padding: 5px 6px; }
   .face-mobile-actionbar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
   [data-page="face-lab"] .face-mobile-actionbar .button { min-height: 54px; font-size: 13px; line-height: 1.5; margin: 0; padding: 10px; width: 100%; border-radius: 12px; }
   .face-mobile-actionbar[data-has-front="false"] #face-capture,
@@ -114,6 +115,7 @@
   [data-page="face-lab"] .face-camera-panel { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 6px 12px; }
   [data-page="face-lab"] .face-camera-panel > * { grid-column: 1 / -1; }
   [data-page="face-lab"] .face-camera-stage { grid-column: 1; grid-row: 2 / span 3; height: clamp(160px, calc(100svh - 170px), 230px); }
+  [data-page="face-lab"] .face-camera-stage[data-video-orientation="portrait"] { height: clamp(160px, calc(100svh - 170px), 230px); }
   [data-page="face-lab"] .face-live-message { grid-column: 2; grid-row: 2; margin: 0; }
   [data-page="face-lab"] .face-quality-checks { grid-column: 2; grid-row: 3; margin: 0; align-content: center; }
   [data-page="face-lab"] .face-mobile-actionbar { grid-column: 2; grid-row: 4; margin: 0; align-self: end; }

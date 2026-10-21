@@ -1,7 +1,7 @@
 import { api, apiRequest } from "../api.js";
 import { showToast } from "../ui.js";
 import { createLandmarker } from "../face/landmarker.js";
-import { drawLandmarkOverlay, sampleFrameLight } from "../face/analysis.js";
+import { drawLandmarkOverlay, LandmarkOverlaySmoother, sampleFrameLight } from "../face/analysis.js";
 import { evaluateCapturePose } from "../face/capture-pose.js";
 import { CaptureStability } from "../face/capture-stability.js";
 import { FaceAcquisition } from "../face/face-acquisition.js";
@@ -22,7 +22,8 @@ let autoCapture = false, autoTimeout = 0, lastServerAt = 0, serverBusy = false, 
 let facingMode = "user", selectedDevice = "", lastDetectionTime = 0, challengeActive = false, challengeVerified = false;
 let knownPeople = [], uploading = false, peopleRequest = 0;
 let lastVideoTime = -1, processController = null, analysisController = null, networkRetryAt = 0;
-let trackingEpoch = 0, overlayPoints = null;
+let trackingEpoch = 0;
+const overlaySmoother = new LandmarkOverlaySmoother();
 const stability = new CaptureStability();
 const sourceCanvas = document.createElement("canvas");
 const captureCanvas = document.createElement("canvas");
@@ -157,6 +158,7 @@ async function enumerateCameras() {
 function updateCameraGuide() {
   const video = $("#face-video"), stage = $("#face-camera-stage"), guide = $("#face-guide-frame");
   if (!stream || !video.videoWidth || !video.videoHeight) return;
+  stage.dataset.videoOrientation = video.videoHeight > video.videoWidth ? "portrait" : "landscape";
   const scale = Math.min(stage.clientWidth / video.videoWidth, stage.clientHeight / video.videoHeight);
   const height = Math.min(video.videoHeight * scale * .78, video.videoWidth * scale * 1.25);
   guide.style.height = `${Math.round(height)}px`;
@@ -290,13 +292,14 @@ function stopCamera() {
   $("#face-challenge-message").textContent = "Bật camera và bắt đầu liveness để xác thực.";
   if (stream) stream.getTracks().forEach(track => track.stop());
   stream = null; resetStability();
-  overlayPoints = null; acquisition.reset();
+  overlaySmoother.reset(); acquisition.reset();
   setText("#face-capture-hint", front ? "Ảnh đã chụp được giữ lại. Bật camera để chụp thêm." : "Bật camera và giữ yên trong giây lát.");
   for (const id of ["face-quality-light", "face-quality-detail", "face-quality-pose", "face-quality-motion"]) { $(`#${id}`).dataset.state = "idle"; }
   setText("#face-quality-light", "Chờ kiểm tra ánh sáng"); setText("#face-quality-detail", "Chờ kiểm tra độ nét"); setText("#face-quality-pose", "Chờ căn góc chụp"); setText("#face-quality-motion", "Chờ khung hình ổn định");
   setText("#face-camera-info", "Camera sẽ tự chọn cấu hình phù hợp khi mở.");
   const video = $("#face-video"); video.pause(); video.srcObject = null; video.hidden = true;
   for (const id of ["face-overlay", "face-guide-frame", "face-camera-chip", "face-stop-camera", "face-switch-camera"]) $(`#${id}`).hidden = true;
+  delete $("#face-camera-stage").dataset.videoOrientation;
   $("#face-camera-empty").hidden = false; $("#face-start-camera").hidden = false; $("#face-start-camera").disabled = false;
   $("#face-challenge-start").disabled = true; $("#face-auto-profile").disabled = true;
   $("#face-overlay").getContext("2d")?.clearRect(0, 0, $("#face-overlay").width, $("#face-overlay").height);
@@ -311,26 +314,19 @@ function mirrorCamera() {
 }
 
 function drawOverlay(landmarks) {
-  if (!$("#face-show-mesh").checked) return;
+  if (!$("#face-show-mesh").checked) { overlaySmoother.reset(); return; }
   const now = performance.now(), elapsed = now - lastOverlayAt;
   if (elapsed < workload.profile.overlayInterval) return;
   lastOverlayAt = now;
-  // Smooth the display only. Capture and server requests always keep raw landmarks.
-  if (!overlayPoints || overlayPoints.length !== landmarks.length) overlayPoints = landmarks.map(point => ({ ...point }));
-  else {
-    const motion = Math.hypot(landmarks[1].x - overlayPoints[1].x, landmarks[1].y - overlayPoints[1].y);
-    const alpha = motion > .025 ? .85 : Math.min(.9, 1 - Math.exp(-elapsed / 120));
-    for (let index = 0; index < landmarks.length; index++) {
-      overlayPoints[index].x += alpha * (landmarks[index].x - overlayPoints[index].x);
-      overlayPoints[index].y += alpha * (landmarks[index].y - overlayPoints[index].y);
-    }
-  }
+  // Smooth display coordinates only. Capture and server requests use raw landmarks.
+  const overlayPoints = overlaySmoother.update(landmarks, now);
+  if (!overlayPoints) return;
   const canvas = $("#face-overlay"), video = $("#face-video"), rect = canvas.getBoundingClientRect();
   const dpr = Math.min(devicePixelRatio || 1, workload.profile.pixelRatio), width = Math.max(1, Math.round(rect.width * dpr)), height = Math.max(1, Math.round(rect.height * dpr));
   if (canvas.width !== width) canvas.width = width;
   if (canvas.height !== height) canvas.height = height;
   const scale = Math.min(canvas.width / video.videoWidth, canvas.height / video.videoHeight);
-  drawLandmarkOverlay(canvas.getContext("2d"), overlayPoints, video.videoWidth, video.videoHeight, { scale, offsetX: (canvas.width - video.videoWidth * scale) / 2, offsetY: (canvas.height - video.videoHeight * scale) / 2 });
+  drawLandmarkOverlay(canvas.getContext("2d"), overlayPoints, video.videoWidth, video.videoHeight, { scale, offsetX: (canvas.width - video.videoWidth * scale) / 2, offsetY: (canvas.height - video.videoHeight * scale) / 2, pixelRatio: dpr });
 }
 
 function snapshot(source, landmarks, yaw = 0) {
@@ -408,7 +404,8 @@ async function scanFrame() {
       processed = true;
       probeUI(id);
       lastFrameAt = performance.now();
-      const { width, height } = fittedFrame(video.videoWidth, video.videoHeight, 1920);
+      const captureEdge = mobileViewport.matches && $("#face-resolution").value === "auto" && workload.tier !== "quality" ? 1280 : 1920;
+      const { width, height } = fittedFrame(video.videoWidth, video.videoHeight, captureEdge);
       if (sourceCanvas.width !== width) sourceCanvas.width = width;
       if (sourceCanvas.height !== height) sourceCanvas.height = height;
       sourceCanvas.getContext("2d").drawImage(video, 0, 0, sourceCanvas.width, sourceCanvas.height);
@@ -416,7 +413,7 @@ async function scanFrame() {
       const faces = (await acquisition.detectForVideo(detector, sourceCanvas, now, workload.longestEdge)).faceLandmarks;
       if (id !== operation || !stream || format !== formatEpoch) return;
       if (faces.length !== 1) {
-        trackingEpoch++; overlayPoints = null; processController?.abort();
+        trackingEpoch++; overlaySmoother.reset(); processController?.abort();
         resetStability(); live(faces.length > 1 ? "Có nhiều khuôn mặt" : "Chưa thấy khuôn mặt", "idle");
         for (const id of ["face-quality-light", "face-quality-detail", "face-quality-pose", "face-quality-motion"]) $(`#${id}`).dataset.state = "idle";
         setText("#face-quality-light", "Chờ một khuôn mặt"); setText("#face-quality-detail", "Chờ kiểm tra độ nét"); setText("#face-quality-pose", "Chờ căn góc chụp"); setText("#face-quality-motion", "Chờ khung hình ổn định");
@@ -481,7 +478,8 @@ async function analyzeFace() {
 function showResults(result, frontShot, profileShot) {
   const content = $("#face-result-content"), bot = getSelectedArenaBot();
   const warnings = result.measurement_quality?.warnings || [];
-  content.innerHTML = `<div class="face-report-heading"><div><span class="panel-overline">VISIONFACE · KẾT QUẢ PHÂN TÍCH</span><h2>${escapeText(result.proportions?.face_shape || "Báo cáo khuôn mặt")}</h2><p>${escapeText(result.overall_grade)}</p></div><div class="face-engine-score"><strong>${Number.isFinite(result.overall_harmony_score) ? result.overall_harmony_score : "—"}</strong><span>/ 100 · chỉ số tham khảo</span></div></div><div class="face-report-images"></div><div class="face-report-quality"><b>Chất lượng & giới hạn phép đo</b><p>${escapeText(result.measurement_quality?.label || "Các số đo hình học chỉ có tính tham khảo.")}</p>${warnings.map(warning => `<p>${escapeText(warning)}</p>`).join("")}</div><div class="face-engine-details">${renderReportDetails(result)}</div><div class="face-result-actions"><button class="button button-primary" type="button" data-face-action="routine"><svg><use href="#i-spark"/></svg> Xây dựng routine trong Health Hub</button><button class="button button-outline" type="button" data-face-action="explain">Giải thích kết quả</button><button class="button button-outline" type="button" data-face-action="download">Tải báo cáo JSON</button><button class="button button-outline" type="button" data-face-action="print">In báo cáo</button><button class="text-link" type="button" data-face-action="delete">Xóa kết quả</button></div><div class="face-native-bot"><div><span class="panel-overline">ARENA · LUYỆN TẬP</span><p>${bot ? `Đối thủ đã chọn: ${escapeText(bot.name)}` : "Chọn đối thủ trong Arena để dùng kết quả này."}</p><small>Chỉ dùng nhóm có phép đo từ VisionFace. Các nhóm chưa được đo sẽ để trống.</small></div><button class="button button-outline" data-face-action="bot" type="button" ${bot ? "" : "disabled"}>Đấu BOT</button><p id="face-bot-battle-outcome" role="status"></p></div>`;
+  const confidence = result.measurement_confidence_score ?? result.overall_harmony_score;
+  content.innerHTML = `<div class="face-report-heading"><div><span class="panel-overline">VISIONFACE · KẾT QUẢ PHÂN TÍCH</span><h2>${escapeText(result.proportions?.face_shape || "Báo cáo khuôn mặt")}</h2><p>${escapeText(result.overall_grade)}</p></div><div class="face-engine-score"><strong>${Number.isFinite(confidence) ? confidence : "—"}</strong><span>/ 100 · độ tin cậy ảnh</span></div></div><div class="face-report-images"></div><div class="face-report-quality"><b>Chất lượng & giới hạn phép đo</b><p>${escapeText(result.measurement_quality?.label || "Các số đo hình học chỉ có tính tham khảo.")}</p>${warnings.map(warning => `<p>${escapeText(warning)}</p>`).join("")}</div><div class="face-engine-details">${renderReportDetails(result)}</div><div class="face-result-actions"><button class="button button-primary" type="button" data-face-action="routine"><svg><use href="#i-spark"/></svg> Xây dựng routine trong Health Hub</button><button class="button button-outline" type="button" data-face-action="explain">Giải thích kết quả</button><button class="button button-outline" type="button" data-face-action="download">Tải báo cáo JSON</button><button class="button button-outline" type="button" data-face-action="print">In báo cáo</button><button class="text-link" type="button" data-face-action="delete">Xóa kết quả</button></div><div class="face-native-bot"><div><span class="panel-overline">ARENA · LUYỆN TẬP</span><p>${bot ? `Đối thủ đã chọn: ${escapeText(bot.name)}` : "Chọn đối thủ trong Arena để dùng kết quả này."}</p><small>Chỉ dùng nhóm có phép đo từ VisionFace. Các nhóm chưa được đo sẽ để trống.</small></div><button class="button button-outline" data-face-action="bot" type="button" ${bot ? "" : "disabled"}>Đấu BOT</button><p id="face-bot-battle-outcome" role="status"></p></div>`;
   for (const [shot, label] of [[frontShot, "Chính diện"], [profileShot, "Góc nghiêng"]]) {
     if (!shot) continue;
     const figure = document.createElement("figure"), caption = document.createElement("figcaption");
@@ -658,7 +656,7 @@ export function initFaceLab() {
   initMobileCapture();
   resetWorkload(); syncPerformance(true);
   window.addEventListener("auramaxx:performance-mode", () => { resetWorkload(); resetStability(); syncPerformance(true); });
-  $("#face-show-mesh").addEventListener("change", () => { lastOverlayAt = 0; const canvas = $("#face-overlay"); canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height); });
+  $("#face-show-mesh").addEventListener("change", () => { lastOverlayAt = 0; overlaySmoother.reset(); const canvas = $("#face-overlay"); canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height); });
   $("#face-start-camera").addEventListener("click", () => void startCamera());
   $("#face-stop-camera").addEventListener("click", () => { stopCamera(); message("Camera đã tắt."); });
   $("#face-device").addEventListener("change", event => { selectedDevice = event.target.value; if (stream) void changeCamera(selectedDevice); });
@@ -675,7 +673,7 @@ export function initFaceLab() {
     void changeCamera(next?.value || "");
   });
   $("#face-mirror").addEventListener("change", () => { mirrorChosen = true; mirrorCamera(); });
-  $("#face-video").addEventListener("resize", () => { formatEpoch++; lastVideoTime = -1; lastOverlayAt = 0; acquisition.reset(); resetStability(); overlayPoints = null; showCameraSettings(); });
+  $("#face-video").addEventListener("resize", () => { formatEpoch++; lastVideoTime = -1; lastOverlayAt = 0; acquisition.reset(); resetStability(); overlaySmoother.reset(); showCameraSettings(); });
   if (typeof ResizeObserver === "function") new ResizeObserver(updateCameraGuide).observe($("#face-camera-stage"));
   else window.addEventListener("resize", updateCameraGuide, { passive: true });
   $("#face-capture").addEventListener("click", captureShot);

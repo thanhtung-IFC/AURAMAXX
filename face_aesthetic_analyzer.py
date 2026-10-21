@@ -1,21 +1,13 @@
-"""
-Module: face_aesthetic_analyzer.py
-Mô tả: Hệ thống phân tích nhân trắc học thẩm mỹ và sinh trắc học khuôn mặt từ ảnh chụp tĩnh.
-Tiêu chí: ĐÁNH GIÁ CÔNG BẰNG, KHÁCH QUAN, KHOA HỌC, KHÔNG NỊNH NỌT, PHÂN TÍCH RÕ ƯU VÀ NHƯỢC ĐIỂM.
-Bao gồm:
-1. Độ cân đối khuôn mặt (Facial Symmetry - Đo độ bất đối xứng tự nhiên)
-2. Tỷ lệ khuôn mặt (Rule of Thirds, Rule of Fifths, fWHR, Tỷ lệ vàng, Dáng mặt)
-3. Tỷ lệ mũi (Nose Proportions, Alar Width, Bridge Deviation, Thẳng/Lệch)
-4. Đường viền hàm & Cằm (Jawline Angle, Bigonial Width, Chin Sharpness, Bạnh/Thon)
-5. Tình trạng da (Skin Tone, Smoothness, Uniformity, Dark Circles, Oiliness, Redness)
-6. Kiểu tóc & Chân tóc (Hairline Shape, Hair Color, Lời khuyên khắc phục khuyết điểm)
-Tác giả: AURAMAXX Team
+"""Measure visible 2D face geometry and pixel variation from a single image.
+
+Outputs are image observations, not clinical measurements, skin assessments,
+population norms, or objective ratings of a person's appearance.
 """
 
 import base64
 import io
 import math
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
  
 import numpy as np
 from PIL import Image
@@ -178,113 +170,13 @@ def estimate_true_trichion(
     img_h: int,
     image_pil: Optional[Image.Image] = None
 ) -> FaceAnalyzerPoint:
+    """Compatibility helper returning the upper Face Mesh boundary, not a hairline.
+
+    Face Mesh does not observe the actual hairline. Pixel-color transitions also
+    confuse hair, shadows, makeup and backgrounds, so do not invent a trichion.
     """
-    Xác định điểm chân tóc thực tế (Trichion) thay vì dùng thô điểm mốc số 10.
-    MediaPipe Face Mesh chỉ vẽ đến phần trên của xương trán (Landmark 10), cách chân mày một khoảng
-    chỉ bằng ~0.60 - 0.65 lần tầng giữa, khiến trán luôn bị nhận nhầm là thấp/ngắn dù thực tế trán cao.
-    
-    Thuật toán:
-    1. Thiết lập trục thẳng đứng khuôn mặt từ Chân mày (Landmark 9) qua đỉnh trán mesh (Landmark 10).
-    2. Nếu có ảnh pixel (PIL Image): Quét dọc trục từ mốc 10 ngược lên trên, phân tích gradient màu sắc
-       và độ sáng (luminance) so với vùng da trán (mốc 151, 10). Điểm có sự chuyển tiếp sắc tố rõ nét
-       (tóc/chân tóc) chính là Trichion thực tế.
-    3. Nếu không tìm thấy tóc rõ ràng hoặc không có ảnh: Áp dụng chuẩn nhân trắc học Farkas
-       (khoảng cách Glabella -> Trichion chuẩn xấp xỉ 1.50 - 1.55 lần Glabella -> Mốc 10).
-    4. Trả về FaceAnalyzerPoint đại diện cho đường chân tóc thực sự.
-    """
-    glabella = points[9]
-    pt10 = points[10]
-
-    # Vector hướng dọc trán từ 9 lên 10
-    dx = pt10.px - glabella.px
-    dy = pt10.py - glabella.py
-    dist_9_10 = math.hypot(dx, dy)
-    if dist_9_10 < 1.0:
-        dist_9_10 = 1.0
-
-    ux = dx / dist_9_10
-    uy = dy / dist_9_10
-
-    # Ước lượng khoảng cách tham chiếu tầng giữa & dưới
-    mid_h = dist_2d(points[9], points[2])
-    low_h = dist_2d(points[2], points[152])
-    ref_third = (mid_h + low_h) / 2.0 if (mid_h + low_h) > 0 else dist_9_10 * 1.5
-
-    # Khoảng cách mặc định theo chuẩn nhân trắc học
-    default_upper_h = max(dist_9_10 * 1.45, min(dist_9_10 * 1.85, ref_third * 0.98))
-    detected_upper_h = None
-
-    if image_pil is not None:
-        try:
-            img_rgb = image_pil.convert("RGB")
-            np_img = np.array(img_rgb)
-            im_h, im_w = np_img.shape[:2]
-
-            # Lấy mẫu màu da trán tại mốc 151 và 10
-            sample_pts = [points[151], points[10]]
-            skin_pixels = []
-            for sp in sample_pts:
-                cx, cy = int(sp.px), int(sp.py)
-                for oy in range(-2, 3):
-                    for ox in range(-2, 3):
-                        x_i, y_i = cx + ox, cy + oy
-                        if 0 <= x_i < im_w and 0 <= y_i < im_h:
-                            skin_pixels.append(np_img[y_i, x_i])
-            
-            if skin_pixels:
-                mean_skin = np.mean(skin_pixels, axis=0) # [R, G, B]
-                skin_lum = 0.299 * mean_skin[0] + 0.587 * mean_skin[1] + 0.114 * mean_skin[2]
-
-                # Quét từ mốc 10 ngược lên trên
-                min_step = int(dist_9_10 * 1.05)
-                max_step = int(min(dist_9_10 * 2.15, max(dist_9_10 * 1.35, ref_third * 1.35)))
-
-                consecutive_hair_count = 0
-                hair_hit_t = None
-
-                for t in range(min_step, max_step, 2):
-                    cur_px = int(round(glabella.px + ux * t))
-                    cur_py = int(round(glabella.py + uy * t))
-
-                    if not (0 <= cur_px < im_w and 0 <= cur_py < im_h):
-                        break
-
-                    pixel = np_img[cur_py, cur_px]
-                    p_lum = 0.299 * pixel[0] + 0.587 * pixel[1] + 0.114 * pixel[2]
-                    color_diff = math.sqrt(
-                        (float(pixel[0]) - mean_skin[0]) ** 2 +
-                        (float(pixel[1]) - mean_skin[1]) ** 2 +
-                        (float(pixel[2]) - mean_skin[2]) ** 2
-                    )
-
-                    # Tóc thường tối màu hơn da trán (lum drop > 20) hoặc đổi màu rõ nét (color diff > 40)
-                    is_hair = (skin_lum - p_lum > 20.0) or (color_diff > 40.0)
-                    if is_hair:
-                        consecutive_hair_count += 1
-                        if consecutive_hair_count >= 2:
-                            hair_hit_t = t - 2
-                            break
-                    else:
-                        consecutive_hair_count = 0
-
-                if hair_hit_t is not None:
-                    detected_upper_h = float(hair_hit_t)
-                elif consecutive_hair_count == 0 and (max_step > dist_9_10 * 1.5):
-                    # Da trán tiếp tục kéo dài lên cao mà chưa gặp tóc -> Người có trán cao/dô
-                    detected_upper_h = float(max_step * 0.95)
-        except Exception:
-            detected_upper_h = None
-
-    final_upper_h = detected_upper_h if detected_upper_h is not None else default_upper_h
-    # Giới hạn an toàn nhân trắc học: trán không thể nhỏ hơn mốc 10 và không thể vượt quá 2.2 lần mốc 10
-    final_upper_h = max(dist_9_10 * 1.15, min(dist_9_10 * 2.15, final_upper_h))
-
-    trichion_px = glabella.px + ux * final_upper_h
-    trichion_py = glabella.py + uy * final_upper_h
-    trichion_x = trichion_px / max(1.0, float(img_w))
-    trichion_y = trichion_py / max(1.0, float(img_h))
-
-    return FaceAnalyzerPoint(trichion_x, trichion_y, 0.0, img_w, img_h)
+    del img_w, img_h, image_pil
+    return points[10]
 
 
 def analyze_facial_proportions(
@@ -293,10 +185,7 @@ def analyze_facial_proportions(
     img_h: int,
     image_pil: Optional[Image.Image] = None
 ) -> Dict[str, Any]:
-    """
-    Quy tắc 3 phần (Rule of Thirds), Tỷ lệ vàng (fWHR) và dáng mặt.
-    Đo lường chính xác từ đường chân tóc thực tế (Trichion) xuống chân mày, chân mũi và đáy cằm.
-    """
+    """Return neutral 2D measurements from the visible Face Mesh boundary."""
     trichion = estimate_true_trichion(points, img_w, img_h, image_pil)
     glabella = points[9]            # Chân mày
     subnasale = points[2]           # Chân mũi
@@ -311,62 +200,44 @@ def analyze_facial_proportions(
     middle_pct = round((middle_h / total_h) * 100.0, 1)
     lower_pct = round((lower_h / total_h) * 100.0, 1)
 
-    # Đánh giá thẳng thắn từng tầng mặt theo chuẩn nhân trắc học
-    thirds_analysis = []
-    if upper_pct > 36.0:
-        thirds_analysis.append(f"Tầng trên (Trán) chiếm {upper_pct}% (trán cao/dài so với chuẩn 33.3%, trán dô hoặc đường chân tóc cao)")
-    elif upper_pct < 29.0:
-        thirds_analysis.append(f"Tầng trên (Trán) chỉ chiếm {upper_pct}% (trán ngắn/hẹp, tạo cảm giác mặt thấp)")
-
-    if middle_pct > 36.5:
-        thirds_analysis.append(f"Tầng giữa (Mũi) dài ({middle_pct}%), sống mũi dài")
-    elif middle_pct < 29.5:
-        thirds_analysis.append(f"Tầng giữa ngắn ({middle_pct}%), trục giữa khuôn mặt bị nén")
-
-    if lower_pct > 36.0:
-        thirds_analysis.append(f"Tầng dưới (Cằm) dài ({lower_pct}%), cằm phát triển dài hoặc nhô")
-    elif lower_pct < 29.0:
-        thirds_analysis.append(f"Tầng dưới (Cằm) ngắn ({lower_pct}%), cằm hơi lẹm hoặc khoảng cách mũi-cằm hẹp")
-
-    if not thirds_analysis:
-        thirds_analysis.append("Cả 3 tầng phân bổ khá đồng đều, bám sát tỷ lệ chuẩn 1:1:1.")
-
-    # Điểm hài hòa 3 tầng (chặt chẽ)
-    dev_3rds = abs(upper_pct - 33.33) + abs(middle_pct - 33.33) + abs(lower_pct - 33.33)
-    thirds_harmony = round(max(40.0, min(98.0, 100.0 - dev_3rds * 3.8)), 1)
+    thirds_spread = round(max(upper_pct, middle_pct, lower_pct) - min(upper_pct, middle_pct, lower_pct), 1)
+    thirds_note = (
+        f"Tỷ trọng trong ảnh: vùng trên {upper_pct}%, vùng giữa {middle_pct}%, vùng dưới {lower_pct}%. "
+        "Vùng trên bắt đầu tại rìa Face Mesh, không phải chân tóc; các tỷ lệ không được chấm theo một chuẩn vẻ đẹp."
+    )
 
     # Chiều dài và chiều rộng khuôn mặt (fWHR)
     face_length = dist_2d(trichion, chin_bot)
     cheekbone_width = dist_2d(points[234], points[454]) + 1e-6
     ratio_hw = round(face_length / cheekbone_width, 2)
-    golden_diff = round(abs(ratio_hw - 1.618), 2)
-    golden_score = round(max(40.0, min(98.0, 100.0 - golden_diff * 60.0)), 1)
+    # The 1.618 ratio is not a validated universal target; retain the raw ratio only.
+    golden_score = None
 
     # Chiều rộng trán và hàm
     forehead_w = dist_2d(points[103], points[332])
     cheek_w = cheekbone_width
     jaw_w = dist_2d(points[172], points[397])
 
-    # Xác định hình dáng khuôn mặt và đánh giá ưu/nhược
+    # Broad shape labels describe the visible 2D outline and carry no value judgment.
     if ratio_hw > 1.58:
         face_shape = "Mặt Dài / Chữ Nhật (Oblong)"
-        shape_desc = "Chiều dài khuôn mặt áp đảo chiều ngang. Nhược điểm: Dễ tạo cảm giác mặt gầy hoặc già dặn nếu không có tóc mái cân đối lại."
+        shape_desc = "Viền Face Mesh trong ảnh có tỷ lệ dọc/rộng thuộc nhóm dài theo ngưỡng phân loại nội bộ; không bao gồm đường chân tóc."
     elif ratio_hw < 1.22:
         if jaw_w / cheek_w > 0.84:
             face_shape = "Mặt Vuông (Square)"
-            shape_desc = "Khung xương hàm bạnh, góc cạnh rõ rệt. Ưu điểm: Cá tính, sắc nét. Nhược điểm: Thiếu sự mềm mại, viền hàm dưới hơi thô."
+            shape_desc = "Tỷ lệ viền hàm và vùng má trong ảnh gần nhóm vuông; đây là mô tả đường nét 2D, không suy ra cấu trúc xương."
         else:
             face_shape = "Mặt Tròn (Round)"
-            shape_desc = "Chiều dài và chiều rộng gần bằng nhau, viền má bầu bĩnh. Ưu điểm: Trẻ lâu, phúc hậu. Nhược điểm: Thiếu góc cạnh và độ thanh thoát V-line."
+            shape_desc = "Tỷ lệ dọc/rộng trong ảnh gần nhóm tròn theo ngưỡng phân loại nội bộ; góc máy và biểu cảm có thể làm thay đổi kết quả."
     elif forehead_w > cheek_w * 0.95 and jaw_w < cheek_w * 0.72:
         face_shape = "Mặt Trái Tim (Heart)"
-        shape_desc = "Trán rộng nổi bật trong khi cằm nhọn và hàm hẹp. Cần cân đối phần tóc gần cằm để giảm sự tương phản trán-cằm."
+        shape_desc = "Vùng thái dương của Face Mesh rộng hơn vùng hàm trong ảnh; đường chân tóc và bề ngang trán thật chưa được đo."
     elif cheek_w > forehead_w * 1.15 and cheek_w > jaw_w * 1.25:
         face_shape = "Mặt Kim Cương (Diamond)"
-        shape_desc = "Gò má cao và rộng nhất, trán và cằm đều hẹp. Ưu điểm: Góc cạnh thời trang. Nhược điểm: Gò má hơi nhô nếu mặt gầy."
+        shape_desc = "Vùng má rộng hơn vùng thái dương và hàm trong ảnh; nhãn chỉ tóm tắt tỷ lệ 2D, không phải đánh giá thẩm mỹ."
     else:
         face_shape = "Mặt Trái Xoan (Oval)"
-        shape_desc = "Dáng mặt cân đối chuẩn mực, đường viền thon gọn, không có khuyết điểm góc cạnh nổi cộm."
+        shape_desc = "Tỷ lệ viền Face Mesh gần nhóm oval theo các ngưỡng nội bộ; không bao gồm đường chân tóc và không phải xếp hạng."
 
     return {
         "face_shape": face_shape,
@@ -375,20 +246,32 @@ def analyze_facial_proportions(
             "x": round(trichion.x, 4),
             "y": round(trichion.y, 4),
             "px": round(trichion.px, 1),
-            "py": round(trichion.py, 1)
+            "py": round(trichion.py, 1),
+            "source": "face_mesh_top",
+            "hairline_measured": False
+        },
+        "forehead": {
+            "mesh_top_to_brow_px": round(upper_h, 1),
+            "temple_width_px": round(forehead_w, 1),
+            "mesh_top_to_brow_pct_of_visible_height": round(upper_h / max(face_length, 1e-6) * 100.0, 1),
+            "hairline_measured": False,
+            "note": "Mốc trên là rìa Face Mesh, không phải đường chân tóc; độ cao trán thật không được suy đoán."
         },
         "rule_of_thirds": {
             "upper_third_pct": upper_pct,
             "middle_third_pct": middle_pct,
             "lower_third_pct": lower_pct,
-            "harmony_score": thirds_harmony,
-            "honest_evaluation": " • ".join(thirds_analysis)
+            "harmony_score": None,
+            "spread_pct": thirds_spread,
+            "honest_evaluation": thirds_note,
+            "reference": "Rìa Face Mesh → mốc giữa chân mày → chân mũi → đáy cằm; không phải phép đo đủ ba tầng giải phẫu."
         },
         "length_to_width_ratio": ratio_hw,
-        "golden_ratio_target": 1.618,
+        "golden_ratio_target": None,
         "golden_ratio_fit_score": golden_score,
         "dimensions_px": {
             "face_length": round(face_length, 1),
+            "upper_face_mesh_height": round(upper_h, 1),
             "forehead_width": round(forehead_w, 1),
             "cheekbone_width": round(cheek_w, 1),
             "jaw_width": round(jaw_w, 1)
@@ -470,61 +353,48 @@ def analyze_nose_proportions(points: List[FaceAnalyzerPoint], img_w: int, img_h:
 # 4. ĐƯỜNG VIỀN HÀM & CẰM (JAWLINE & CHIN - ĐÁNH GIÁ CHÂN THỰC)
 # =========================================================================
 
-def analyze_jawline_and_chin(points: List[FaceAnalyzerPoint], img_w: int, img_h: int) -> Dict[str, Any]:
-    """
-    Phân tích góc xương hàm (Gonial Angle), tỷ lệ gò má/hàm và hình thái cằm.
-    """
+def analyze_jawline_and_chin(
+    points: List[FaceAnalyzerPoint],
+    img_w: int,
+    img_h: int,
+    pose_quality: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """Measure visible lower-face geometry without assigning a preferred shape."""
     chin = points[152]
     jaw_l = points[172]
     jaw_r = points[397]
-    ear_l = points[234]
-    ear_r = points[454]
+    cheek_l = points[234]
+    cheek_r = points[454]
 
-    angle_l = angle_between_points(ear_l, jaw_l, chin)
-    angle_r = angle_between_points(ear_r, jaw_r, chin)
+    angle_l = angle_between_points(cheek_l, jaw_l, chin)
+    angle_r = angle_between_points(cheek_r, jaw_r, chin)
     avg_jaw_angle = round((angle_l + angle_r) / 2.0, 1)
 
     jaw_w = dist_2d(jaw_l, jaw_r)
-    cheek_w = dist_2d(ear_l, ear_r) + 1e-6
+    cheek_w = dist_2d(cheek_l, cheek_r) + 1e-6
     ratio_jaw_cheek = round(jaw_w / cheek_w, 2)
-
     chin_angle = angle_between_points(jaw_l, chin, jaw_r)
-
-    # Đánh giá hình thái cằm thẳng thắn
-    if chin_angle < 82.0:
-        chin_type = "Cằm V-line nhọn sắc nét"
-        chin_flaw = "Cằm rất nhọn, nếu mặt gầy có thể tạo cảm giác sắc sảo."
-    elif chin_angle < 96.0:
-        chin_type = "Cằm thon gọn tự nhiên"
-        chin_flaw = "Độ nhọn và độ mở cằm cân bằng tốt."
-    elif chin_angle < 112.0:
-        chin_type = "Cằm tròn đầy đặn"
-        chin_flaw = "Cằm tròn, thiếu độ sắc nét góc cạnh, dễ lộ nọng nếu tăng cân."
-    else:
-        chin_type = "Cằm vuông / bạnh ngang"
-        chin_flaw = "Đáy cằm phẳng và ngang, làm phần dưới khuôn mặt trông nặng nề."
-
-    # Đánh giá góc xương hàm
-    if avg_jaw_angle < 118.0:
-        jawline_desc = f"Góc hàm bạnh ({avg_jaw_angle}° < 120°): Khung xương hàm phát triển vuông vức, viền hàm thô."
-        sharpness_score = round(max(45.0, 75.0 - (120.0 - avg_jaw_angle) * 2.0), 1)
-    elif avg_jaw_angle <= 130.0:
-        jawline_desc = f"Góc hàm chuẩn ({avg_jaw_angle}°): Viền hàm có độ dốc thanh thoát, bám sát góc tỷ lệ nhân trắc học."
-        sharpness_score = round(max(75.0, min(95.0, 95.0 - abs(avg_jaw_angle - 125.0) * 2.0)), 1)
-    else:
-        jawline_desc = f"Góc hàm mở rộng ({avg_jaw_angle}° > 130°): Đường viền hàm phẳng, thiếu góc cạnh định hình rõ nét."
-        sharpness_score = round(max(50.0, 80.0 - (avg_jaw_angle - 130.0) * 2.5), 1)
+    visible_height = dist_2d(points[10], chin) + 1e-6
+    lower_face_height = dist_2d(points[2], chin)
+    yaw = abs(float((pose_quality or {}).get("yaw_deg", 0.0)))
+    roll = abs(float((pose_quality or {}).get("roll_deg", 0.0)))
+    reliability = "Hạn chế do góc chụp" if yaw > 8 or roll > 6 or (pose_quality or {}).get("clipped") else "Đo trên ảnh chính diện 2D"
 
     return {
         "average_jaw_angle_deg": avg_jaw_angle,
         "jaw_angle_left_deg": round(angle_l, 1),
         "jaw_angle_right_deg": round(angle_r, 1),
-        "chin_type": chin_type,
-        "chin_flaw": chin_flaw,
+        "chin_type": "Không phân loại theo chuẩn thẩm mỹ",
+        "chin_flaw": f"Góc mở đường viền hàm–cằm trên ảnh là {round(chin_angle, 1)}°. Mốc 2D không đủ để kết luận cằm nhô, lẹm hay cấu trúc xương.",
         "chin_apex_angle_deg": round(chin_angle, 1),
+        "chin_lower_face_height_pct": round(lower_face_height / visible_height * 100.0, 1),
         "jaw_to_cheek_ratio": ratio_jaw_cheek,
-        "jawline_sharpness_score": sharpness_score,
-        "jawline_evaluation": jawline_desc
+        "jawline_sharpness_score": None,
+        "jawline_evaluation": f"Góc đường viền trái/phải lần lượt {round(angle_l, 1)}° và {round(angle_r, 1)}°; tỷ lệ bề ngang hàm/má là {ratio_jaw_cheek}. {reliability}. Đây không phải góc xương hàm đo lâm sàng.",
+        "measurement_note": "Điểm 234/454, 172/397 và 152 mô tả đường viền nhìn thấy; ánh sáng, râu, biểu cảm, tư thế và độ chính diện ảnh hưởng kết quả.",
+        "measurement_reliability": reliability,
+        "pose_yaw_deg": round(yaw, 1),
+        "pose_roll_deg": round(roll, 1),
     }
 
 
@@ -548,9 +418,32 @@ def _crop_skin_roi(np_img: np.ndarray, center_pt: FaceAnalyzerPoint, radius: int
     return np_img[y1:y2, x1:x2]
 
 
+def _skin_region_measurements(roi: Optional[np.ndarray]) -> Optional[Dict[str, float]]:
+    """Measure image luminance and local texture without labeling skin health."""
+    if roi is None or roi.size == 0 or roi.shape[0] < 16 or roi.shape[1] < 16:
+        return None
+    patch = np.asarray(Image.fromarray(roi).resize((32, 32), Image.Resampling.BILINEAR), dtype=np.float32)
+    gray = np.dot(patch[..., :3], [0.299, 0.587, 0.114])
+    mean_luminance = float(np.median(gray))
+    yy, xx = np.mgrid[:32, :32]
+    design = np.column_stack((xx.ravel(), yy.ravel(), np.ones(32 * 32)))
+    fitted = design @ np.linalg.lstsq(design, gray.ravel(), rcond=None)[0]
+    residual = gray.ravel() - fitted
+    median_residual = float(np.median(residual))
+    robust_variation = 1.4826 * float(np.median(np.abs(residual - median_residual)))
+    return {
+        "mean_luminance": round(mean_luminance, 1),
+        "texture_variation_pct": round(100 * robust_variation / max(mean_luminance, 1.0), 2),
+        "shadow_clipped_pct": round(float(np.mean(gray <= 5.0)) * 100.0, 1),
+        "highlight_clipped_pct": round(float(np.mean(gray >= 250.0)) * 100.0, 1),
+    }
+
+
 def analyze_skin_condition(image_pil: Image.Image, points: List[FaceAnalyzerPoint]) -> Dict[str, Any]:
-    """
-    Phân tích pixel thực tế: Quầng thâm, lỗ chân lông/độ sần sùi, dầu nhờn T-zone, mẩn đỏ.
+    """Return relative image observations for matched face regions.
+
+    RGB tone, absolute brightness, makeup and camera processing are not reliable
+    evidence of complexion, oiliness, texture health or pigmentation.
     """
     img_rgb = image_pil.convert("RGB")
     np_img = np.array(img_rgb)
@@ -561,106 +454,61 @@ def analyze_skin_condition(image_pil: Image.Image, points: List[FaceAnalyzerPoin
     roi_left_cheek = _crop_skin_roi(np_img, points[116], roi_radius)
     roi_right_cheek = _crop_skin_roi(np_img, points[345], roi_radius)
     roi_forehead = _crop_skin_roi(np_img, points[151], roi_radius)
-
     roi_under_eye_l = _crop_skin_roi(np_img, points[111], int(roi_radius * 0.75))
-
-    valid_rois = [r for r in [roi_left_cheek, roi_right_cheek, roi_forehead] if r is not None and r.size > 0]
-    if not valid_rois:
-        return {
-            "skin_tone": "Không rõ",
-            "smoothness_score": None,
-            "uniformity_score": None,
-            "dark_circles_index": None,
-            "oiliness_score": None,
-            "redness_score": None,
-            "measurement_available": False,
-            "skin_health_evaluation": "Không lấy được vùng da phù hợp; các chỉ số da chưa được đo."
-        }
-
-    combined_skin = np.concatenate([r.reshape(-1, 3) for r in valid_rois], axis=0)
-    mean_r, mean_g, mean_b = np.mean(combined_skin, axis=0)
-
-    luminance = 0.299 * mean_r + 0.587 * mean_g + 0.114 * mean_b
-
-    if luminance > 185:
-        skin_tone = "Trắng Sáng (Fair / Light)"
-    elif luminance > 150:
-        skin_tone = "Trắng Tự Nhiên / Trung Tính (Medium Fair)"
-    elif luminance > 120:
-        skin_tone = "Tự Nhiên / Bánh Mật (Natural Olive / Tan)"
-    else:
-        skin_tone = "Ngăm Khỏe Khoắn (Deep / Warm Tan)"
-
-    if mean_r > mean_b + 28:
-        undertone = "Tông Ấm (Warm Undertone)"
-    elif mean_b > mean_g - 5:
-        undertone = "Tông Lạnh (Cool Undertone)"
-    else:
-        undertone = "Tông Trung Tính (Neutral Undertone)"
-
-    # Đo độ mịn màng thực tế qua độ lệch chuẩn và độ nhám bề mặt (Texture variance)
-    cheek_texture = []
+    roi_under_eye_r = _crop_skin_roi(np_img, points[340], int(roi_radius * 0.75))
+    regions = {
+        "left_cheek": _skin_region_measurements(roi_left_cheek),
+        "right_cheek": _skin_region_measurements(roi_right_cheek),
+        "forehead": _skin_region_measurements(roi_forehead),
+        "under_eye_left": _skin_region_measurements(roi_under_eye_l),
+        "under_eye_right": _skin_region_measurements(roi_under_eye_r),
+    }
+    available_regions = {name: value for name, value in regions.items() if value is not None}
+    left_lum = regions["left_cheek"]["mean_luminance"] if regions["left_cheek"] else None
+    right_lum = regions["right_cheek"]["mean_luminance"] if regions["right_cheek"] else None
+    forehead_lum = regions["forehead"]["mean_luminance"] if regions["forehead"] else None
+    under_eye_luminances = [regions[name]["mean_luminance"] for name in ("under_eye_left", "under_eye_right") if regions[name]]
+    under_eye_lum = float(np.mean(under_eye_luminances)) if under_eye_luminances else None
+    cheek_mean = (left_lum + right_lum) / 2 if left_lum is not None and right_lum is not None else None
+    relative = lambda value, reference: round((value - reference) / max(reference, 1.0) * 100.0, 1) if value is not None and reference is not None else None
+    cheek_difference = round(abs(left_lum - right_lum) / max((left_lum + right_lum) / 2, 1.0) * 100.0, 1) if left_lum is not None and right_lum is not None else None
+    texture_values = [regions[name]["texture_variation_pct"] for name in ("left_cheek", "right_cheek") if regions[name]]
+    # Keep deprecated fields for older clients; all current decisions use the
+    # observation-only fields below and must ignore these uncalibrated scores.
+    legacy_texture = []
     for cheek_roi in (roi_left_cheek, roi_right_cheek):
-        if cheek_roi is not None and cheek_roi.size:
-            # Compare patches at the same scale and remove a linear lighting gradient.
+        if cheek_roi is not None and cheek_roi.shape[0] >= 16 and cheek_roi.shape[1] >= 16:
             patch = np.asarray(Image.fromarray(cheek_roi).resize((32, 32), Image.Resampling.BILINEAR), dtype=np.float32)
             gray = np.dot(patch[..., :3], [0.299, 0.587, 0.114])
             yy, xx = np.mgrid[:32, :32]
             design = np.column_stack((xx.ravel(), yy.ravel(), np.ones(32 * 32)))
             fitted = design @ np.linalg.lstsq(design, gray.ravel(), rcond=None)[0]
-            cheek_texture.append(float(np.std(gray.ravel() - fitted)))
-    # Use both cheeks and the median so one shadowed side is less influential.
-    std_dev = float(np.median(cheek_texture)) if cheek_texture else 0.0
-    smoothness_score = round(max(35.0, min(95.0, 95.0 - std_dev * 3.2)), 1)
-
-    # Đo độ đồng đều sắc tố giữa các vùng
-    means = [np.mean(r, axis=(0,1)) for r in valid_rois]
-    diff_between_zones = np.max([np.linalg.norm(m1 - m2) for m1 in means for m2 in means])
-    uniformity_score = round(max(40.0, min(95.0, 95.0 - diff_between_zones * 2.2)), 1)
-
-    # Quầng thâm mắt
-    dark_circles_index = None
-    if roi_under_eye_l is not None and roi_left_cheek is not None:
-        eye_lum = np.mean(0.299 * roi_under_eye_l[...,0] + 0.587 * roi_under_eye_l[...,1] + 0.114 * roi_under_eye_l[...,2])
-        cheek_lum = np.mean(np.dot(roi_left_cheek[..., :3], [0.299, 0.587, 0.114]))
-        dark_circles_index = 0.0
-        if cheek_lum > eye_lum and cheek_lum > 0:
-            ratio_dark = (cheek_lum - eye_lum) / cheek_lum
-            dark_circles_index = round(min(90.0, ratio_dark * 220.0), 1)
-
-    # Độ bóng nhờn vùng trán (T-zone)
-    oiliness_score = None
-    if roi_forehead is not None:
-        forehead_gray = np.dot(roi_forehead[...,:3], [0.299, 0.587, 0.114])
-        shiny_pixels = np.sum(forehead_gray > 215)
-        oiliness_score = round(min(90.0, (shiny_pixels / forehead_gray.size) * 400.0 + 8.0), 1)
-
-    # Đánh giá da chân thật, chỉ rõ khuyết điểm
-    skin_flaws = []
-    if dark_circles_index is not None and dark_circles_index > 35.0:
-        skin_flaws.append(f"Vùng dưới mắt tối hơn má trong ảnh (chỉ số tương phản {dark_circles_index}); có thể chịu ảnh hưởng của bóng đổ")
-    if oiliness_score is not None and oiliness_score > 45.0:
-        skin_flaws.append(f"Vùng trán có nhiều điểm sáng trong ảnh (chỉ số phản sáng {oiliness_score}); chưa xác định được lượng dầu thực tế")
-    if smoothness_score < 70.0:
-        skin_flaws.append("Vùng má có nhiều biến thiên độ sáng; texture ảnh, nhiễu và trang điểm đều có thể ảnh hưởng")
-    if uniformity_score < 72.0:
-        skin_flaws.append("Sắc tố da không đều giữa các vùng má và trán")
-
-    if not skin_flaws:
-        skin_health_desc = "Các vùng ảnh được lấy mẫu có độ sáng tương đối đồng đều. Chỉ số phản ánh ảnh chụp, không xác định sức khỏe da."
-    else:
-        skin_health_desc = "Quan sát từ ảnh: " + " • ".join(skin_flaws) + "."
-
+            legacy_texture.append(float(np.std(gray.ravel() - fitted)))
+    legacy_smoothness = round(max(35.0, min(95.0, 95.0 - (float(np.median(legacy_texture)) if legacy_texture else 0.0) * 3.2)), 1) if legacy_texture else None
+    legacy_dark_circles = None
+    if roi_under_eye_l is not None and roi_left_cheek is not None and roi_under_eye_l.size and roi_left_cheek.size:
+        eye_lum = float(np.mean(np.dot(roi_under_eye_l[..., :3], [0.299, 0.587, 0.114])))
+        cheek_lum = float(np.mean(np.dot(roi_left_cheek[..., :3], [0.299, 0.587, 0.114])))
+        legacy_dark_circles = round(min(90.0, max(0.0, (cheek_lum - eye_lum) / max(cheek_lum, 1.0) * 220.0)), 1)
     return {
-        "skin_tone": skin_tone,
-        "measurement_available": True,
-        "undertone": undertone,
-        "hex_color": f"#{int(mean_r):02x}{int(mean_g):02x}{int(mean_b):02x}",
-        "smoothness_score": smoothness_score,
-        "uniformity_score": uniformity_score,
-        "dark_circles_index": dark_circles_index,
-        "oiliness_score": oiliness_score,
-        "skin_health_evaluation": skin_health_desc
+        "skin_tone": None,
+        "undertone": None,
+        "hex_color": None,
+        "smoothness_score": legacy_smoothness,
+        "uniformity_score": None,
+        "dark_circles_index": legacy_dark_circles,
+        "oiliness_score": None,
+        "redness_score": None,
+        "measurement_available": regions["left_cheek"] is not None and regions["right_cheek"] is not None,
+        "observation_only": True,
+        "legacy_scores_deprecated": True,
+        "measurement_coverage": len(available_regions),
+        "regions": available_regions,
+        "cheek_texture_variation_pct": round(float(np.median(texture_values)), 2) if texture_values else None,
+        "left_right_cheek_luminance_difference_pct": cheek_difference,
+        "forehead_vs_cheek_luminance_difference_pct": relative(forehead_lum, cheek_mean),
+        "under_eye_vs_cheek_luminance_difference_pct": relative(under_eye_lum, cheek_mean),
+        "skin_health_evaluation": "Chỉ mô tả độ sáng và biến thiên pixel trong các vùng ảnh lấy mẫu. Không suy ra tông da, dầu, mụn, sắc tố, quầng thâm hay sức khỏe da; bóng, trang điểm, camera và ánh sáng đều ảnh hưởng kết quả. Hai vùng dưới mắt giúp đối chiếu ảnh, nhưng không xác định nguyên nhân vùng tối."
     }
 
 
@@ -674,235 +522,89 @@ def analyze_hair_and_hairline(
     face_shape: str,
     trichion_data: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
-    """
-    Phân tích chân tóc và đưa ra lời khuyên tạo mẫu tóc để KHẮC PHỤC KHUYẾT ĐIỂM THỰC TẾ.
-    Sử dụng đường chân tóc thực tế (Trichion) để đánh giá chuẩn xác trán cao / trán dô.
-    """
-    img_rgb = image_pil.convert("RGB")
-    np_img = np.array(img_rgb)
-    h, w = np_img.shape[:2]
-
-    glabella = points[9]
-    chin = points[152]
-    temple_l = points[103]
-    temple_r = points[332]
-
-    if trichion_data and "px" in trichion_data and "py" in trichion_data:
-        forehead_top = FaceAnalyzerPoint(trichion_data.get("x", 0), trichion_data.get("y", 0), 0.0, w, h)
-        forehead_top.px = trichion_data["px"]
-        forehead_top.py = trichion_data["py"]
-    else:
-        forehead_top = points[10]
-
-    crop_y2 = int(max(0, min(h - 1, forehead_top.py)))
-    crop_y1 = max(0, int(crop_y2 - (chin.py - forehead_top.py) * 0.35))
-    crop_x1 = max(0, int(temple_l.px - 20))
-    crop_x2 = min(w, int(temple_r.px + 20))
-
-    dominant_color = "Đen Tự Nhiên"
-    if crop_y2 > crop_y1 and crop_x2 > crop_x1:
-        hair_roi = np_img[crop_y1:crop_y2, crop_x1:crop_x2]
-        if hair_roi.size > 0:
-            r_mean = np.mean(hair_roi[..., 0])
-            g_mean = np.mean(hair_roi[..., 1])
-            b_mean = np.mean(hair_roi[..., 2])
-            lum = 0.299 * r_mean + 0.587 * g_mean + 0.114 * b_mean
-
-            if lum < 55:
-                dominant_color = "Đen Tuyền"
-            elif lum < 95:
-                dominant_color = "Đen Tự Nhiên"
-            elif r_mean > b_mean + 20 and lum < 140:
-                dominant_color = "Nâu Hạt Dẻ"
-            elif lum >= 140:
-                dominant_color = "Nâu Sáng / Nhuộm Sáng"
-            else:
-                dominant_color = "Nâu Đen"
-
-    # Đánh giá chiều cao trán chuẩn nhân trắc học
-    forehead_height = dist_2d(forehead_top, glabella)
-    total_face_height = dist_2d(forehead_top, chin) + 1e-6
-    forehead_ratio = forehead_height / total_face_height
-
-    if forehead_ratio > 0.36:
-        hairline_type = "Đường Chân Tóc Cao / Trán Dô"
-    elif forehead_ratio < 0.28:
-        hairline_type = "Đường Chân Tóc Thấp / Trán Ngắn"
-    elif abs(temple_l.py - forehead_top.py) > 22.0:
-        hairline_type = "Chân Tóc Chữ M (Widow's Peak / Có dấu hiệu lùi trán 2 bên)"
-    else:
-        hairline_type = "Đường Chân Tóc Tiêu Chuẩn Cân Đối"
-
-    # Lời khuyên tập trung sửa khuyết điểm chân thực
-    recommendations_map = {
-        "Mặt Tròn (Round)": {
-            "nam": "Cần tạo chiều dài: Cắt sát 2 bên (Fade), vuốt phồng cao (Quiff, Pompadour). Tuyệt đối tránh để tóc mái ngố tròn che trán vì sẽ làm mặt tròn hơn.",
-            "nu": "Cần che bớt má: Tóc Layer mái bay rẽ ngôi 6/4 hoặc 7/3, tóc dài xoăn sóng lơi qua vai. Tránh cắt tóc ngắn ngang cằm hoặc mái bằng dày.",
-            "loi_khuyen": "Khuyết điểm của bạn là khuôn mặt thiếu chiều sâu góc cạnh. Hãy dùng kiểu tóc có độ phồng ở đỉnh đầu để kéo dài tỷ lệ khuôn mặt."
-        },
-        "Mặt Vuông (Square)": {
-            "nam": "Cần làm mềm góc hàm bạnh: Side Part rẽ ngôi uốn nhẹ gợn sóng hoặc Quiff mềm. Tránh cạo quá vuông vức hai bên mang tai.",
-            "nu": "Cần che góc hàm thô: Tóc tỉa tầng ôm sát xương hàm, tóc uốn lọn xoăn mềm mại dài ngang lưng. Tránh tóc Bob thẳng đuột ngắn chạm đúng góc hàm.",
-            "loi_khuyen": "Khung xương hàm của bạn khá vuông vức. Cần dùng các đường lượn sóng mềm của tóc để trung hòa sự góc cạnh thô cứng."
-        },
-        "Mặt Dài / Chữ Nhật (Oblong)": {
-            "nam": "Cần thu ngắn chiều dài trán: Để tóc có mái rủ (Textured Crop, Comma hair, 7/3 rủ). Tuyệt đối KHÔNG vuốt dựng cao vì sẽ làm mặt dài ngoằng.",
-            "nu": "Cần che trán và tạo chiều ngang: Mái thưa Hàn Quốc, mái bằng, tóc uốn phồng xòe 2 bên tai. Tránh để tóc dài thẳng đuột không mái rẽ ngôi giữa.",
-            "loi_khuyen": "Khuôn mặt bạn có chiều dài lớn hơn tỷ lệ chuẩn. Bắt buộc nên có tóc mái để che bớt trán và tạo độ phồng sang hai bên."
-        },
-        "Mặt Trái Tim (Heart)": {
-            "nam": "Cần cân đối trán rộng và cằm nhọn: Tóc rủ mái dài vừa phải, tóc vuốt lệch phồng vừa. Tránh cạo quá trắng hai bên thái dương.",
-            "nu": "Cần tăng độ đầy đặn cho vùng cằm: Tóc Bob ngang cằm uốn cụp, tóc uốn xoăn đuôi phồng ôm cằm. Tránh buộc tóc quá chặt vuốt hết ra sau.",
-            "loi_khuyen": "Phần trán của bạn to bản hơn nhiều so với cằm. Hãy tập trung tạo độ bồng bềnh ở phần đuôi tóc ngang quai hàm."
-        },
-        "Mặt Kim Cương (Diamond)": {
-            "nam": "Cần che bớt gò má cao: Side Part mái rủ, Textured Fringe rối tự nhiên. Tránh cạo sát phần thái dương vì sẽ làm gò má nhô to hơn.",
-            "nu": "Mái bay dài buông nhẹ qua gò má để che xương má cao, tóc uốn lơi nhẹ nhàng. Tránh vén hết tóc sau tai.",
-            "loi_khuyen": "Gò má là điểm nhô rộng nhất trên mặt bạn. Tóc mái bay nhẹ qua gò má sẽ giúp tổng thể thanh thoát hơn."
-        },
-        "Mặt Trái Xoan (Oval)": {
-            "nam": "Dáng mặt cân đối, hợp hầu hết các kiểu: Side Part, Layer, Pompadour. Tuy nhiên cần chú ý nếu trán hơi cao thì nên để mái rủ nhẹ.",
-            "nu": "Hợp hầu hết kiểu tóc: Layer mái bay, xoăn sóng, tóc ngang vai. Chọn kiểu theo phong cách cá nhân.",
-            "loi_khuyen": "Khuôn mặt bạn có tỷ lệ nền tảng tốt, chỉ cần chú ý chăm sóc tóc và chọn màu nhuộm tôn da."
-        }
-    }
-
-    rec = recommendations_map.get(face_shape, recommendations_map["Mặt Trái Xoan (Oval)"])
-
+    """Avoid inferring hairline or hair color from a face-only mesh crop."""
+    del image_pil, points, face_shape, trichion_data
     return {
-        "dominant_hair_color": dominant_color,
-        "hairline_type": hairline_type,
+        "dominant_hair_color": "Không xác định từ vùng ảnh hiện có",
+        "hairline_type": "Chân tóc nằm ngoài vùng Face Mesh nên chưa được đo",
         "hair_recommendations": {
-            "for_men": rec["nam"],
-            "for_women": rec["nu"],
-            "stylist_advice": rec["loi_khuyen"]
+            "for_men": None,
+            "for_women": None,
+            "stylist_advice": "Không có một kiểu tóc tối ưu duy nhất được suy ra từ tỷ lệ 2D; hãy chọn theo sở thích và sự thoải mái."
         }
     }
 
 
 # =========================================================================
-# 7. PHÂN TÍCH GÓC NGHIÊNG (PROFILE / 3/4 VIEW - RICKETTS E-LINE & JAW ANGLE)
+# 7. PHÂN TÍCH SỐ ĐO HÌNH HỌC Ở GÓC NGHIÊNG
 # =========================================================================
 
 def analyze_profile_view(
     points: List[FaceAnalyzerPoint],
     img_w: int,
-    img_h: int
+    img_h: int,
+    pose_quality: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
-    """
-    Phân tích góc nghiêng (Profile View):
-    1. Đường thẩm mỹ Ricketts E-line (Pronasale -> Pogonion): Đánh giá độ nhô môi & cằm lẹm / cằm nhô.
-    2. Góc mũi môi (Nasolabial Angle): Đánh giá góc nghiêng trụ mũi với môi trên.
-    3. Đường sống mũi nghiêng (Nasal Bridge Slope): Thẳng, gồ xương (dorsal hump), hay tẹt/lõm (saddle).
-    4. Góc xương hàm nghiêng thực tế (True Gonial Angle).
-    5. Phát hiện hướng quay mặt (Side Profile: Left vs Right) từ độ chênh lệch mốc 2 bên.
-    """
-    pronasale = points[1]        # Đỉnh chóp mũi
-    subnasale = points[2]        # Chân trụ mũi
-    labrale_sup = points[0]      # Đỉnh viền môi trên
-    labrale_inf = points[17]     # Đáy viền môi dưới
-    pogonion = points[152]       # Điểm nhô nhất của cằm (Đáy cằm)
-    nasion = points[168]         # Gốc mũi giữa 2 mắt
+    """Report image-space profile measurements without clinical or beauty labels."""
+    del img_w, img_h
+    pronasale = points[1]
+    subnasale = points[2]
+    labrale_sup = points[0]
+    labrale_inf = points[17]
+    chin_boundary = points[152]
+    nasion = points[168]
 
-    # Xác định hướng quay mặt profile (Quay trái hay quay phải)
-    dist_l = abs(points[234].px - points[1].px)
-    dist_r = abs(points[454].px - points[1].px)
-    is_left_profile = dist_l < dist_r  # Quay mặt sang trái (gò má trái gần mũi hơn hoặc ẩn)
+    # This is only an image-orientation hint; mirrored cameras can reverse it.
+    dist_l = abs(points[234].px - pronasale.px)
+    dist_r = abs(points[454].px - pronasale.px)
+    is_left_profile = dist_l < dist_r
+    jaw_contour = points[172] if is_left_profile else points[397]
+    side_boundary = points[234] if is_left_profile else points[454]
+    face_scale = dist_2d(nasion, chin_boundary) + 1e-6
 
-    gonion = points[172] if is_left_profile else points[397]
-    ear_tragus = points[234] if is_left_profile else points[454]
+    def signed_offset_pct(point: FaceAnalyzerPoint, start: FaceAnalyzerPoint, end: FaceAnalyzerPoint) -> float:
+        # Sign is relative to image coordinates and changes with point order/mirroring.
+        dx, dy = end.px - start.px, end.py - start.py
+        cross = dx * (point.py - start.py) - dy * (point.px - start.px)
+        return round(cross / max(math.hypot(dx, dy), 1e-6) / face_scale * 100.0, 2)
 
-    # 1. Đường thẩm mỹ Ricketts E-line (Pronasale [1] -> Pogonion [152])
-    # Tính khoảng cách từ môi trên [0] và môi dưới [17] tới đường E-line
-    eline_dist_upper = point_line_distance(labrale_sup, pronasale, pogonion)
-    eline_dist_lower = point_line_distance(labrale_inf, pronasale, pogonion)
-
-    # Đánh giá độ nhô cằm dựa trên mối tương quan giữa E-line và môi
-    # Trong nhân trắc học: Môi trên nên nằm sau đường E-line khoảng 2-4mm, môi dưới cách 1-2mm.
-    # Nếu môi nằm quá xa về phía trước đường E-line -> Cằm lẹm (Retrognathia) hoặc Môi hô (Bimaxillary protrusion).
-    # Nếu cằm vượt qua đường thẳng đứng -> Cằm nhô/gãy (Prognathia).
-    face_scale = dist_2d(nasion, pogonion) + 1e-6
-    norm_lower_lip = (eline_dist_lower / face_scale) * 100.0
-
-    if norm_lower_lip > 5.5:
-        chin_projection = "Cằm lẹm (Retrognathia) / Môi nhô trước đường E-line"
-        chin_projection_comment = "Đường E-line cho thấy cằm bị thụt lùi so với trục mũi và môi, làm góc nghiêng thiếu độ sắc nét."
-        chin_projection_score = 65.0
-    elif norm_lower_lip < -3.5:
-        chin_projection = "Cằm nhô / Cằm phát triển quá mức (Prognathia)"
-        chin_projection_comment = "Cằm phát triển chìa ra trước nhiều hơn trục thẩm mỹ E-line."
-        chin_projection_score = 72.0
-    else:
-        chin_projection = "Cằm đạt chuẩn tỷ lệ thẩm mỹ Ricketts E-line"
-        chin_projection_comment = "Cằm và môi có độ dốc hài hòa trên đường thẩm mỹ chuẩn, tỷ lệ cằm - mũi - môi cân đối."
-        chin_projection_score = 92.0
-
-    # 2. Góc mũi môi (Nasolabial Angle): Hợp bởi Glabella/Columella (Subnasale [2]) và Môi trên [0]
+    upper_lip_offset = signed_offset_pct(labrale_sup, pronasale, chin_boundary)
+    lower_lip_offset = signed_offset_pct(labrale_inf, pronasale, chin_boundary)
     nasolabial_angle = angle_between_points(pronasale, subnasale, labrale_sup)
-    if nasolabial_angle < 85.0:
-        nasolabial_status = f"Góc mũi môi nhọn ({round(nasolabial_angle, 1)}° < 90°): Đầu mũi chúc xuống hoặc môi trên nhô"
-        nasolabial_score = 68.0
-    elif nasolabial_angle <= 108.0:
-        nasolabial_status = f"Góc mũi môi lý tưởng ({round(nasolabial_angle, 1)}°): Chuẩn thẩm mỹ nhân trắc học (90° - 105°)"
-        nasolabial_score = 93.0
-    else:
-        nasolabial_status = f"Góc mũi môi tù ({round(nasolabial_angle, 1)}° > 108°): Đầu mũi hếch hoặc góc trụ mũi mở rộng"
-        nasolabial_score = 70.0
-
-    # 3. Đường sống mũi nghiêng (Nasal Bridge Profile):
-    # Xét độ thẳng của đường nối Nasion [168] -> Pronasale [1] với điểm rhinion [6]
     rhinion = points[6]
-    bridge_hump_dist = point_line_distance(rhinion, nasion, pronasale)
-    norm_hump = (bridge_hump_dist / face_scale) * 100.0
-
-    if norm_hump > 2.0:
-        bridge_slope = "Sống mũi gồ nhẹ (Dorsal Hump) ở phần xương chính mũi"
-        bridge_slope_type = "Gồ xương"
-    elif norm_hump < -2.2:
-        bridge_slope = "Sống mũi trũng / võng nhẹ (Saddle / Scooped profile)"
-        bridge_slope_type = "Võng / Tẹt nhẹ"
-    else:
-        bridge_slope = "Sống mũi thẳng tắp thanh thoát theo góc nhìn nghiêng"
-        bridge_slope_type = "Thẳng tự nhiên"
-
-    # 4. Góc xương hàm nghiêng thực tế (True Gonial Angle ở góc nhìn nghiêng)
-    profile_gonial_angle = angle_between_points(ear_tragus, gonion, pogonion)
-    if profile_gonial_angle < 118.0:
-        profile_jaw_desc = f"Góc hàm vuông vức sắc nét ({round(profile_gonial_angle, 1)}°): Khung xương hàm rõ nét, cá tính mạnh."
-    elif profile_gonial_angle <= 128.0:
-        profile_jaw_desc = f"Góc hàm nghiêng thanh tú ({round(profile_gonial_angle, 1)}°): Độ dốc xương hàm chuẩn tỷ lệ vàng."
-    else:
-        profile_jaw_desc = f"Góc hàm nghiêng mở rộng ({round(profile_gonial_angle, 1)}°): Viền hàm thoai thoải, đường quai hàm không quá gắt."
-
-    profile_aesthetic_score = round(
-        chin_projection_score * 0.40 +
-        nasolabial_score * 0.35 +
-        (90.0 if bridge_slope_type == "Thẳng tự nhiên" else 75.0) * 0.25,
-        1
-    )
+    bridge_offset_pct = signed_offset_pct(rhinion, nasion, pronasale)
+    contour_angle = angle_between_points(side_boundary, jaw_contour, chin_boundary)
+    pose = pose_quality or {}
 
     return {
-        "profile_aesthetic_score": profile_aesthetic_score,
-        "view_side": "Góc nghiêng Trái" if is_left_profile else "Góc nghiêng Phải",
+        "profile_aesthetic_score": None,
+        "view_side": "Bên trái trong ảnh (có thể bị đảo bởi camera)" if is_left_profile else "Bên phải trong ảnh (có thể bị đảo bởi camera)",
+        "pose_yaw_deg": pose.get("yaw_deg"),
+        "pose_roll_deg": pose.get("roll_deg"),
+        "measurement_note": "Các số đo là hình học 2D trên ảnh, không phải chỉ định nha khoa hay chẩn đoán cấu trúc xương. Mốc 152 là rìa dưới Face Mesh, không phải điểm cằm lâm sàng; dấu +/- phụ thuộc hướng điểm và ảnh có thể bị lật.",
         "ricketts_eline": {
-            "chin_projection": chin_projection,
-            "chin_comment": chin_projection_comment,
-            "upper_lip_offset_px": round(eline_dist_upper, 1),
-            "lower_lip_offset_px": round(eline_dist_lower, 1),
-            "score": chin_projection_score
+            "reference_name": "Đường nối chóp mũi với rìa dưới Face Mesh ở cằm (tham chiếu 2D)",
+            "chin_projection": "Chỉ báo khoảng lệch môi so với đường tham chiếu; không phân loại cằm nhô/lẹm.",
+            "chin_comment": "Không suy ra vị trí xương hàm hoặc chuẩn thẩm mỹ từ một ảnh 2D.",
+            "upper_lip_offset_px": round(point_line_distance(labrale_sup, pronasale, chin_boundary), 1),
+            "lower_lip_offset_px": round(point_line_distance(labrale_inf, pronasale, chin_boundary), 1),
+            "upper_lip_offset_pct": upper_lip_offset,
+            "lower_lip_offset_pct": lower_lip_offset,
+            "score": None
         },
         "nasolabial_angle_deg": round(nasolabial_angle, 1),
-        "nasolabial_status": nasolabial_status,
+        "nasolabial_status": "Góc tạo bởi các mốc chóp mũi, chân mũi và môi trên; ảnh hưởng bởi biểu cảm và góc máy.",
         "nasal_bridge_profile": {
-            "type": bridge_slope_type,
-            "description": bridge_slope
+            "type": None,
+            "rhinion_offset_pct": bridge_offset_pct,
+            "description": "Độ lệch có dấu của mốc sống mũi giữa so với đường nối gốc mũi và chóp mũi; chỉ là quan sát 2D."
         },
-        "profile_gonial_angle_deg": round(profile_gonial_angle, 1),
-        "profile_jaw_description": profile_jaw_desc,
+        "profile_gonial_angle_deg": round(contour_angle, 1),
+        "profile_jaw_description": f"Góc tại mốc đường viền hàm trong ảnh: {round(contour_angle, 1)}°. Đây không phải góc xương hàm lâm sàng.",
         "visual_guides": {
             "eline": [
                 {"x": round(pronasale.px, 1), "y": round(pronasale.py, 1)},
-                {"x": round(pogonion.px, 1), "y": round(pogonion.py, 1)}
+                {"x": round(chin_boundary.px, 1), "y": round(chin_boundary.py, 1)}
             ],
             "nasolabial_rays": [
                 {"x": round(pronasale.px, 1), "y": round(pronasale.py, 1)},
@@ -910,22 +612,23 @@ def analyze_profile_view(
                 {"x": round(labrale_sup.px, 1), "y": round(labrale_sup.py, 1)}
             ],
             "jaw_profile_triangle": [
-                {"x": round(ear_tragus.px, 1), "y": round(ear_tragus.py, 1)},
-                {"x": round(gonion.px, 1), "y": round(gonion.py, 1)},
-                {"x": round(pogonion.px, 1), "y": round(pogonion.py, 1)}
+                {"x": round(side_boundary.px, 1), "y": round(side_boundary.py, 1)},
+                {"x": round(jaw_contour.px, 1), "y": round(jaw_contour.py, 1)},
+                {"x": round(chin_boundary.px, 1), "y": round(chin_boundary.py, 1)}
             ]
         }
     }
 
 
 # =========================================================================
-# 8. HỢP NHẤT ĐA GÓC NHÌN (MULTI-VIEW FUSION: FRONTAL + PROFILE)
+# 8. GIỮ RIÊNG SỐ ĐO CHÍNH DIỆN VÀ GÓC NGHIÊNG
 # =========================================================================
 
 def _pose_quality(points: List[FaceAnalyzerPoint], img_w: int, img_h: int) -> Dict[str, Any]:
     """Estimate capture pose from normalized Face Mesh geometry for quality gating."""
     cheek_width = max(abs(points[454].x - points[234].x), 1e-6)
-    yaw = abs(math.degrees(math.atan2(points[234].z - points[454].z, cheek_width)))
+    yaw_signed = math.degrees(math.atan2(points[234].z - points[454].z, cheek_width))
+    yaw = abs(yaw_signed)
     eye_dx = (points[263].x - points[33].x) * img_w
     eye_dy = (points[263].y - points[33].y) * img_h
     roll = math.degrees(math.atan2(eye_dy, max(1e-6, abs(eye_dx))))
@@ -936,6 +639,7 @@ def _pose_quality(points: List[FaceAnalyzerPoint], img_w: int, img_h: int) -> Di
     )
     return {
         "yaw_deg": round(yaw, 1),
+        "yaw_signed_deg": round(yaw_signed, 1),
         "roll_deg": round(roll, 1),
         "face_height_fraction": round(face_height, 3),
         "clipped": clipped,
@@ -958,6 +662,33 @@ def _front_quality_warnings(quality: Dict[str, Any]) -> List[str]:
         warnings.append("Độ phân giải ảnh thấp; các phép đo chi tiết có độ tin cậy hạn chế.")
     return warnings
 
+
+def _measurement_confidence(
+    quality: Dict[str, Any],
+    expected_yaw: Tuple[float, float] = (0.0, 5.0)
+) -> int:
+    """Estimate capture suitability, never a score for a person's appearance."""
+    yaw = float(quality.get("yaw_deg", 0.0))
+    yaw_excess = max(0.0, expected_yaw[0] - yaw, yaw - expected_yaw[1])
+    roll_excess = max(0.0, abs(float(quality.get("roll_deg", 0.0))) - 3.0)
+    face_height = float(quality.get("face_height_fraction", 0.0))
+    resolution = min(int(quality.get("image_width", 0)), int(quality.get("image_height", 0)))
+    penalty = min(35.0, yaw_excess * 2.2) + min(24.0, roll_excess * 2.0)
+    penalty += 25.0 if quality.get("clipped") else 0.0
+    penalty += min(25.0, max(0.0, 0.35 - face_height) * 100.0)
+    penalty += 18.0 if resolution < 320 else 8.0 if resolution < 640 else 0.0
+    return max(0, min(100, round(100.0 - penalty)))
+
+
+def _confidence_label(score: int) -> str:
+    if score >= 80:
+        level = "cao"
+    elif score >= 55:
+        level = "vừa"
+    else:
+        level = "thấp"
+    return f"Độ tin cậy phép đo {level} (ước lượng nội bộ, chưa hiệu chuẩn thống kê); điểm phản ánh chất lượng ảnh và tư thế, không đánh giá ngoại hình."
+
 def run_multi_view_face_analysis(
     frontal_b64: str,
     frontal_landmarks: List[Dict[str, float]],
@@ -966,12 +697,7 @@ def run_multi_view_face_analysis(
     img_width: int,
     img_height: int
 ) -> Dict[str, Any]:
-    """
-    Hợp nhất phân tích 2 góc chụp:
-    - Ảnh 1: Chính diện (Frontal) -> Đối xứng, Rule of Thirds, fWHR, Da, Tóc
-    - Ảnh 2: Góc nghiêng (Profile) -> Ricketts E-line, Độ nhô cằm, Sống mũi, Góc hàm thực tế
-    - Kết hợp để xác định Dáng mặt chuẩn xác 3D, loại bỏ hoàn toàn hiện tượng lệch kết quả do tư thế.
-    """
+    """Keep front and side measurements separate; profile data does not redefine the face."""
     frontal_result = run_comprehensive_face_analysis(
         image_base64=frontal_b64,
         landmarks_data=frontal_landmarks,
@@ -981,100 +707,54 @@ def run_multi_view_face_analysis(
     if not frontal_result.get("success"):
         return frontal_result
 
-    # Giải mã và đo góc nghiêng
-    actual_w = img_width
-    actual_h = img_height
+    actual_w, actual_h = img_width, img_height
     try:
-        if "," in profile_b64:
-            clean_b64 = profile_b64.split(",", 1)[1]
-        else:
-            clean_b64 = profile_b64
+        clean_b64 = profile_b64.split(",", 1)[1] if "," in profile_b64 else profile_b64
         p_bytes = base64.b64decode(clean_b64)
         p_img = Image.open(io.BytesIO(p_bytes))
         actual_w, actual_h = p_img.size
     except Exception:
         pass
 
-    profile_points = [FaceAnalyzerPoint(p.get("x", 0), p.get("y", 0), p.get("z", 0), actual_w, actual_h) for p in profile_landmarks]
+    profile_points = [
+        FaceAnalyzerPoint(p.get("x", 0), p.get("y", 0), p.get("z", 0), actual_w, actual_h)
+        for p in profile_landmarks
+    ]
     profile_warning = None
     profile_analysis = None
-    if len(profile_points) >= 468:
-        pose = _pose_quality(profile_points, actual_w, actual_h)
-        if not 15 <= pose["yaw_deg"] <= 40:
-            profile_warning = "Ảnh góc nghiêng chưa nằm trong khoảng 15–40°; điểm tổng hợp chỉ dùng ảnh chính diện."
-        elif abs(pose["roll_deg"]) > 12 or pose["clipped"]:
-            profile_warning = "Ảnh nghiêng bị nghiêng đầu hoặc cắt mép; hãy chụp lại để đo góc nghiêng ổn định hơn."
+    profile_pose = None
+    profile_confidence = None
+    if len(profile_points) >= 468 and any(
+        not all(math.isfinite(value) for value in (point.x, point.y, point.z)) for point in profile_points
+    ):
+        profile_warning = "Điểm mốc ảnh nghiêng chứa giá trị không hợp lệ; chưa thể đo góc nghiêng."
+    elif len(profile_points) >= 468:
+        profile_pose = _pose_quality(profile_points, actual_w, actual_h)
+        if not 15 <= profile_pose["yaw_deg"] <= 40:
+            profile_warning = "Góc quay của ảnh nghiêng nằm ngoài khoảng đo tham khảo 15–40°; chưa hiển thị các số đo góc nghiêng."
+        elif abs(profile_pose["roll_deg"]) > 12 or profile_pose["clipped"]:
+            profile_warning = "Ảnh nghiêng bị nghiêng đầu hoặc khuôn mặt sát mép ảnh; chưa hiển thị các số đo góc nghiêng."
         else:
-            profile_analysis = analyze_profile_view(profile_points, actual_w, actual_h)
+            profile_analysis = analyze_profile_view(profile_points, actual_w, actual_h, profile_pose)
+            profile_confidence = _measurement_confidence(profile_pose, expected_yaw=(15.0, 40.0))
+            profile_analysis["measurement_confidence_score"] = profile_confidence
+            profile_analysis["measurement_confidence_label"] = _confidence_label(profile_confidence)
     else:
-        profile_warning = "Thiếu điểm mốc ở ảnh nghiêng; điểm tổng hợp chỉ dùng ảnh chính diện."
+        profile_warning = "Thiếu điểm mốc ở ảnh nghiêng; chưa thể đo góc nghiêng."
 
-    # Use profile measurements as a small, gated contribution when pose is suitable.
-    f_shape = frontal_result["proportions"]["face_shape"]
-    fwhr = frontal_result["proportions"]["length_to_width_ratio"]
-    jaw_angle_front = frontal_result["jawline"]["average_jaw_angle_deg"]
-    
-    if profile_analysis:
-        p_gonial = profile_analysis["profile_gonial_angle_deg"]
-        chin_proj = profile_analysis["ricketts_eline"]["chin_projection"]
-        
-        # Dùng góc nghiêng bổ trợ; nhãn vẫn dựa trên tỷ lệ đo được.
-        if fwhr > 1.55:
-            unified_shape = "Mặt Dài / Chữ Nhật (Oblong)"
-            unified_desc = "Tỷ lệ chiều dài khuôn mặt lớn cả ở góc chính diện lẫn nghiêng. Viền hàm dài thon."
-        elif fwhr < 1.25:
-            if p_gonial < 120.0 or jaw_angle_front < 120.0:
-                unified_shape = "Mặt Vuông (Square)"
-                unified_desc = "Khung xương hàm bạnh và góc cạnh xác thực từ cả 2 góc nhìn. Khuôn mặt nam tính, sắc nét."
-            else:
-                unified_shape = "Mặt Tròn (Round)"
-                unified_desc = "Tỷ lệ dài và rộng tương đương, đường viền hàm và má cong mềm, không có góc xương thô."
-        elif "lẹm" in chin_proj and fwhr < 1.35:
-            unified_shape = "Mặt Tròn (Round / Cằm lẹm)"
-            unified_desc = "Góc nghiêng xác nhận độ lùi cằm làm phần dưới khuôn mặt ngắn hơn góc nhìn chính diện."
-        elif jaw_angle_front > 124.0 and (120.0 <= p_gonial <= 130.0):
-            unified_shape = "Mặt Trái Xoan (Oval)"
-            unified_desc = "Dáng mặt cân đối chuẩn mực xác nhận từ cả góc thẳng lẫn góc nghiêng, tỷ lệ các góc xương hài hòa."
-        else:
-            unified_shape = f_shape
-            unified_desc = frontal_result["proportions"]["face_shape_description"]
-
-        # Cập nhật kết quả dáng mặt thống nhất
-        frontal_result["proportions"]["face_shape"] = unified_shape
-        frontal_result["proportions"]["face_shape_description"] = unified_desc
-        frontal_result["proportions"]["profile_measurement_used"] = True
-
-    # Keep the profile view at a smaller weight because a single 2D view is sensitive to pose.
-    if profile_analysis:
-        p_score = profile_analysis["profile_aesthetic_score"]
-        f_score = frontal_result["overall_harmony_score"]
-        multi_score = round(f_score * 0.80 + p_score * 0.20, 1)
-        frontal_result["overall_harmony_score"] = multi_score
-        frontal_result["profile"] = profile_analysis
-        
-        # Cập nhật cấp bậc
-        if multi_score >= 85.0:
-            frontal_result["overall_grade"] = "Điểm tổng hợp cao theo tiêu chí tham khảo"
-        elif multi_score >= 75.0:
-            frontal_result["overall_grade"] = "Điểm tổng hợp khá theo tiêu chí tham khảo"
-        elif multi_score >= 63.0:
-            frontal_result["overall_grade"] = "Điểm tổng hợp trung bình theo tiêu chí tham khảo"
-        elif multi_score >= 50.0:
-            frontal_result["overall_grade"] = "Một số tỷ lệ lệch khỏi mốc tham khảo"
-        else:
-            frontal_result["overall_grade"] = "Nhiều tỷ lệ lệch khỏi mốc tham khảo"
-
-    frontal_result["is_multi_view"] = bool(profile_analysis)
+    quality = frontal_result["measurement_quality"]
+    quality["profile_pose"] = profile_pose
+    quality["profile_confidence_score"] = profile_confidence
+    quality["profile_used"] = profile_analysis is not None
     if profile_warning:
-        frontal_result["measurement_quality"]["warnings"].append(profile_warning)
-        frontal_result["measurement_quality"]["profile_used"] = False
+        quality["warnings"].append(profile_warning)
     else:
-        frontal_result["measurement_quality"]["profile_used"] = True
+        quality["warnings"].append("Các số đo góc nghiêng được giữ riêng, không gộp với tỷ lệ chính diện hoặc điểm tin cậy chính diện.")
+    frontal_result["profile"] = profile_analysis
+    frontal_result["is_multi_view"] = profile_analysis is not None
     return frontal_result
-
-
 # =========================================================================
-# 9. HÀM TỔNG HỢP: COMPREHENSIVE FACE ANALYSIS (THANG ĐIỂM CHUẨN KHOA HỌC)
+# 9. HÀM TỔNG HỢP: PHÂN TÍCH ẢNH KHUÔN MẶT
 # =========================================================================
 
 def run_comprehensive_face_analysis(
@@ -1119,33 +799,18 @@ def run_comprehensive_face_analysis(
     quality = _pose_quality(points, actual_w, actual_h)
     quality_warnings = _front_quality_warnings(quality)
 
-    # Phân tích từng nhóm hình học; điểm là tiêu chí tham khảo, không phải chẩn đoán.
+    # Trả về số đo ảnh và quan sát pixel, không xếp hạng ngoại hình.
     symmetry = analyze_facial_symmetry(points, actual_w, actual_h)
     proportions = analyze_facial_proportions(points, actual_w, actual_h, pil_img)
     nose = analyze_nose_proportions(points, actual_w, actual_h)
-    jawline = analyze_jawline_and_chin(points, actual_w, actual_h)
+    jawline = analyze_jawline_and_chin(points, actual_w, actual_h, quality)
     skin = analyze_skin_condition(pil_img, points)
     hair = analyze_hair_and_hairline(pil_img, points, proportions["face_shape"], proportions.get("trichion"))
 
-    # Weighted composite of the displayed heuristic measurements.
-    components = [(symmetry["overall_symmetry_score"], .25), (proportions["rule_of_thirds"]["harmony_score"], .25),
-                  (nose["nose_aesthetic_score"], .18), (jawline["jawline_sharpness_score"], .17), (skin["smoothness_score"], .15)]
-    measured = [(score, weight) for score, weight in components if score is not None and math.isfinite(score)]
-    harmony_score = round(sum(score * weight for score, weight in measured) / sum(weight for _, weight in measured), 1)
+    confidence_score = _measurement_confidence(quality)
     if not skin.get("measurement_available", True):
-        quality_warnings.append("Không đo được vùng da; chỉ số tổng hợp chỉ dùng các nhóm hình học có dữ liệu.")
-
-    # Categories describe this heuristic score only; no population percentile is implied.
-    if harmony_score >= 85.0:
-        overall_grade = "Điểm tổng hợp cao theo tiêu chí tham khảo"
-    elif harmony_score >= 75.0:
-        overall_grade = "Điểm tổng hợp khá theo tiêu chí tham khảo"
-    elif harmony_score >= 63.0:
-        overall_grade = "Điểm tổng hợp trung bình theo tiêu chí tham khảo"
-    elif harmony_score >= 50.0:
-        overall_grade = "Một số tỷ lệ lệch khỏi mốc tham khảo"
-    else:
-        overall_grade = "Nhiều tỷ lệ lệch khỏi mốc tham khảo"
+        quality_warnings.append("Một số vùng ảnh không đủ dữ liệu để đo biến thiên pixel của da.")
+    overall_grade = _confidence_label(confidence_score)
 
     visual_guide_lines = {
         "midline": [
@@ -1153,7 +818,7 @@ def run_comprehensive_face_analysis(
             {"x": symmetry["midline_axis"]["bottom"]["x"], "y": symmetry["midline_axis"]["bottom"]["y"]}
         ],
         "thirds_lines": [
-            {"name": "Trán", "y": round(proportions.get("trichion", {}).get("py", points[10].py), 1)},
+            {"name": "Rìa Face Mesh", "y": round(proportions.get("trichion", {}).get("py", points[10].py), 1)},
             {"name": "Chân mày", "y": round(points[9].py, 1)},
             {"name": "Chân mũi", "y": round(points[2].py, 1)},
             {"name": "Đáy cằm", "y": round(points[152].py, 1)}
@@ -1172,7 +837,9 @@ def run_comprehensive_face_analysis(
 
     return {
         "success": True,
-        "overall_harmony_score": harmony_score,
+        "measurement_confidence_score": confidence_score,
+        # Compatibility alias for older clients; this no longer describes appearance.
+        "overall_harmony_score": confidence_score,
         "overall_grade": overall_grade,
         "symmetry": symmetry,
         "proportions": proportions,
@@ -1187,8 +854,9 @@ def run_comprehensive_face_analysis(
             "landmarks_count": len(points)
         },
         "measurement_quality": {
-            "label": "Ước lượng hình học, không phải xếp hạng dân số hay chẩn đoán y khoa",
+            "label": "Chỉ báo nội bộ về độ phù hợp của ảnh và tư thế; chưa hiệu chuẩn thống kê, không đánh giá ngoại hình hay sức khỏe.",
             "front_pose": quality,
+            "front_confidence_score": confidence_score,
             "warnings": quality_warnings,
             "profile_used": False
         }

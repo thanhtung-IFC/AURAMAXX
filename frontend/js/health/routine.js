@@ -337,17 +337,13 @@ function selectTasksForProfile(profile, intensity = "intensive", feedback = "bal
   let skinScore = 85;
   let darkCircles = 20;
 
-  if (profile?.jawline?.jawline_sharpness_score !== undefined) {
-    jawlineScore = Math.round(profile.jawline.jawline_sharpness_score);
-    skinScore = Math.round(profile.skin?.smoothness_score ?? 80);
-    darkCircles = Math.round(profile.skin?.dark_circles_index ?? 20);
-    bloatScore = profile.skin?.oiliness_score !== undefined ? Math.round(100 - profile.skin.oiliness_score) : 80;
-  } else if (currentPreset === "bloated") {
+  const isFaceReport = Boolean(profile?.measurement_quality || (profile?.jawline && profile?.skin));
+  if (!isFaceReport && currentPreset === "bloated") {
     jawlineScore = 68;
     bloatScore = 54;
     skinScore = 82;
     darkCircles = 24;
-  } else if (currentPreset === "dry_eyes") {
+  } else if (!isFaceReport && currentPreset === "dry_eyes") {
     jawlineScore = 84;
     bloatScore = 80;
     skinScore = 65;
@@ -364,37 +360,37 @@ function selectTasksForProfile(profile, intensity = "intensive", feedback = "bal
     {
       id: "mewing",
       score: 100 + (100 - jawlineScore) * 1.6,
-      reason: `Face Lab phát hiện độ sắc nét viền hàm: ${jawlineScore}/100. Đặt lưỡi Mewing đúng kỹ thuật tạo áp lực nâng vòm họng và định hình đường nét hàm.`
+      reason: "Bài tập tư thế lưỡi tùy chọn; không có cam kết thay đổi cấu trúc xương hoặc đường nét khuôn mặt."
     },
     {
       id: "kali_debloat",
       score: 100 + (100 - bloatScore) * 1.7,
-      reason: `Chỉ số giữ nước (Debloating): ${bloatScore}/100. Thực phẩm giàu Kali hỗ trợ thận đào thải natri, giảm phù nề má và bọng mắt rõ rệt.`
+      reason: "Chọn thực phẩm cân bằng theo nhu cầu cá nhân; ảnh khuôn mặt không đo lượng nước giữ trong cơ thể."
     },
     {
       id: "drink_water",
       score: 95 + (100 - bloatScore) * 0.9 + (100 - skinScore) * 0.6,
-      reason: `Uống 2L nước ấm kích hoạt cơ chế bài tiết dịch ứ đọng và giữ độ ẩm mọng tế bào biểu bì (${skinScore}/100).`
+      reason: "Uống nước theo nhu cầu cơ thể và điều kiện sinh hoạt; không cần ép theo một mục tiêu cố định từ ảnh khuôn mặt."
     },
     {
       id: "gentle_wash",
       score: 90 + (100 - skinScore) * 1.5,
-      reason: `Độ mịn nền da: ${skinScore}/100. Làm sạch dịu nhẹ pH 5.5 giúp củng cố màng lipid, kiềm dầu thừa và phục hồi hàng rào da.`
+      reason: "Làm sạch dịu nhẹ là lựa chọn chăm sóc cá nhân; phân tích ảnh không xác định độ dầu hay tình trạng hàng rào da."
     },
     {
       id: "guasha",
       score: 86 + (100 - jawlineScore) * 1.1 + (100 - bloatScore) * 1.2,
-      reason: `Massage Gua Sha gạt dọc viền hàm kích hoạt dẫn lưu hệ bạch huyết, xả ứ dịch và nâng cơ mặt tức thì.`
+      reason: "Nếu thấy dễ chịu, massage nhẹ có thể dùng như một bước thư giãn; không làm thay đổi cấu trúc xương hoặc nâng cơ tức thì."
     },
     {
       id: "skincare_core",
       score: 88 + (100 - skinScore) * 1.2,
-      reason: `Chu trình phục hồi chuyên sâu cung cấp chất chống oxy hóa, đẩy nhanh tái tạo biểu bì theo phân tích da từ Face Lab.`
+      reason: "Chọn sản phẩm chăm sóc da theo nhu cầu và khả năng dung nạp cá nhân; phép đo pixel không kê đơn sản phẩm."
     },
     {
       id: "sleep_schedule",
       score: 80 + darkCircles * 1.8,
-      reason: `Chỉ số quầng thâm mắt: ${darkCircles}%. Giấc ngủ sâu trước 23h giúp tăng tuần hoàn mao mạch ổ mắt và hạ cortisol.`
+      reason: "Giữ lịch ngủ phù hợp với sinh hoạt cá nhân; vùng tối trong ảnh không xác định nguyên nhân hay chất lượng giấc ngủ."
     },
     {
       id: "sunscreen",
@@ -404,17 +400,17 @@ function selectTasksForProfile(profile, intensity = "intensive", feedback = "bal
     {
       id: "ice_facial",
       score: 78 + (100 - bloatScore) * 1.3,
-      reason: `Chườm lạnh buổi sáng co mạch tức thì, làm dịu bọng mắt sưng và giúp da săn chắc thon gọn.`
+      reason: "Chườm mát là lựa chọn tạo cảm giác dễ chịu; ảnh không xác định nguyên nhân sưng hay tình trạng da."
     },
     {
       id: "neck_stretch",
       score: 75 + (100 - jawlineScore) * 1.0,
-      reason: `Kéo giãn cơ cổ Platysma và bài tập Chin Tuck giải phóng cơ ức đòn chũm, khắc phục nọng cằm và tư thế gù cổ.`
+      reason: "Kéo giãn cổ nhẹ nhàng để thư giãn sau thời gian ngồi lâu; dừng nếu thấy đau hoặc khó chịu."
     },
     {
       id: "jaw_relax",
       score: 72 + (100 - jawlineScore) * 0.9,
-      reason: `Thả lỏng cơ cắn (Masseter) giúp giải tỏa căng thẳng khớp thái dương hàm, hạn chế tình trạng bạnh hàm do nghiến cơ.`
+      reason: "Giữ hàm thư giãn, tránh nghiến răng; bài tập không làm thay đổi hình dạng xương hàm."
     },
     {
       id: "lip_balm_sleep",
@@ -424,7 +420,7 @@ function selectTasksForProfile(profile, intensity = "intensive", feedback = "bal
     {
       id: "straight_posture",
       score: 68 + (100 - jawlineScore) * 0.6,
-      reason: `Giữ tư thế ngồi thẳng và màn hình ngang tầm mắt giúp góc hàm không bị kéo trệ về phía trước.`
+      reason: "Điều chỉnh tư thế ngồi để cổ và vai thoải mái hơn; không nhằm thay đổi cấu trúc khuôn mặt."
     }
   ];
 
@@ -1116,15 +1112,21 @@ export function initRoutine() {
       updateCoachQuote(report, routine.intensity, routine.feedback);
 
       // Update metrics UI if values exist
-      if (report.jawline?.jawline_sharpness_score !== undefined) {
+      if (Number.isFinite(report.jawline?.jawline_sharpness_score)) {
         const val = Math.round(report.jawline.jawline_sharpness_score);
         $("#hh-metric-jawline-score").textContent = `${val}/100 • ${val >= 80 ? "Sắc nét" : "Cần kích hoạt"}`;
         $("#hh-metric-jawline-bar").style.width = `${val}%`;
+      } else if (report.jawline) {
+        $("#hh-metric-jawline-score").textContent = "Chưa có điểm được hiệu chỉnh";
+        $("#hh-metric-jawline-bar").style.width = "0%";
       }
-      if (report.skin?.smoothness_score !== undefined) {
+      if (Number.isFinite(report.skin?.smoothness_score) && !report.skin?.observation_only) {
         const val = Math.round(report.skin.smoothness_score);
         $("#hh-metric-skin-score").textContent = `${val}/100 • ${val >= 80 ? "Nền da khỏe" : "Cần phục hồi"}`;
         $("#hh-metric-skin-bar").style.width = `${val}%`;
+      } else if (report.skin?.observation_only) {
+        $("#hh-metric-skin-score").textContent = "Ảnh chỉ đo pixel, không chấm sức khỏe da";
+        $("#hh-metric-skin-bar").style.width = "0%";
       }
 
       persistLocal();

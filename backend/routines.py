@@ -47,10 +47,14 @@ def empty_state(today):
 
 def generate_tasks(state):
     report = state.get("report") or {}
-    jawline_score = (report.get("jawline") or {}).get("jawline_sharpness_score")
+    jawline_info = report.get("jawline") or {}
+    jawline_score = jawline_info.get("jawline_sharpness_score") if not report.get("measurement_quality") else None
     skin_info = report.get("skin") or {}
-    smoothness = skin_info.get("smoothness_score")
-    dark_circles = skin_info.get("dark_circles_index")
+    # Observation-only image measurements are not calibrated for health or
+    # appearance scoring and must not personalize a health routine.
+    use_legacy_skin_scores = not skin_info.get("observation_only") and not report.get("measurement_quality")
+    smoothness = skin_info.get("smoothness_score") if use_legacy_skin_scores else None
+    dark_circles = skin_info.get("dark_circles_index") if use_legacy_skin_scores else None
 
     focus_jawline = jawline_score is not None and jawline_score < 80
     focus_skin = smoothness is not None and smoothness < 75
@@ -159,6 +163,8 @@ def explanation(item, report):
     if item.get("optional"):
         return "Mục tham khảo tùy chọn. Bạn có thể bỏ qua; không có cam kết thay đổi cấu trúc khuôn mặt."
     skin = (report or {}).get("skin") or {}
+    if skin.get("observation_only") or (report or {}).get("measurement_quality"):
+        return "Routine Builder không dùng quan sát pixel để chấm tình trạng da hoặc chọn khuyến nghị. Bạn có thể tự chọn thói quen phù hợp."
     fields = {"gentle_wash": ("oiliness_score", "độ bóng trong ảnh"),
               "sunscreen": ("uniformity_score", "độ đều màu trong ảnh"),
               "drink_water": ("smoothness_score", "độ mịn trong ảnh"),

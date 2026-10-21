@@ -1,5 +1,83 @@
 const FACE_OVAL = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109, 10];
 const SYMMETRY_PAIRS = [[234, 454], [127, 356], [93, 323], [33, 263], [133, 362], [61, 291], [172, 397]];
+const OVERLAY_MARKERS = [
+  [10, "#62e7d5"], [152, "#62e7d5"], [234, "#62e7d5"], [454, "#62e7d5"],
+  [33, "#f4ce78"], [133, "#f4ce78"], [159, "#f4ce78"], [145, "#f4ce78"],
+  [263, "#f4ce78"], [362, "#f4ce78"], [386, "#f4ce78"], [374, "#f4ce78"],
+  [1, "#f7fbff"], [2, "#f7fbff"], [168, "#f7fbff"],
+  [61, "#ff9db7"], [291, "#ff9db7"], [13, "#ff9db7"], [14, "#ff9db7"],
+];
+
+const smoothingAlpha = (cutoff, seconds) => {
+  const tau = 1 / (2 * Math.PI * cutoff);
+  return 1 / (1 + tau / seconds);
+};
+
+// One Euro filtering keeps the live mesh calm when the face is still and
+// raises the cutoff automatically when the face moves, limiting visual lag.
+export class LandmarkOverlaySmoother {
+  constructor({ minCutoff = 1.15, beta = 2.5, derivativeCutoff = 1 } = {}) {
+    this.minCutoff = minCutoff;
+    this.beta = beta;
+    this.derivativeCutoff = derivativeCutoff;
+    this.reset();
+  }
+  reset() {
+    this.points = null;
+    this.previousX = null;
+    this.previousY = null;
+    this.velocityX = null;
+    this.velocityY = null;
+    this.lastAt = 0;
+  }
+  update(landmarks, now) {
+    if (!Array.isArray(landmarks) || landmarks.length < 468 || !Number.isFinite(now)) return null;
+    const first = !this.points || this.points.length !== landmarks.length;
+    const elapsed = first ? 0 : now - this.lastAt;
+    if (!first && (elapsed <= 0 || elapsed > 350)) this.reset();
+    if (!this.points) {
+      this.points = landmarks.map(point => ({ ...point }));
+      this.previousX = Float32Array.from(landmarks, point => point.x);
+      this.previousY = Float32Array.from(landmarks, point => point.y);
+      this.velocityX = new Float32Array(landmarks.length);
+      this.velocityY = new Float32Array(landmarks.length);
+      this.lastAt = now;
+      return this.points;
+    }
+
+    const faceWidth = Math.max(.01, Math.abs(landmarks[454].x - landmarks[234].x));
+    const anchors = [1, 234, 454, 10, 152];
+    const movement = Math.sqrt(anchors.reduce((sum, index) => {
+      const dx = landmarks[index].x - this.previousX[index];
+      const dy = landmarks[index].y - this.previousY[index];
+      return sum + dx * dx + dy * dy;
+    }, 0) / anchors.length) / faceWidth;
+    if (movement > .35) {
+      this.reset();
+      return this.update(landmarks, now);
+    }
+
+    const seconds = Math.min(.35, Math.max(.001, elapsed / 1000));
+    const derivativeAlpha = smoothingAlpha(this.derivativeCutoff, seconds);
+    for (let index = 0; index < landmarks.length; index++) {
+      const raw = landmarks[index], filtered = this.points[index];
+      const rawVelocityX = (raw.x - this.previousX[index]) / seconds;
+      this.velocityX[index] += derivativeAlpha * (rawVelocityX - this.velocityX[index]);
+      const alphaX = smoothingAlpha(this.minCutoff + this.beta * Math.abs(this.velocityX[index]), seconds);
+      filtered.x += alphaX * (raw.x - filtered.x);
+      this.previousX[index] = raw.x;
+
+      const rawVelocityY = (raw.y - this.previousY[index]) / seconds;
+      this.velocityY[index] += derivativeAlpha * (rawVelocityY - this.velocityY[index]);
+      const alphaY = smoothingAlpha(this.minCutoff + this.beta * Math.abs(this.velocityY[index]), seconds);
+      filtered.y += alphaY * (raw.y - filtered.y);
+      this.previousY[index] = raw.y;
+      filtered.z = raw.z ?? 0;
+    }
+    this.lastAt = now;
+    return this.points;
+  }
+}
 
 function pixelPoint(landmarks, index, width, height) {
   const point = landmarks[index];
@@ -135,6 +213,7 @@ export function analyzeGeometry(landmarks, width, height) {
 
 export function drawLandmarkOverlay(context, landmarks, width, height, mapping, clear = true) {
   const { scale, offsetX, offsetY } = mapping;
+  const pixelRatio = Math.max(1, mapping.pixelRatio || 1);
   const toCanvas = (index) => {
     const point = landmarks[index];
     return { x: offsetX + point.x * width * scale, y: offsetY + point.y * height * scale };
@@ -143,7 +222,7 @@ export function drawLandmarkOverlay(context, landmarks, width, height, mapping, 
   if (clear) context.clearRect(0, 0, context.canvas.width, context.canvas.height);
   context.lineJoin = "round";
   context.lineCap = "round";
-  context.lineWidth = Math.max(1, context.canvas.width / 900);
+  context.lineWidth = Math.max(1, context.canvas.width / 900, 1.15 * pixelRatio);
   context.strokeStyle = "rgba(104, 226, 216, .78)";
   context.beginPath();
   FACE_OVAL.forEach((index, order) => {
@@ -168,11 +247,18 @@ export function drawLandmarkOverlay(context, landmarks, width, height, mapping, 
     context.stroke();
   });
 
-  context.fillStyle = "rgba(224, 244, 238, .92)";
-  [1, 10, 33, 61, 133, 152, 168, 234, 263, 291, 362, 454].forEach((index) => {
+  OVERLAY_MARKERS.forEach(([index, color]) => {
     const p = toCanvas(index);
     context.beginPath();
-    context.arc(p.x, p.y, Math.max(1.5, context.canvas.width / 420), 0, Math.PI * 2);
+    context.arc(p.x, p.y, 3.15 * pixelRatio, 0, Math.PI * 2);
+    context.fillStyle = `${color}55`;
     context.fill();
+    context.beginPath();
+    context.arc(p.x, p.y, 2.15 * pixelRatio, 0, Math.PI * 2);
+    context.fillStyle = color;
+    context.fill();
+    context.lineWidth = 1.1 * pixelRatio;
+    context.strokeStyle = "rgba(255,255,255,.92)";
+    context.stroke();
   });
 }
